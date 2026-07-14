@@ -1,4 +1,4 @@
-"""AXIOM Package Registry Server -- stores and serves AXIOM packages."""
+"""xiom Package Registry Server -- stores and serves xiom packages."""
 import http.server
 import json
 import os
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     os.makedirs(PACKAGES_DIR, exist_ok=True)
     if not os.path.exists(INDEX_FILE):
         save_index({"packages": {}})
-    print(f'AXIOM Package Registry at http://localhost:{PORT}')
+    print(f'xiom Package Registry at http://localhost:{PORT}')
     print('GET  /index.json  — list all packages')
     print('POST /publish     — publish a package')
     server = http.server.HTTPServer(('', PORT), RegistryHandler)
