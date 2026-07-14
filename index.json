@@ -1,28 +1,28 @@
 {
   "packages": {
-    "axiom-std@0.1.0": {
-      "name": "axiom-std",
+    "xiom-std@0.1.0": {
+      "name": "xiom-std",
       "version": "0.1.0",
-      "description": "AXIOM Standard Library",
-      "author": "AXIOM Team"
+      "description": "xiom Standard Library",
+      "author": "xiom Team"
     },
-    "axiom-http@0.1.0": {
-      "name": "axiom-http",
+    "xiom-http@0.1.0": {
+      "name": "xiom-http",
       "version": "0.1.0",
       "description": "HTTP client via libcurl",
-      "author": "AXIOM Team"
+      "author": "xiom Team"
     },
-    "axiom-crypto@0.1.0": {
-      "name": "axiom-crypto",
+    "xiom-crypto@0.1.0": {
+      "name": "xiom-crypto",
       "version": "0.1.0",
       "description": "Cryptographic hashing via OpenSSL",
-      "author": "AXIOM Team"
+      "author": "xiom Team"
     },
-    "axiom-sql@0.1.0": {
-      "name": "axiom-sql",
+    "xiom-sql@0.1.0": {
+      "name": "xiom-sql",
       "version": "0.1.0",
       "description": "SQL database via SQLite",
-      "author": "AXIOM Team"
+      "author": "xiom Team"
     }
   }
 }
