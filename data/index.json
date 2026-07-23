@@ -1,0 +1,986 @@
+{
+  "version": "1.0.0",
+  "packages": {
+    "xiom-algo": {
+      "name": "xiom-algo",
+      "description": "XIOM Algorithm Library â€” sorting, searching, math utilities",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-algo/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-arrow": {
+      "name": "xiom-arrow",
+      "description": "Apache Arrow â€” in-memory columnar data format. Pandas backend, zero-copy data sharing between libraries.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-arrow/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-assimp": {
+      "name": "xiom-assimp",
+      "description": "XIOM Assimp Bindings â€” 3D model import (OBJ, FBX, glTF, COLLADA, etc.) via Open Asset Import Library. Safe wrappers with design-by-contract.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-assimp/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-blas": {
+      "name": "xiom-blas",
+      "description": "BLAS/LAPACK linear algebra bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-blas/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-box2d": {
+      "name": "xiom-box2d",
+      "description": "Box2D 2D physics engine FFI bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-box2d/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-bullet": {
+      "name": "xiom-bullet",
+      "description": "Bullet Physics rigid body dynamics bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-bullet/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-control": {
+      "name": "xiom-control",
+      "description": "Control systems library for XIOM â€” PID, state machines, signal processing",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-control/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-core": {
+      "name": "xiom-core",
+      "description": "XIOM shared durable-systems core â€” config, errors, IDs, storage, WAL, transactions substrate for database engines",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-core/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-cuda": {
+      "name": "xiom-cuda",
+      "description": "CUDA Toolkit â€” NVIDIA GPU computing (cuBLAS, cuDNN, cuFFT, cuRAND).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-cuda/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-directx11": {
+      "name": "xiom-directx11",
+      "description": "Direct3D 11 â€” Microsoft's graphics API (Windows). Part of the DirectX SDK.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-directx11/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-directx12": {
+      "name": "xiom-directx12",
+      "description": "Direct3D 12 â€” Microsoft's low-level graphics API. Explicit GPU control.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-directx12/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-dxc": {
+      "name": "xiom-dxc",
+      "description": "DirectX Shader Compiler (DXC) bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-dxc/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-eigen": {
+      "name": "xiom-eigen",
+      "description": "Eigen â€” C++ template library for linear algebra. Header-only.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-eigen/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-ffi": {
+      "name": "xiom-ffi",
+      "description": "The foundational FFI module for all XIOM C-binding packages.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-ffi/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-ffmpeg": {
+      "name": "xiom-ffmpeg",
+      "description": "FFmpeg â€” audio/video codec library (libavcodec, libavformat, libavutil).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-ffmpeg/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-gazebo": {
+      "name": "xiom-gazebo",
+      "description": "Gazebo â€” Robot simulation engine (gz-sim / Ignition Gazebo).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-gazebo/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-glfw": {
+      "name": "xiom-glfw",
+      "description": "XIOM GLFW bindings â€” safe windowing, input, and monitor management. Zero Vulkan dependency.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-glfw/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-graphql": {
+      "name": "xiom-graphql",
+      "description": "Schema-first GraphQL server â€” SDL loading, validation, execution, resolvers, subscriptions, built on xiom-http",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-graphql/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-grpc": {
+      "name": "xiom-grpc",
+      "description": "gRPC C Core bindings for XIOM â€” client, server, types, and 17 canonical status codes",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-grpc/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-http": {
+      "name": "xiom-http",
+      "description": "XIOM HTTP Library â€” types, parsing, client, and server",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-http/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-imgui": {
+      "name": "xiom-imgui",
+      "description": "Dear ImGui v1.92.9 â€” immediate-mode GUI library.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-imgui/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-jolt": {
+      "name": "xiom-jolt",
+      "description": "Jolt Physics rigid body dynamics bindings for XIOM â€” requires joltc C bridge",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-jolt/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-json": {
+      "name": "xiom-json",
+      "description": "Pure XIOM JSON Parser and Serializer",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-json/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-kafka": {
+      "name": "xiom-kafka",
+      "description": "Apache Kafka client for XIOM â€” librdkafka bindings",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-kafka/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-libpq": {
+      "name": "xiom-libpq",
+      "description": "libpq â€” PostgreSQL C client library.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-libpq/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-libsodium": {
+      "name": "xiom-libsodium",
+      "description": "libsodium secure cryptography bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-libsodium/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-libtorch": {
+      "name": "xiom-libtorch",
+      "description": "LibTorch â€” PyTorch C++ API. Full ML/DL framework with CUDA support.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-libtorch/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-libuv": {
+      "name": "xiom-libuv",
+      "description": "libuv â€” cross-platform asynchronous I/O library (used by Node.js).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-libuv/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-log": {
+      "name": "xiom-log",
+      "description": "Structured logging library for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-log/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-lzfse": {
+      "name": "xiom-lzfse",
+      "description": "Apple LZFSE compression library bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-lzfse/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-math": {
+      "name": "xiom-math",
+      "description": "Production-grade native XIOM math library: Vec2, Vec3, Vec4, Mat4 (column-major, Vulkan), Quat",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-math/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-meshopt": {
+      "name": "xiom-meshopt",
+      "description": "meshoptimizer bindings for XIOM (mesh simplification, compression, optimization)",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-meshopt/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-micro": {
+      "name": "xiom-micro",
+      "description": "Microservices resilience â€” service discovery, typed RPC, retries/budgets, circuit breakers, bulkheads, tracing, sagas, built on xiom-http",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-micro/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-miniaudio": {
+      "name": "xiom-miniaudio",
+      "description": "MiniAudio playback, capture, and waveform synthesis bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-miniaudio/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-moveit": {
+      "name": "xiom-moveit",
+      "description": "MoveIt â€” Motion planning framework.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-moveit/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-net": {
+      "name": "xiom-net",
+      "description": "XIOM Networking Library â€” TCP/UDP primitives",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-net/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-numpy": {
+      "name": "xiom-numpy",
+      "description": "NumPy C API â€” the fundamental array computing library for scientific Python.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-numpy/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-onnx": {
+      "name": "xiom-onnx",
+      "description": "ONNX Runtime bindings for XIOM â€” cross-framework model inference",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-onnx/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-openal": {
+      "name": "xiom-openal",
+      "description": "OpenAL 3D audio bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-openal/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-openblas": {
+      "name": "xiom-openblas",
+      "description": "OpenBLAS â€” optimized Basic Linear Algebra Subprograms (BLAS) and LAPACK.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-openblas/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-opencv": {
+      "name": "xiom-opencv",
+      "description": "OpenCV bindings for XIOM â€” computer vision",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-opencv/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-opengl": {
+      "name": "xiom-opengl",
+      "description": "OpenGL 4.6 â€” cross-platform graphics API.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-opengl/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-openssl": {
+      "name": "xiom-openssl",
+      "description": "OpenSSL â€” TLS/cryptography.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-openssl/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-ozz": {
+      "name": "xiom-ozz",
+      "description": "Ozz-Animation (v0.16.0) bindings for XIOM â€” skeletal animation runtime + offline pipeline",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-ozz/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-pandas": {
+      "name": "xiom-pandas",
+      "description": "Pandas â€” data analysis library. Arrow-backed DataFrame/Series operations with zero Python overhead.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-pandas/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-phonon": {
+      "name": "xiom-phonon",
+      "description": "Steam Audio (Phonon) spatial audio bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-phonon/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-portaudio": {
+      "name": "xiom-portaudio",
+      "description": "PortAudio â€” cross-platform audio I/O.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-portaudio/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-postgres": {
+      "name": "xiom-postgres",
+      "description": "PostgreSQL database bindings for XIOM via libpq",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-postgres/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-protobuf": {
+      "name": "xiom-protobuf",
+      "description": "Protocol Buffers serialization bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-protobuf/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-raylib": {
+      "name": "xiom-raylib",
+      "description": "Raylib â€” simple game framework.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-raylib/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-realtime": {
+      "name": "xiom-realtime",
+      "description": "Application-level realtime â€” channels, rooms, presence, broadcast, ordering, ephemeral/durable events, built on xiom-websocket and xiom-micro",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-realtime/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-redis": {
+      "name": "xiom-redis",
+      "description": "Redis database bindings for XIOM via hiredis",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-redis/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-rest": {
+      "name": "xiom-rest",
+      "description": "REST resource routing, pagination, filtering, content negotiation, and OpenAPI helpers built on xiom-http",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-rest/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-ros2": {
+      "name": "xiom-ros2",
+      "description": "ROS 2 â€” Robot Operating System middleware.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-ros2/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-scipy": {
+      "name": "xiom-scipy",
+      "description": "SciPy â€” scientific computing library for optimization, integration, interpolation, signal processing, statistics, and sparse matrices.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-scipy/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-sdl3": {
+      "name": "xiom-sdl3",
+      "description": "SDL3 (Simple DirectMedia Layer 3) bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-sdl3/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-sensor": {
+      "name": "xiom-sensor",
+      "description": "Sensor fusion library for XIOM â€” IMU, GPS, data fusion",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-sensor/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-sql": {
+      "name": "xiom-sql",
+      "description": "XIOM SQL Library â€” embedded SQL database bindings.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-sql/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-sqlite": {
+      "name": "xiom-sqlite",
+      "description": "SQLite Database Bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-sqlite/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-stb": {
+      "name": "xiom-stb",
+      "description": "stb_image loading bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-stb/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-tensorflow": {
+      "name": "xiom-tensorflow",
+      "description": "TensorFlow C API (libtensorflow) â€” Google's ML framework.",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-tensorflow/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-test": {
+      "name": "xiom-test",
+      "description": "XIOM Test Framework â€” lightweight unit testing",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-test/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-torch": {
+      "name": "xiom-torch",
+      "description": "LibTorch bindings for XIOM â€” PyTorch C++ inference",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-torch/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-ui": {
+      "name": "xiom-ui",
+      "description": "XIOM Immediate-Mode GUI Library",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-ui/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-vma": {
+      "name": "xiom-vma",
+      "description": "Vulkan Memory Allocator (VMA) bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-vma/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-vulkan": {
+      "name": "xiom-vulkan",
+      "description": "Vulkan GPU bindings for XIOM",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.2.0": {
+          "version": "0.2.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-vulkan/v0.2.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.2.0"
+    },
+    "xiom-wasmtime": {
+      "name": "xiom-wasmtime",
+      "description": "Wasmtime â€” standalone WebAssembly runtime (Bytecode Alliance).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-wasmtime/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-websocket": {
+      "name": "xiom-websocket",
+      "description": "WebSocket transport â€” handshake, framing, connection lifecycle, heartbeat, backpressure, reconnect, pub/sub, built on xiom-http and xiom-net",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-websocket/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-zeromq": {
+      "name": "xiom-zeromq",
+      "description": "libzmq â€” high-performance asynchronous messaging library (ZeroMQ).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-zeromq/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    },
+    "xiom-zstd": {
+      "name": "xiom-zstd",
+      "description": "zstd â€” fast lossless compression algorithm (Facebook).",
+      "repository": "https://github.com/xiom-lang/packages",
+      "versions": {
+        "0.1.0": {
+          "version": "0.1.0",
+          "published": "2026-07-23T21:42:44.636Z",
+          "download_url": "https://github.com/xiom-lang/packages/releases/download/xiom-zstd/v0.1.0/package.tar.gz",
+          "dependencies": []
+        }
+      },
+      "latest": "0.1.0"
+    }
+  },
+  "updated_at": "2026-07-23T21:42:44.636Z"
+}
