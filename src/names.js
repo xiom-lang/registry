@@ -8,16 +8,17 @@ const { BadRequestError, ForbiddenError } = require('./errors');
 
 /**
  * Package names are DNS-ish: lowercase, dot-separated segments, each starting
- * with a letter and ending with a letter or digit. The first-party `xiom.*`
- * namespace is reserved for XIOM Foundation tokens (SESSION.md section 2.4,
- * T6).
+ * with a letter and ending with a letter or digit (no trailing hyphen, no
+ * double hyphen). The first-party `xiom.*` namespace is reserved for XIOM
+ * Foundation tokens (SESSION.md section 2.4, T6).
  *
  * Deliberately stricter than the legacy server regex: uppercase, `_`, and
  * leading/trailing separators are refused. Client-published packages are
  * already lowercase-kebab in practice; the legacy seed index is normalized
  * on read (index.js) rather than at publish time.
  */
-const NAME_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
+const SEGMENT = '[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*';
+const NAME_PATTERN = new RegExp(`^${SEGMENT}(?:\\.${SEGMENT})*$`);
 const MAX_NAME_LENGTH = 128;
 const MAX_SEGMENT_LENGTH = 64;
 
