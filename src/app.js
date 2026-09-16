@@ -1,6 +1,6 @@
 // XIOM Package Registry -- HTTP API.
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Protocol contract (normative): registry/SESSION.md section 2. The client
 // is `crates/xiom-pkg` in the xiom compiler repo; this file exists to serve
