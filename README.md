@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 Eleftherios Notas and XIOM Foundation -->
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+
 # XIOM Package Registry
 
 The package registry for XIOM - index discovery, artifact download, publish
@@ -77,5 +80,10 @@ R4 (monorepo) and `SESSION.md` section 4.
 
 ## License
 
-Apache License 2.0. Copyright 2026 Eleftherios Notas (Lefteris Notas) and
-XIOM Foundation. See `LICENSE` and `NOTICE`.
+Dual-licensed under your choice of:
+
+- MIT License - see `LICENSE-MIT`
+- Apache License, Version 2.0 - see `LICENSE-APACHE`
+
+Copyright (c) 2026 Eleftherios Notas (Lefteris Notas) and XIOM Foundation.
+See `NOTICE` for attributions.

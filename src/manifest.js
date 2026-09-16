@@ -1,6 +1,6 @@
 // XIOM Package Registry -- package.xi metadata extraction from a published tarball.
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // `xiom pkg publish` uploads only name/version/signature/publicKey as form
 // fields; description and dependencies exist solely in the tarball's

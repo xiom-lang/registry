@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 # XIOM Package Registry -- Docker image
 # Build: docker build -t xiom-registry .
 # Run:   docker run --name xiom-registry \
@@ -24,7 +27,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Application code.
 COPY src ./src
-COPY seed.js NOTICE LICENSE ./
+COPY seed.js NOTICE LICENSE-MIT LICENSE-APACHE ./
 
 # Writable volumes (data/index.json, packages/<name>/<version>/package.tar.gz,
 # and the upload staging directory) must be owned by the unprivileged user.
