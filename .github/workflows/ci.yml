@@ -3,11 +3,13 @@ name: Registry CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   test:
-    name: node + docker
+    name: unit tests + docker build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -25,8 +27,13 @@ jobs:
 
       - name: Syntax check
         run: |
-          node --check server.js
+          node --check src/server.js
+          node --check src/app.js
           node --check seed.js
+          node --check scripts/keygen.js
+
+      - name: Unit tests
+        run: npm test
 
       - name: Docker build
         run: docker build -t xiom-registry:ci .

@@ -3,3 +3,6 @@ tmp/
 *.log
 .env
 *.code-workspace
+# Publish tokens and operator seed data must never be committed.
+tokens.json
+seed-index.json

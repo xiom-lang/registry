@@ -1,0 +1,44 @@
+name: Registry e2e (real client)
+
+# The end-to-end gate drives the REAL `xiom-pkg` client against a locally
+# started registry (SESSION.md section 5, T8). It needs the xiom compiler
+# repo because the client lives there (crates/xiom-pkg). It runs on demand
+# and on pull requests that touch the protocol surface; point it at a
+# prebuilt binary with the XIOM_PKG_CLIENT repository variable or let it
+# build from source.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "test/e2e/**"
+
+jobs:
+  e2e:
+    name: xiom-pkg client e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout registry
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build xiom-pkg client
+        run: |
+          git clone --depth 1 https://github.com/xiom-lang/xiom.git "$RUNNER_TEMP/xiom"
+          cd "$RUNNER_TEMP/xiom"
+          cargo build -p xiom-pkg
+          echo "XIOM_PKG_CLIENT=$RUNNER_TEMP/xiom/target/debug/xiom-pkg" >> "$GITHUB_ENV"
+
+      - name: Run e2e gate
+        run: npm run test:e2e
