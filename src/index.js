@@ -150,7 +150,9 @@ class IndexStore {
       },
     };
     const entry = next.packages[name];
-    entry.latest = computeLatest(entry.versions) || metadata.version;
+    // May be '' when every version is yanked: `latest` is "newest
+    // installable", and an empty value is the honest answer.
+    entry.latest = computeLatest(entry.versions);
 
     this.#commit(next);
     return entry.versions[metadata.version];
@@ -178,7 +180,7 @@ class IndexStore {
       ...(reason ? { yankReason: String(reason).slice(0, 500) } : {}),
     };
     const nextPkg = { ...pkg, versions: { ...pkg.versions, [version]: updated } };
-    nextPkg.latest = computeLatest(nextPkg.versions) || nextPkg.latest;
+    nextPkg.latest = computeLatest(nextPkg.versions);
     this.#commit({
       packages: { ...this.index.packages, [name]: nextPkg },
     });
@@ -216,20 +218,16 @@ class IndexStore {
 }
 
 /**
- * Highest non-yanked version, preferring stable releases over prereleases.
- * Returns '' when nothing qualifies.
+ * Highest installable version (non-yanked), preferring stable releases over
+ * prereleases. Returns '' when every version is yanked -- `latest` must never
+ * point at a withdrawn release, or a version-less install would silently
+ * fetch it. Yanked versions remain resolvable by explicit version pin.
  *
  * @param {Record<string, object>} versions
  * @returns {string}
  */
 function computeLatest(versions) {
   const candidates = Object.values(versions).filter((v) => v && !v.yanked && v.version);
-  if (candidates.length === 0) {
-    // Everything is yanked: keep the highest yanked version visible so the
-    // package page is not empty, but it will not be installable by default.
-    const all = Object.values(versions).filter((v) => v && v.version);
-    return highestVersion(all);
-  }
   return highestVersion(candidates);
 }
 
@@ -297,7 +295,7 @@ function normalizeIndex(parsed, registryUrl = '') {
       }
     }
     const computed = computeLatest(pkg.versions);
-    if (computed) pkg.latest = computed;
+    pkg.latest = computed;
     index.packages[name] = pkg;
   }
   return index;
