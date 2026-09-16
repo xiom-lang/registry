@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // XIOM Package Registry -- publish token generator.
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Usage:
 //   node scripts/keygen.js [--label name] [--scopes a,b,*] [--trusted]
