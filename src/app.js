@@ -272,7 +272,7 @@ function createApp(config = loadConfig()) {
       try {
         const { name, version } = req.params;
         assertPublishScope(req.token, name);
-        const entry = indexStore.yankVersion(name, version, req.body?.reason || '');
+        indexStore.yankVersion(name, version, req.body?.reason || '');
         console.log(`Yanked: ${name}@${version} by ${req.token.label}`);
         res.json({
           ok: true,
