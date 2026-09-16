@@ -72,6 +72,12 @@ function flattenToEntries(parsed) {
   }
   if (!parsed || typeof parsed !== 'object') return entries;
 
+  // A single entry object (e.g. a one-package seed file).
+  if (parsed.name && parsed.version && !parsed.packages) {
+    push(parsed.name, parsed.version, parsed);
+    return entries;
+  }
+
   const packages = parsed.packages;
   if (Array.isArray(packages)) {
     for (const entry of packages) {
