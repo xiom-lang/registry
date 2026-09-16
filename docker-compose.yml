@@ -1,60 +1,68 @@
-# XIOM Package Registry — Docker Compose (Portainer / Contabo VPS ready)
+# XIOM Package Registry -- Docker Compose (Portainer / Contabo VPS ready)
+#
 # Usage:
-#   docker-compose up -d              # Start in background
-#   docker-compose down               # Stop
-#   docker-compose logs -f            # View logs
-#   docker-compose pull && up -d      # Update
-
-version: '3.8'
+#   cp .env.example .env          # set TOKENS_FILE source, see below
+#   docker compose up -d          # start in background
+#   docker compose logs -f        # view logs
+#   docker compose down           # stop
+#
+# Secrets: the publish tokens live in a JSON file on the host, mounted
+# read-only (see scripts/keygen.js to generate entries). Never bake tokens
+# into the image or this compose file.
 
 services:
   registry:
     build: .
+    image: xiom-registry:latest
     container_name: xiom-registry
     restart: unless-stopped
+    # Bind loopback only: Hestia nginx terminates TLS and proxies inward.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - registry_data:/app/data
       - registry_packages:/app/packages
+      # Host token file, read-only. Create it with scripts/keygen.js and
+      # point XIOM_TOKENS_FILE at it (defaults to ./tokens.json).
+      - ${XIOM_TOKENS_FILE:-./tokens.json}:/run/secrets/xiom-tokens.json:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Set API_KEY for publish authentication (leave empty for open registry)
-      - API_KEY=${API_KEY:-}
+      - TOKENS_FILE=/run/secrets/xiom-tokens.json
+      - REGISTRY_URL=${REGISTRY_URL:-https://registry.xiom-lang.org}
+      # Set TRUST_PROXY=1 when running behind the Hestia nginx vhost so the
+      # rate limiter sees client IPs from X-Forwarded-For.
+      - TRUST_PROXY=${TRUST_PROXY:-0}
+    security_opt:
+      - no-new-privileges:true
+    # Drop all capabilities; the service needs none.
+    cap_drop:
+      - ALL
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - xiom
-
-  # Optional: nginx reverse proxy with HTTPS
-  # Uncomment if using nginx-proxy + Let's Encrypt on Portainer
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: xiom-registry-nginx
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  #     - certs:/etc/nginx/certs
-  #   depends_on:
-  #     - registry
-  #   networks:
-  #     - xiom
+    # Optional read-only root filesystem (read_only: true). It requires the
+    # Node process to write only under the two volumes and a tmpfs; enable it
+    # after verifying `docker compose exec registry touch /app/data/.probe`.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
 
 volumes:
   registry_data:
     driver: local
   registry_packages:
     driver: local
-  # certs:
-  #   driver: local
 
 networks:
   xiom:

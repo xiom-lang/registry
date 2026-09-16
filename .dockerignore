@@ -1,4 +1,22 @@
+# The image copies only src/, package files, seed.js, and the license/notice.
+# Everything else is excluded so a stray data directory cannot bloat or leak
+# into the build context.
 node_modules/
 npm-debug.log*
-.git
+.git/
+.gitignore
+.github/
+.kilo/
+test/
+data/
+packages/
 tmp/
+*.log
+.env
+tokens.json
+seed-index.json
+README.md
+SESSION.md
+docker-compose.yml
+Dockerfile
+registry.code-workspace
