@@ -3,6 +3,12 @@ tmp/
 *.log
 .env
 *.code-workspace
-# Publish tokens and operator seed data must never be committed.
+
+# Publish tokens must never be committed.
 tokens.json
-seed-index.json
+# Local seed overlays (the tracked seed-index.json is the canonical seed).
+seed-index.local.json
+
+# Runtime registry state lives on the Docker volumes, never in git.
+data/
+packages/
