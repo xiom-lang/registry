@@ -73,13 +73,19 @@ function authenticate(req, tokens) {
 }
 
 /**
- * Scope check: a token may publish `name` when it has the wildcard scope or
- * a scope that equals the package name or is a namespace prefix of it
- * (`xiom` grants `xiom.core`, `xiom-*` style prefixes do NOT match).
+ * Scope check: a token may publish `name` when it has the wildcard scope, a
+ * scope equal to the name, or a namespace scope. `xiom` and `xiom.*` both
+ * grant `xiom.core`; `xiom.corex` is never granted by the `xiom.core` scope
+ * (the prefix must end on a dot boundary).
  */
 function tokenMayPublish(token, name) {
-  if (token.scopes.includes('*')) return true;
-  return token.scopes.some((scope) => name === scope || name.startsWith(`${scope}.`));
+  return token.scopes.some((scope) => {
+    if (scope === '*') return true;
+    if (name === scope) return true;
+    // Normalize `ns.*` to the `ns` prefix form.
+    const namespace = scope.endsWith('.*') ? scope.slice(0, -2) : scope;
+    return name.startsWith(`${namespace}.`);
+  });
 }
 
 /** @throws ForbiddenError */

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.js\"",
     "test:e2e": "node test/e2e/run-e2e.js",
     "keygen": "node scripts/keygen.js"
   },
