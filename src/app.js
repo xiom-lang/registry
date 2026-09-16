@@ -169,7 +169,7 @@ function createApp(config = loadConfig()) {
     });
   });
 
-  app.get('/health', (req, res) => {
+  app.get('/health', limit(generalLimiter), (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
   });
 
