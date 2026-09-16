@@ -120,12 +120,11 @@ async function main() {
     console.error('ERROR: no package versions found in the seed index');
     process.exit(1);
   }
+  console.log(`Seeding ${packages.length} package version(s) to ${args.registry}...`);
   if (!args.token) {
     console.error('ERROR: no token supplied; set XIOM_REGISTRY_TOKEN or pass --token');
     process.exit(1);
   }
-
-  console.log(`Seeding ${packages.length} package version(s) to ${args.registry}...`);
   const response = await fetch(`${args.registry.replace(/\/+$/, '')}/sync`, {
     method: 'POST',
     headers: {
