@@ -5,11 +5,12 @@
 monorepo). Strategy lives in `docs/RELEASE_INFRA_PLAN.md` sections R4/R5;
 this file is the normative working spec for the service itself.
 
-**Status:** server skeleton exists and is deployable, but it does NOT yet
-speak the protocol the `xiom pkg` client implements. Nothing is deployed to
-production yet. The beta scope is: protocol compliance + token auth +
-signature storage + version immutability + an end-to-end test that drives
-the real client. Everything else is post-beta.
+**Status:** the server speaks the full `xiom pkg` protocol and passes a
+16-check end-to-end gate that drives the real client
+(`npm run test:e2e`), plus 71 unit tests (`npm test`). Nothing is deployed
+to production yet; the remaining work is T9 (staging deploy) and T10 (doc
+split). Beta scope -- protocol compliance, token auth, signature storage and
+verification, version immutability, yank -- is implemented.
 
 ---
 
@@ -20,7 +21,8 @@ server application, not static hosting:
 
 - HTTP API for index discovery, artifact download, publish, yank, search.
 - Persistence: JSON index + tarball storage (Docker volumes at beta).
-- Authentication: Bearer tokens for publish (GitHub OIDC in phase 2).
+- Authentication: Bearer tokens for publish (GitHub OIDC in phase 2), with
+  per-token scopes and per-token signature policy.
 - Integrity: every version carries sha256; optional detached ed25519
   signature + public key; trusted clients fail closed.
 - Deployment: Docker container on the Contabo VPS (Portainer), reverse
@@ -38,8 +40,8 @@ Default endpoint baked into the client:
 ## 2. Protocol contract (normative)
 
 Client source of truth: `crates/xiom-pkg/src/registry.rs` and
-`crates/xiom-pkg/src/main.rs` (they were NOT moved; the compiler repo owns
-them after the split). Read them before changing server behavior.
+`crates/xiom-pkg/src/main.rs` (they live in the xiom compiler repo). Read
+them before changing server behavior.
 
 ### 2.1 Client requests
 
@@ -55,10 +57,19 @@ Transport rules on the client: HTTPS enforced (plain http only when
 `XIOM_PKG_ALLOW_HTTP=1`); 30s GET timeout; 120s download timeout; max
 archive 256 MiB; multipart upload signed with the environment token.
 
+**Known client defect (compiler repo, not this service):** after an install
+fails any check, `xiom pkg install` falls back to
+`install_from_registry_download` (`crates/xiom-pkg/src/main.rs`), which
+verifies NEITHER sha256 NOR the signature. A tampered artifact is detected
+and then silently installed anyway. The server cannot compensate for a
+client that bypasses its own gate; fix the fallback to abort on integrity
+failures.
+
 ### 2.2 Index schema the client accepts
 
 ```json
 {
+  "registry": "https://registry.xiom-lang.org",
   "version": "1.0.0",
   "packages": {
     "xiom.example": {
@@ -82,6 +93,9 @@ archive 256 MiB; multipart upload signed with the environment token.
 }
 ```
 
+- `registry` is **required** by the client (`RegistryIndex.registry` has no
+  serde default); the server emits it from `REGISTRY_URL`. Without it the
+  client refuses the whole index with "missing field `registry`".
 - `versions` may also be a plain array of version strings (legacy), but the
   server MUST always emit the object form: `sha256` is mandatory for install
   (clients refuse unhashed versions unless `XIOM_PKG_ALLOW_UNHASHED=1`).
@@ -90,68 +104,89 @@ archive 256 MiB; multipart upload signed with the environment token.
   pinned key for this registry (see `xiom pkg trust`) REFUSES unsigned or
   mis-signed artifacts. When present, the signature is ed25519 over the
   exact tarball bytes.
+- `latest` is the highest non-yanked version (stable preferred over
+  prerelease); it is empty when every version is yanked.
+- `yanked: true` (plus `yankedAt`, optional `yankReason`) marks withdrawn
+  versions; artifacts remain downloadable for pinned lockfiles.
 
-### 2.3 Version metadata the server must store per publish
+### 2.3 Version metadata the server stores per publish
 
 `version`, `sha256`, `signature`, `publicKey`, `size`, `published`,
-`dependencies`, and (recommended) `compiler` compatibility range.
+`dependencies` (extracted from `package.xi` inside the tarball, since the
+client does not send them), and optional `compiler` compatibility range.
+`description` is likewise extracted from the manifest.
 
-### 2.4 Current mismatches (the work to close)
+### 2.4 Reconciled mismatches (T1-T7, all done)
 
-| Item | Client expects | Server today | Fix |
-|---|---|---|---|
-| Download path | `/packages/{name}/{version}/package.tar.gz` | `/packages/:name/:version/download` | add the client path (keep the old as alias) |
-| Publish auth | `Authorization: Bearer <token>` | `x-api-key` header only | accept both; prefer Bearer; per-publisher tokens |
-| Signature fields | `signature` + `publicKey` stored per version | ignored | parse multipart fields, verify when policy says so, store them |
-| Immutability | locked installs depend on digests | republish overwrites version | reject duplicate version with 409; add yank |
-| Reserved names | first-party `xiom.*` namespace | none | token scopes: `xiom.*` publishable only by first-party tokens |
-| `/index.json` fields | `size`, `published`, `dependencies` tolerated | sha256/size only | store and emit all fields |
+| Item | Client expects | Server behavior now |
+|---|---|---|
+| Download path | `/packages/{name}/{version}/package.tar.gz` | client path served; `/download` suffix kept as alias |
+| Publish auth | `Authorization: Bearer <token>` | Bearer preferred; `x-api-key` and GET `api_key` accepted for legacy compatibility |
+| Signature fields | `signature` + `publicKey` per version | parsed, format-validated, stored, emitted; verified on publish for `trusted` tokens |
+| Immutability | locked installs depend on digests | duplicate version -> 409; `POST /packages/:name/:version/yank` |
+| Reserved names | first-party `xiom.*` namespace | `firstParty` token flag required for `xiom.*`; strict name validation |
+| `/index.json` fields | `size`, `published`, `dependencies` tolerated | all stored and emitted, plus the required root `registry` field |
 
 ### 2.5 Error semantics
 
-- `400` malformed body / invalid name or semver.
-- `401` missing or unknown token.
-- `403` token not allowed to publish the requested namespace.
+- `400` malformed body / invalid name or semver / malformed signature hex.
+- `401` missing or unknown token (publishing is always authenticated).
+- `403` token not allowed to publish the requested namespace/scope.
 - `404` unknown package/version/artifact.
 - `409` version already exists (immutable; yank instead).
 - `413` tarball over the size cap (50 MiB at beta).
-- `422` signature invalid when verification is required.
+- `422` signature missing for a trusted token, or signature mismatch.
+- `429` rate limit exceeded (with `Retry-After`).
+- `507` index growth bound reached (`MAX_INDEX_PACKAGES` / size / versions).
 
 ---
 
-## 3. Work breakdown (in order)
+## 3. Work breakdown
 
-- [ ] T1. Add the client download route + keep `/download` alias.
-- [ ] T2. Bearer auth with per-token scopes; keep `x-api-key` for backward
-      compatibility only if it costs nothing.
-- [ ] T3. Store `signature`, `publicKey`, `size`, `published`,
-      `dependencies` in the index; emit them on `/index.json`.
-- [ ] T4. Server-side signature verification on publish for tokens marked
-      `trusted: true` (config file or env); reject mismatches with 422.
-- [ ] T5. Immutability (409 on republish) + `POST /packages/:name/:version/yank`
-      (marks `yanked: true`; artifact stays for lockfile integrity;
-      installs of a pinned yanked version still work).
-- [ ] T6. Reserved namespace policy (`xiom.*` first-party only) + name
-      validation (reject reserved Windows names, leading dots).
-- [ ] T7. Limits: 50 MiB cap, rate limiting, bounds on index growth.
-- [ ] T8. End-to-end test (section 5) wired into CI.
+- [x] T1. Client download route + `/download` alias.
+- [x] T2. Bearer auth with per-token scopes; `x-api-key` kept for backward
+      compatibility.
+- [x] T3. Store `signature`, `publicKey`, `size`, `published`,
+      `dependencies` (and `description`) in the index; emit on `/index.json`;
+      extract metadata from `package.xi` inside the uploaded tarball.
+- [x] T4. Server-side ed25519 verification on publish for tokens marked
+      `trusted: true`; 422 on missing/mismatched signatures.
+- [x] T5. Immutability (409 on republish) + `POST /packages/:name/:version/yank`
+      (`yanked: true`; artifact stays; pinned installs keep working).
+- [x] T6. Reserved namespace policy (`xiom.*` first-party only) + name
+      validation (lowercase DNS-ish grammar, Windows reserved segments).
+- [x] T7. Limits: 50 MiB cap, rate limiting, index growth bounds.
+- [x] T8. End-to-end test (`npm run test:e2e`) wired into CI
+      (`.github/workflows/e2e.yml`).
 - [ ] T9. Staging deploy at `staging.registry.xiom-lang.org`; run the e2e
       against it; then promote to `registry.xiom-lang.org`.
-- [ ] T10. Convert this file into `README.md` + `SPEC.md` + `DEPLOY.md`
-      once the service is stable (keep this file as SESSION handoff).
+- [ ] T10. Finish the doc split (`README.md` covers quick start; keep this
+      file as SESSION handoff; add `DEPLOY.md` for the VPS runbook).
 
 ---
 
 ## 4. Architecture and operations
 
-- Node.js >= 18, Express + multer + semver (see package.json).
+- Node.js >= 18, Express + multer + semver (see `package.json`).
+- Source layout:
+  - `src/server.js` -- process entry point (listen, shutdown).
+  - `src/app.js` -- Express app and the publish pipeline.
+  - `src/index.js` -- index store (normalize, immutability, yank, atomic writes).
+  - `src/tokens.js` -- Bearer/x-api-key extraction, constant-time lookup, scopes.
+  - `src/names.js` -- package-name grammar and namespace policy.
+  - `src/signatures.js` -- ed25519 verify (Node crypto, RFC 8410 SPKI).
+  - `src/manifest.js` -- bounded `package.xi` extraction from tarballs.
+  - `src/storage.js` -- artifact placement with path containment.
+  - `src/ratelimit.js`, `src/config.js`, `src/errors.js`.
+  - `scripts/keygen.js` -- publish-token generator.
 - Storage at beta: `data/index.json` plus
   `packages/<name>/<version>/package.tar.gz`, both on Docker named volumes.
-- Env: `PORT` (3000), `DATA_DIR`, `PACKAGES_DIR`, `NODE_ENV`.
-  Legacy `API_KEY` exists; the real model is a tokens file with scopes
-  (introduce `TOKENS_FILE` when T2 lands).
-- Container hardening: non-root user, `no-new-privileges`, read-only root
-  filesystem with writable volumes, bind `127.0.0.1:3000` only.
+- Env: `PORT` (3000), `HOST`, `DATA_DIR`, `PACKAGES_DIR`, `UPLOAD_TMP_DIR`,
+  `REGISTRY_URL`, `TOKENS_FILE`, `TRUST_PROXY`, `NODE_ENV`, size/index limits
+  and rate-limit knobs (see `.env.example`). Legacy `API_KEY` maps to a
+  first-party, trusted token.
+- Container hardening: non-root `node` user, `no-new-privileges`, dropped
+  capabilities, bind `127.0.0.1:3000` only (Hestia nginx terminates TLS).
 - Reverse proxy: Hestia nginx vhost for `registry.xiom-lang.org` ->
   `http://127.0.0.1:3000`, Let's Encrypt TLS, force HTTPS.
 - Backups: nightly restic of the two volumes off-site; documented restore
@@ -163,24 +198,27 @@ archive 256 MiB; multipart upload signed with the environment token.
 
 ## 5. Test plan
 
-Unit tests for index read/write, name validation, auth. The gate that
-matters is end-to-end against the REAL client:
+`npm test` runs the unit suite (index, names, auth, signatures, manifest,
+config, HTTP semantics). `npm run test:e2e` is the gate that matters -- it
+starts a sandboxed registry and drives the REAL `xiom-pkg` client:
 
 1. Build a fixture package directory with a `package.xi`.
-2. Generate a test keypair: `xiom pkg keygen` (writes
-   `~/.xiom/keys/default.key`); publish the public key into the server's
-   trusted-token config.
-3. Run the server locally (`npm start`, `XIOM_REGISTRY=http://localhost:3000`
-   plus `XIOM_PKG_ALLOW_HTTP=1` and `XIOM_REGISTRY_TOKEN=<test-token>`).
-4. `xiom pkg publish` the fixture; assert 201 and index fields.
-5. In a clean directory: `xiom pkg install <fixture>` (checksum verified),
-   then `xiom pkg lock` and confirm the digest is pinned.
-6. Negative cases: republish -> 409; bad token -> 401; tampered tarball ->
-   checksum mismatch; unsigned artifact against a trusted registry ->
-   refused; yanked version -> pinned install still works, fresh resolve
-   reports yanked.
+2. `xiom pkg keygen` writes the test keyring; a trusted token is configured.
+3. Server starts on a free port with isolated data/packages/tokens dirs.
+4. `xiom pkg publish` the fixture; assert 201 and every index field,
+   including metadata extracted from `package.xi`.
+5. Install through the registry path (checksum verified), then `xiom pkg
+   lock` and confirm the digest is pinned in `xiom.lock` (v2, `sha256-...`).
+6. Negative cases: republish -> 409; bad token -> 401; reserved namespace ->
+   403; unsigned artifact from a pinned registry -> refused; tampered
+   artifact/ signature -> 422 or checksum mismatch; yanked version -> pinned
+   install still works, `latest` skips it.
 7. Pin the key (`xiom pkg trust --registry ... --key <hex>`) and repeat
    install; assert signature verification is enforced.
+
+Client lookup for the e2e: `$XIOM_PKG_CLIENT`, then
+`../xiom/target/{debug,release}/xiom-pkg[.exe]`, then PATH. Build it with
+`cargo build -p xiom-pkg` in the xiom repo.
 
 ---
 
@@ -210,20 +248,24 @@ matters is end-to-end against the REAL client:
 ```
 Work in the xiom-lang/registry repository. Read README.md and SESSION.md
 (the spec and handoff) before touching code. The registry must speak the
-protocol implemented by crates/xiom-pkg in the xiom repo: GET /index.json,
-GET /packages/{name}/{version}/package.tar.gz, POST /publish with Bearer
-auth and signature/publicKey multipart fields. The work queue is section 3
-of SESSION.md (T1-T10), in order. Follow the repository rules: conventional
-commits, tests for every behavior change, never weaken signature or
-checksum checks. Verify with the end-to-end test described in section 5
-against the real client before claiming any task done. Deployment is
-staging-first; production is behind a required-reviewer environment.
+protocol implemented by crates/xiom-pkg in the xiom repo: GET /index.json
+(including the root "registry" field), GET
+/packages/{name}/{version}/package.tar.gz, POST /publish with Bearer auth
+and signature/publicKey multipart fields. The work queue is section 3 of
+SESSION.md. T1-T8 are implemented and covered by tests. Follow the
+repository rules: conventional commits, tests for every behavior change,
+never weaken signature or checksum checks. Run `npm test` and
+`npm run test:e2e` (real client) before claiming any task done. Deployment
+is staging-first; production is behind a required-reviewer environment.
 ```
 
 ---
 
 ## 9. Related documents
 
+- `README.md` -- quick start and repository rules.
+- `LICENSE`, `NOTICE` -- Apache License 2.0; Copyright 2026 Eleftherios
+  Notas and XIOM Foundation.
 - `docs/RELEASE_INFRA_PLAN.md` (monorepo until split): R3 release
   pipeline, R4 VPS runbook, R5 registry hardening.
 - `docs/REPO_MIGRATION_RUNBOOK.md` (monorepo until split): how this repo
