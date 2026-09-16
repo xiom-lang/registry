@@ -1,21 +1,24 @@
 {
   "name": "xiom-registry",
   "version": "1.0.0",
-  "description": "XIOM Package Registry — lightweight Node.js backend for package discovery and distribution",
-  "main": "server.js",
+  "description": "XIOM Package Registry - protocol-compliant server for package discovery, publish, download, and integrity verification",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/",
+    "test:e2e": "node test/e2e/run-e2e.js",
+    "keygen": "node scripts/keygen.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1",
     "cors": "^2.8.5",
-    "tar": "^6.2.0",
-    "semver": "^7.6.0"
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "semver": "^7.7.2",
+    "tar": "^7.4.3"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "MIT"
+  "license": "Apache-2.0"
 }
