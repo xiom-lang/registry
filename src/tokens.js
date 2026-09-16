@@ -1,6 +1,6 @@
 // XIOM Package Registry -- authentication (Bearer tokens + legacy x-api-key).
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 'use strict';
 

@@ -1,6 +1,6 @@
 // XIOM Package Registry -- end-to-end gate (SESSION.md section 5, T8).
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // This test drives the REAL `xiom-pkg` client binary against a locally
 // started registry. It is the gate that proves protocol compliance: nothing

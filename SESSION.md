@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 Eleftherios Notas and XIOM Foundation -->
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+
 # XIOM Registry -- Session Handoff & Spec
 
 **Read this first** if you are a human or agent working in
@@ -264,8 +267,8 @@ is staging-first; production is behind a required-reviewer environment.
 ## 9. Related documents
 
 - `README.md` -- quick start and repository rules.
-- `LICENSE`, `NOTICE` -- Apache License 2.0; Copyright 2026 Eleftherios
-  Notas and XIOM Foundation.
+- `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` -- dual MIT OR Apache-2.0;
+  Copyright (c) 2026 Eleftherios Notas and XIOM Foundation.
 - `docs/RELEASE_INFRA_PLAN.md` (monorepo until split): R3 release
   pipeline, R4 VPS runbook, R5 registry hardening.
 - `docs/REPO_MIGRATION_RUNBOOK.md` (monorepo until split): how this repo

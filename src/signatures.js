@@ -1,6 +1,6 @@
 // XIOM Package Registry -- ed25519 signature verification.
-// Copyright 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // The client (`crates/xiom-pkg/src/signing.rs`) signs with ed25519-dalek and
 // publishes the 64-byte signature and 32-byte public key as lowercase hex.
