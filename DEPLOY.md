@@ -43,11 +43,29 @@ cp .env.staging.example .env.staging          # then edit if needed
 docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
   node scripts/keygen.js --label staging --scopes "*" --trusted --first-party \
   --out tokens.staging.json
-docker compose --profile staging up -d --build
-docker compose ps                              # both containers up, staging on 3200
+# The file is bind-mounted into the container and read by the unprivileged
+# `node` user (UID 1000): root-owned 0600 crash-loops with EACCES. Fix both
+# token files the same way.
+chown 1000:1000 tokens.json tokens.staging.json
+chmod 600 tokens.json tokens.staging.json
+
+# Build ONLY the staging image and start ONLY the staging service, so the
+# shared xiom-registry:latest rebuild never restarts production.
+docker compose --env-file .env.staging --profile staging build staging
+docker compose --env-file .env.staging --profile staging up -d --no-deps staging
+docker compose ps                              # staging on 3200, production untouched
 curl -s http://127.0.0.1:3200/health           # staging is up
 curl -s http://127.0.0.1:3100/health           # production still up
 ```
+
+Why `--env-file .env.staging`: compose only auto-reads `.env`; without the
+flag every `XIOM_STAGING_*` edit in `.env.staging` is silently ignored (the
+built-in defaults happen to match today, which makes the bug invisible).
+
+Why `--no-deps` and a named service: `--build` rebuilds the shared
+`xiom-registry:latest` image, and a plain `up -d` would recreate
+production from it. Building and starting only `staging` leaves production
+untouched.
 
 **Then repoint the staging vhost** -- until this is done, both hostnames
 still serve the production instance:

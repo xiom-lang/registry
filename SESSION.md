@@ -10,19 +10,21 @@ this file is the normative working spec for the service itself.
 
 **Status:** the server speaks the full `xiom pkg` protocol and passes a
 20-check end-to-end gate that drives the real client (`npm run test:e2e`),
-plus 71 unit tests (`npm test`). **Deployed:** `https://registry.xiom-lang.org`
-and `https://staging.registry.xiom-lang.org` are live and running the
-current `main`. The staging container (`xiom-registry-staging`, port 3200,
-own volumes and tokens) is up; the staging vhost still points at the
-production instance (3100), so isolating the hostname is the last deploy
-step -- see `DEPLOY.md` "Staging isolation".
+plus 71 unit tests (`npm test`). **Deployed and verified:**
+`https://registry.xiom-lang.org` (port 3100) and
+`https://staging.registry.xiom-lang.org` (isolated instance on port 3200,
+own volumes and tokens). Both advertise their own `registry` URL; the
+scheduled live check (`.github/workflows/live-check.yml`,
+`npm run live-check`) verifies health and artifact digests and asserts the
+two indexes stay separate.
 
 **Remaining:**
 
-1. **Repoint the staging vhost to 3200** (T9) -- one nginx template change
-   plus `v-rebuild-web-domain`, then verify the staging index advertises
-   `https://staging.registry.xiom-lang.org` and run a live publish/install
-   against it. Needs host access; commands are in `DEPLOY.md`.
+1. **Live publish/install against staging** -- the staging token lives at
+   `/opt/xiom/registry/tokens.staging.json` on the VPS (transfer
+   out-of-band), then publish a fixture (e.g. `xiom.staging-isolation-probe`)
+   and confirm production's index never lists it. This is the final T9
+   acceptance action; the ops isolation work is complete.
 2. **Operational hygiene** -- nightly restic backups of the volumes are not
    automated yet (R4 in `RELEASE_INFRA_PLAN.md`), as are the uptime monitor
    and the release -> registry deploy hook; log rotation is already handled
@@ -31,6 +33,8 @@ step -- see `DEPLOY.md` "Staging isolation".
    (tar, multer, qs/express bumps); multer and tar are already on the
    proposed versions in `package.json`, so those PRs are superseded and
    can be closed.
+4. **Probe residue** -- `xiom.staging-e2e-probe` remains in the production
+   index (signed, one version yanked; harmless). Remove it when convenient.
 
 ---
 
@@ -184,12 +188,12 @@ client does not send them), and optional `compiler` compatibility range.
 - [x] T7. Limits: 50 MiB cap, rate limiting, index growth bounds.
 - [x] T8. End-to-end test (`npm run test:e2e`) wired into CI
       (`.github/workflows/e2e.yml`).
-- [~] T9. Staging deploy at `staging.registry.xiom-lang.org`: the isolated
-      staging container is running on 3200 with fresh volumes and tokens,
-      but the staging vhost still proxies to the production instance on
-      3100. **Last step:** repoint the vhost, verify the staging index
-      advertises the staging URL, run a live publish/install against it
-      (depends on host access; see `DEPLOY.md` "Staging isolation").
+- [x] T9. Staging deploy at `staging.registry.xiom-lang.org`: isolated
+      instance on port 3200 with its own volumes, tokens, and
+      `REGISTRY_URL`, verified by the live check. The final acceptance
+      step (publish a fixture to staging and confirm it never appears in
+      production) needs the staging token from the VPS -- see item 1 under
+      Status.
 - [x] T10. Doc split: `README.md` covers quick start, `DEPLOY.md` covers
       the VPS runbook, this file stays the spec/handoff.
 
@@ -209,7 +213,11 @@ client does not send them), and optional `compiler` compatibility range.
   - `src/manifest.js` -- bounded `package.xi` extraction from tarballs.
   - `src/storage.js` -- artifact placement with path containment.
   - `src/config.js`, `src/errors.js`.
-  - `scripts/keygen.js` -- publish-token generator.
+  - `scripts/keygen.js` -- publish-token generator (`--replace` rotates).
+  - `scripts/live-check.js` -- read-only deployed-instance smoke check;
+    scheduled in `.github/workflows/live-check.yml` (health, registry
+    self-advertisement, artifact digest equality, staging/production
+    isolation).
 - Rate limiting: `express-rate-limit` on every route (general read budget,
   stricter publish and download budgets); configured via the `RATE_LIMIT_*`
   / `PUBLISH_RATE_*` / `DOWNLOAD_RATE_*` env knobs, disabled with

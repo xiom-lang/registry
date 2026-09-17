@@ -1,0 +1,39 @@
+# Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Live registry check (staging)
+
+# Scheduled read-only smoke check of the deployed registries: staging must be
+# healthy, advertise its own URL, and serve artifacts matching their indexed
+# digests; production must be healthy and must not share staging's packages.
+# Publishing and install coverage lives in the local e2e gate
+# (`npm run test:e2e`), which needs a client build and a token.
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: live-registry-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: staging + production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout registry
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Run live check
+        run: |
+          node scripts/live-check.js \
+            --staging https://staging.registry.xiom-lang.org \
+            --production https://registry.xiom-lang.org

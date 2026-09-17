@@ -5,11 +5,13 @@
 //
 // Usage:
 //   node scripts/keygen.js [--label name] [--scopes a,b,*] [--trusted]
-//                          [--first-party] [--out tokens.json]
+//                          [--first-party] [--out tokens.json] [--replace]
 //
-// Append (or create) a TOKENS_FILE entry. The token itself is 32 random
-// bytes of hex; the registry compares tokens in constant time, so the
-// format only matters for entropy.
+// Append a TOKENS_FILE entry (creating the file if needed). `--replace`
+// overwrites an existing file instead of appending, which is what token
+// rotation wants. Without it, re-running with `--out` accumulates entries.
+// The token is 32 random bytes of hex; the registry compares tokens in
+// constant time, so the format only matters for entropy.
 
 'use strict';
 
@@ -24,6 +26,7 @@ function parseArgs(argv) {
     trusted: false,
     firstParty: false,
     out: path.join(process.cwd(), 'tokens.json'),
+    replace: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -32,6 +35,7 @@ function parseArgs(argv) {
     else if (arg === '--trusted') args.trusted = true;
     else if (arg === '--first-party') args.firstParty = true;
     else if (arg === '--out') args.out = argv[++i];
+    else if (arg === '--replace') args.replace = true;
     else {
       console.error(`unknown argument: ${arg}`);
       process.exit(2);
@@ -58,7 +62,14 @@ function loadExisting(outPath) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const tokens = loadExisting(args.out);
+  const existing = loadExisting(args.out);
+  const tokens = args.replace ? [] : existing;
+  if (!args.replace && existing.length > 0) {
+    console.log(
+      `appending to ${args.out} (${existing.length} existing token(s)); `
+      + 'use --replace to rotate the file instead',
+    );
+  }
   const token = crypto.randomBytes(32).toString('hex');
   tokens.push({
     token,
@@ -69,14 +80,17 @@ function main() {
   });
   fs.mkdirSync(path.dirname(args.out), { recursive: true });
   fs.writeFileSync(args.out, `${JSON.stringify(tokens, null, 2)}\n`, 'utf-8');
-  console.log(`Token written to ${args.out}`);
+  console.log(`Token written to ${args.out}${args.replace ? ' (replaced)' : ''}`);
   console.log(`  label:      ${args.label}`);
   console.log(`  scopes:     ${args.scopes.join(', ')}`);
   console.log(`  trusted:    ${args.trusted}`);
   console.log(`  firstParty: ${args.firstParty}`);
   console.log(`  token:      ${token}`);
   console.log('');
-  console.log('Set TOKENS_FILE=' + args.out + ' for the registry process.');
+  console.log(`Mount file content now has ${tokens.length} token(s).`);
+  console.log(`Set TOKENS_FILE=${args.out} for the registry process.`);
+  console.log('On the VPS the container reads it as UID 1000: '
+    + 'chown 1000:1000 ' + args.out + ' && chmod 600 ' + args.out);
 }
 
 main();
