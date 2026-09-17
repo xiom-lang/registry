@@ -9,6 +9,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 
 const express = require('express');
@@ -26,7 +27,7 @@ const {
   RateLimitedError,
 } = require('./errors');
 const { loadConfig } = require('./config');
-const { IndexStore, computeLatest } = require('./index');
+const { IndexStore, computeLatest, normalizeDependencies } = require('./index');
 const { ArtifactStore } = require('./storage');
 const { authenticate, assertPublishScope } = require('./tokens');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
@@ -100,6 +101,17 @@ function createApp(config = loadConfig()) {
   }).single('package');
 
   /**
+   * Resolve a staged upload to its canonical location inside UPLOAD_TMP_DIR.
+   * multer controls the generated name, but re-deriving the path from
+   * path.basename keeps the only path component a caller can influence from
+   * ever containing a separator. (CodeQL js/path-injection.)
+   */
+  function stagedUploadPath(req) {
+    if (!req.file || typeof req.file.path !== 'string') return null;
+    return path.join(config.uploadTmpDir, path.basename(req.file.path));
+  }
+
+  /**
    * Wrap multer so its errors become typed registry errors. Runs only after
    * authentication succeeded (no anonymous byte hits the disk).
    */
@@ -137,8 +149,9 @@ function createApp(config = loadConfig()) {
 
   /** Remove a staged upload before forwarding an error to the handler. */
   function cleanupAndNext(req, res, next, err) {
-    if (req.file?.path) {
-      try { fs.rmSync(req.file.path, { force: true }); } catch { /* best effort */ }
+    const staged = stagedUploadPath(req);
+    if (staged) {
+      try { fs.rmSync(staged, { force: true }); } catch { /* best effort */ }
     }
     failRequest(req, res, next, err);
   }
@@ -157,7 +170,15 @@ function createApp(config = loadConfig()) {
 
   // ─── Read routes ──────────────────────────────────────────────────────────
 
-  app.get('/', (req, res) => {
+  /**
+   * Read-only routes that CodeQL's js/missing-rate-limiting query treats as
+   * file-system access (the package/version/download handlers). They are
+   * guarded by the same per-IP limiter as the rest of the API; the static
+   * middleware array shape keeps the query able to see it.
+   */
+  const readLimiter = limit(generalLimiter);
+
+  app.get('/', limit(generalLimiter), (req, res) => {
     const index = indexStore.snapshot();
     res.json({
       name: SERVICE_NAME,
@@ -178,14 +199,14 @@ function createApp(config = loadConfig()) {
     res.json(indexStore.snapshot());
   });
 
-  app.get('/packages/:name', limit(generalLimiter), (req, res) => {
+  app.get('/packages/:name', readLimiter, (req, res) => {
     const name = req.params.name;
     const pkg = indexStore.getPackage(name);
     if (!pkg) throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
     res.json(pkg);
   });
 
-  app.get('/packages/:name/:version', limit(generalLimiter), (req, res) => {
+  app.get('/packages/:name/:version', readLimiter, (req, res) => {
     res.json(indexStore.requireVersion(req.params.name, req.params.version));
   });
 
@@ -320,9 +341,7 @@ function createApp(config = loadConfig()) {
           }
           const existing = indexStore.getPackage(name);
           if (existing?.versions?.[version]) { skipped++; continue; }
-          const deps = pkg.dependencies && typeof pkg.dependencies === 'object'
-            ? pkg.dependencies
-            : {};
+          const deps = normalizeDependencies(pkg.dependencies);
           indexStore.publishVersion(name, {
             version,
             sha256: typeof pkg.sha256 === 'string' ? pkg.sha256.toLowerCase() : '',
@@ -389,9 +408,14 @@ function createApp(config = loadConfig()) {
  * @returns {{ name: string, version: string, sha256: string, signature: string, publicKey: string }}
  */
 function publish(req, { config, indexStore, artifacts, token }) {
+  // Re-derive the staged path from its basename: the only path component a
+  // caller could influence cannot carry a separator. (CodeQL js/path-injection.)
+  const staged = req.file && typeof req.file.path === 'string'
+    ? path.join(config.uploadTmpDir, path.basename(req.file.path))
+    : null;
   const removeUpload = () => {
-    if (req.file?.path) {
-      try { fs.rmSync(req.file.path, { force: true }); } catch { /* best effort */ }
+    if (staged) {
+      try { fs.rmSync(staged, { force: true }); } catch { /* best effort */ }
     }
   };
 
@@ -445,7 +469,7 @@ function publish(req, { config, indexStore, artifacts, token }) {
   }
 
   // Compute the digest over the exact uploaded bytes BEFORE moving the file.
-  const fileBuffer = fs.readFileSync(req.file.path);
+  const fileBuffer = fs.readFileSync(staged);
   const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
   // T4: trusted tokens must present a signature that verifies over the exact
@@ -481,7 +505,7 @@ function publish(req, { config, indexStore, artifacts, token }) {
   }
 
   // T3: description/repository/dependencies only exist inside package.xi.
-  const manifest = extractManifest(req.file.path, config);
+  const manifest = extractManifest(staged, config);
   const metadata = {
     version,
     sha256,
@@ -498,7 +522,7 @@ function publish(req, { config, indexStore, artifacts, token }) {
 
   // Move the artifact into place, then index it. If indexing fails (e.g. a
   // race lost to a concurrent publish), remove the artifact again.
-  artifacts.store(name, version, req.file.path);
+  artifacts.store(name, version, staged);
   try {
     indexStore.publishVersion(name, metadata);
   } catch (err) {
