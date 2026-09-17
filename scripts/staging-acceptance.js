@@ -48,27 +48,68 @@ function parseArgs(argv) {
     }
   }
   if (!args.token) {
-    console.error('ERROR: no token. Pass --token <staging token> or set XIOM_STAGING_TOKEN.');
+    args.token = tokenFromDefaultFile();
+  }
+  if (!args.token) {
+    console.error('ERROR: no token. Pass --token <staging token>, set XIOM_STAGING_TOKEN, '
+      + 'or make /opt/xiom/registry/tokens.staging.json readable.');
     process.exit(2);
   }
   return args;
+}
+
+/**
+ * Read the first token from the deployment's token file. This is the
+ * out-of-band transfer path: the operator runs the script on the host where
+ * the staging tokens already live, so the secret never transits chat.
+ * Returns '' when the file is absent or unreadable.
+ */
+function tokenFromDefaultFile() {
+  const candidates = [
+    process.env.XIOM_STAGING_TOKENS_FILE,
+    '/opt/xiom/registry/tokens.staging.json',
+    path.resolve(__dirname, '..', 'tokens.staging.json'),
+  ].filter(Boolean);
+  for (const file of candidates) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      const tokens = Array.isArray(parsed) ? parsed : Object.values(parsed.tokens || {});
+      const first = tokens.find((entry) => entry && typeof entry.token === 'string');
+      if (first) {
+        console.log(`token:    from ${file} (${first.label || 'unlabeled'})`);
+        return first.token;
+      }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return '';
 }
 
 function findClient(explicit) {
   if (explicit) return explicit;
   const exe = process.platform === 'win32' ? 'xiom-pkg.exe' : 'xiom-pkg';
   const candidates = [
+    // Sibling compiler checkout, the common local layout.
     path.resolve(__dirname, '..', '..', 'xiom', 'target', 'debug', exe),
     path.resolve(__dirname, '..', '..', 'xiom', 'target', 'release', exe),
+    // Container image layout (the VPS runs the server image, but a client
+    // may be installed alongside it).
+    path.resolve('/usr/local/bin', exe),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
+  // PATH, including the VPS case where the published client binary is on the
+  // host.
   const which = process.platform === 'win32'
-    ? spawnSync('where', ['xiom-pkg'], { encoding: 'utf-8' })
-    : spawnSync('which', ['xiom-pkg'], { encoding: 'utf-8' });
+    ? spawnSync('where', [exe], { encoding: 'utf-8' })
+    : spawnSync('which', [exe], { encoding: 'utf-8' });
   if (which.status === 0) return which.stdout.split(/\r?\n/).find(Boolean).trim();
-  throw new Error('xiom-pkg client not found; build it or pass --client <path>');
+  throw new Error(
+    'xiom-pkg client not found. Install the published client, put it on PATH, '
+    + 'or pass --client <path> (for example the binary from a xiom release tarball).',
+  );
 }
 
 function run(bin, args, env, cwd) {
