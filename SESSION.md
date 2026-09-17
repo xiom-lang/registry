@@ -111,6 +111,12 @@ failures.
   prerelease); it is empty when every version is yanked.
 - `yanked: true` (plus `yankedAt`, optional `yankReason`) marks withdrawn
   versions; artifacts remain downloadable for pinned lockfiles.
+- Known caveat: `/index.json` is serialized compact when served from a
+  freshly built in-memory state and pretty-printed (2-space indent) after a
+  restart reloads from disk. The client deserializes the index, so both are
+  valid; standardize on one serializer when next touching `src/index.js`.
+  No client should ever string-match the raw index bytes (the compiler's
+  old fallback did; it was removed in xiom 43fbbbcc / R36).
 
 ### 2.3 Version metadata the server stores per publish
 
