@@ -130,12 +130,29 @@ async function main() {
   console.log(`staging:  ${args.registry}`);
   console.log(`fixture:  ${PACKAGE_NAME}@${VERSION}`);
 
-  // 1. Production must not know the fixture before we start.
+  // 1. Production must not know the fixture before we start, and a previous
+  //    acceptance run must not block this one (yank the old version first).
   const prodBefore = await getJson(`${args.production}/index.json`);
   assert.ok(
     !prodBefore.packages[PACKAGE_NAME],
     `production already lists ${PACKAGE_NAME}; pick another fixture name`,
   );
+  const stagingBefore = await getJson(`${args.registry}/index.json`);
+  if (stagingBefore.packages[PACKAGE_NAME]?.versions?.[VERSION]) {
+    console.log('cleanup:  yanking the previous acceptance probe version');
+    const cleanup = await fetch(
+      `${args.registry}/packages/${PACKAGE_NAME}/${VERSION}/yank`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${args.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: 'superseded by a new acceptance run' }),
+      },
+    );
+    assert.ok(cleanup.ok, `cleanup yank failed: HTTP ${cleanup.status}`);
+  }
 
   // 2. Build the fixture package directory.
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-staging-accept-'));
