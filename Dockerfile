@@ -10,7 +10,7 @@
 #          -v "$PWD/tokens.json:/run/secrets/xiom-tokens.json:ro" \
 #          -e TOKENS_FILE=/run/secrets/xiom-tokens.json \
 #          xiom-registry
-FROM node:20-alpine
+FROM node:22-alpine
 
 ENV NODE_ENV=production
 ENV PORT=3000
