@@ -14,6 +14,7 @@ const crypto = require('crypto');
 
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const semver = require('semver');
 
@@ -38,7 +39,6 @@ const {
   isValidPublicKeyHex,
 } = require('./signatures');
 const { extractManifest } = require('./manifest');
-const { SlidingWindowLimiter } = require('./ratelimit');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
@@ -54,9 +54,27 @@ function createApp(config = loadConfig()) {
 
   fs.mkdirSync(config.uploadTmpDir, { recursive: true });
 
-  const generalLimiter = new SlidingWindowLimiter(config.rateLimit.general);
-  const publishLimiter = new SlidingWindowLimiter(config.rateLimit.publish);
-  const downloadLimiter = new SlidingWindowLimiter(config.rateLimit.download);
+  /**
+   * Rate limiting uses express-rate-limit, the standard Express middleware
+   * for this job. The publish and download routes get stricter budgets than
+   * the general read surface, and every route carries a limiter explicitly
+   * (also what CodeQL's js/missing-rate-limiting query recognizes).
+   */
+  const disabled = config.rateLimit.disabled;
+  const limiterOptions = (bucket) => ({
+    windowMs: bucket.windowMs,
+    limit: bucket.max,
+    standardHeaders: 'draft-7',
+    legacyHeaders: true,
+    skip: () => disabled,
+    handler: (req, res, next) => next(new RateLimitedError(
+      `rate limit exceeded: max ${bucket.max} requests per ${Math.round(bucket.windowMs / 1000)}s`,
+      Math.max(1, Math.ceil(bucket.windowMs / 1000)),
+    )),
+  });
+  const generalLimit = rateLimit(limiterOptions(config.rateLimit.general));
+  const writeLimit = rateLimit(limiterOptions(config.rateLimit.publish));
+  const downloadLimit = rateLimit(limiterOptions(config.rateLimit.download));
 
   if (config.trustProxy) app.set('trust proxy', true);
   app.disable('x-powered-by');
@@ -77,25 +95,6 @@ function createApp(config = loadConfig()) {
       next();
     });
   }
-
-  /**
-   * Per-IP limiter middleware. Kept as a small factory; every route either
-   * goes through the global `app.use(limit(generalLimiter))` below or a
-   * stricter limiter on the route itself, so no handler that touches the
-   * filesystem is unbounded. (CodeQL js/missing-rate-limiting.)
-   */
-  const limit = (limiter) => (req, res, next) => {
-    if (config.rateLimit.disabled) return next();
-    try {
-      limiter.check(`${req.ip || req.socket.remoteAddress || 'unknown'}`);
-      next();
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  // General API bound, applied to every route registered after this point.
-  app.use(limit(generalLimiter));
 
   // ─── Multipart upload handling ────────────────────────────────────────────
 
@@ -178,10 +177,10 @@ function createApp(config = loadConfig()) {
   }
 
   // ─── Read routes ──────────────────────────────────────────────────────────
-  // All of these sit behind the global general limiter installed above; the
-  // download route adds the stricter download limiter on top.
+  // Every read route carries the general limiter explicitly; the download
+  // route adds the stricter download limiter on top.
 
-  app.get('/', (req, res) => {
+  app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     res.json({
       name: SERVICE_NAME,
@@ -193,23 +192,23 @@ function createApp(config = loadConfig()) {
     });
   });
 
-  app.get('/health', (req, res) => {
+  app.get('/health', generalLimit, (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
   });
 
-  app.get('/index.json', (req, res) => {
+  app.get('/index.json', generalLimit, (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json(indexStore.snapshot());
   });
 
-  app.get('/packages/:name', (req, res) => {
+  app.get('/packages/:name', generalLimit, (req, res) => {
     const name = req.params.name;
     const pkg = indexStore.getPackage(name);
     if (!pkg) throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
     res.json(pkg);
   });
 
-  app.get('/packages/:name/:version', (req, res) => {
+  app.get('/packages/:name/:version', generalLimit, (req, res) => {
     res.json(indexStore.requireVersion(req.params.name, req.params.version));
   });
 
@@ -217,7 +216,7 @@ function createApp(config = loadConfig()) {
   // with the legacy `/download` suffix kept as an alias.
   app.get(
     ['/packages/:name/:version/package.tar.gz', '/packages/:name/:version/download'],
-    limit(downloadLimiter),
+    downloadLimit,
     (req, res) => {
       const { name, version } = req.params;
       // Both index and artifact must agree: no serving files the index does
@@ -244,7 +243,7 @@ function createApp(config = loadConfig()) {
     },
   );
 
-  app.get('/search', (req, res) => {
+  app.get('/search', generalLimit, (req, res) => {
     const query = String(req.query.q || '').toLowerCase();
     const index = indexStore.snapshot();
     const results = [];
@@ -268,7 +267,7 @@ function createApp(config = loadConfig()) {
 
   // ─── Publish ──────────────────────────────────────────────────────────────
 
-  app.post('/publish', limit(publishLimiter), authenticated, handleUpload, (req, res, next) => {
+  app.post('/publish', writeLimit, authenticated, handleUpload, (req, res, next) => {
     try {
       const result = publish(req, { config, indexStore, artifacts, token: req.token });
       res.status(201).json({
@@ -289,7 +288,7 @@ function createApp(config = loadConfig()) {
 
   app.post(
     '/packages/:name/:version/yank',
-    limit(publishLimiter),
+    writeLimit,
     authenticated,
     express.json({ limit: '64kb' }),
     (req, res, next) => {
@@ -316,7 +315,7 @@ function createApp(config = loadConfig()) {
 
   app.post(
     '/sync',
-    limit(publishLimiter),
+    writeLimit,
     authenticated,
     express.json({ limit: '12mb' }),
     (req, res, next) => {
