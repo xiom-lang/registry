@@ -9,19 +9,77 @@ Read this before touching deployment. The service code and protocol live in
 - Clone: `/opt/xiom/registry` (public repo, anonymous clone).
 - Container: `xiom-registry` from `docker-compose.yml`, bound to
   `127.0.0.1:${XIOM_REGISTRY_PORT}` -> container `3000`.
-- Production URL: `https://registry.xiom-lang.org`.
-- Staging URL: `https://staging.registry.xiom-lang.org` (currently the SAME
-  container; a separate staging instance on port 3200 is a TODO).
-- Ports: Gitea already owns 3000 on this host, so staging/production use
-  `XIOM_REGISTRY_PORT=3100`; a future staging instance can use 3200.
+- Production URL: `https://registry.xiom-lang.org` (port 3100).
+- Staging URL: `https://staging.registry.xiom-lang.org` -- **currently the
+  same container and data as production**. A genuinely separate staging
+  instance is prepared in `docker-compose.yml` under the `staging` profile
+  (port 3200, own volumes, own tokens, own `REGISTRY_URL`); see "Staging
+  isolation" below for the one-time host steps.
+- Ports: Gitea already owns 3000 on this host, so production uses
+  `XIOM_REGISTRY_PORT=3100`; the staging profile uses 3200.
 
 ## Host files
 
 | Path | Purpose |
 |---|---|
 | `/opt/xiom/registry/.env` | `REGISTRY_URL`, `TRUST_PROXY=1`, `XIOM_REGISTRY_PORT=3100` |
-| `/opt/xiom/registry/tokens.json` | publish tokens (mounted read-only; never commit) |
-| volumes `registry_registry_data` / `registry_registry_packages` | index + artifacts |
+| `/opt/xiom/registry/.env.staging` | staging port, tokens path, staging `REGISTRY_URL` (copy of `.env.staging.example`) |
+| `/opt/xiom/registry/tokens.json` | production publish tokens (mounted read-only; never commit) |
+| `/opt/xiom/registry/tokens.staging.json` | staging publish tokens (separate file) |
+| volumes `registry_registry_data` / `registry_registry_packages` | production index + artifacts |
+| volumes `registry_staging_data` / `registry_staging_packages` | staging index + artifacts |
+
+## Staging isolation
+
+Run these once on the host; production keeps running untouched throughout.
+
+```
+cd /opt/xiom/registry
+git pull
+cp .env.staging.example .env.staging          # then edit if needed
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/keygen.js --label staging --scopes "*" --trusted --first-party \
+  --out tokens.staging.json
+docker compose --profile staging up -d --build
+curl -s http://127.0.0.1:3200/health           # staging is up
+curl -s http://127.0.0.1:3100/health           # production still up
+```
+
+Then repoint the staging vhost from 3100 to 3200 (the template argument):
+
+```
+# /usr/local/hestia/data/templates/web/nginx/php-fpm/xiom-registry*.tpl|stpl
+# change proxy_pass http://127.0.0.1:3100 -> http://127.0.0.1:3200
+# (keep a separate copy of the template for staging if production must stay
+#  on 3100 -- Hestia templates are per-domain assignments, so either two
+#  template variants or one parameterized copy works)
+v-rebuild-web-domain lefteris staging.registry.xiom-lang.org
+nginx -t && systemctl reload nginx
+```
+
+Verify isolation -- the two hostnames must have different uptimes and
+different index contents:
+
+```
+curl -s https://staging.registry.xiom-lang.org/health
+curl -s https://registry.xiom-lang.org/health
+```
+
+Once isolated, `npm run test:e2e` can be pointed at staging without
+polluting production data. The harness currently starts its own local
+server; a live run is:
+
+```
+$env:XIOM_REGISTRY = "https://staging.registry.xiom-lang.org"
+$env:XIOM_REGISTRY_TOKEN = "<a staging token>"
+xiom-pkg publish         # from a fixture package directory
+xiom-pkg install <name>@<version>
+```
+
+Note: the e2e probe package (`xiom.staging-e2e-probe`) currently in the
+shared instance is leftover from validating the shared deployment; it is
+harmless (signed, one version yanked) but should be removed when staging
+gets its own volumes.
 
 ## Hestia reverse proxy
 

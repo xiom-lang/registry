@@ -9,11 +9,28 @@ monorepo). Strategy lives in `docs/RELEASE_INFRA_PLAN.md` sections R4/R5;
 this file is the normative working spec for the service itself.
 
 **Status:** the server speaks the full `xiom pkg` protocol and passes a
-16-check end-to-end gate that drives the real client
-(`npm run test:e2e`), plus 71 unit tests (`npm test`). Nothing is deployed
-to production yet; the remaining work is T9 (staging deploy) and T10 (doc
-split). Beta scope -- protocol compliance, token auth, signature storage and
-verification, version immutability, yank -- is implemented.
+20-check end-to-end gate that drives the real client (`npm run test:e2e`),
+plus 71 unit tests (`npm test`). **Deployed:** `https://registry.xiom-lang.org`
+and `https://staging.registry.xiom-lang.org` are live and running the
+current `main`. Staging is currently the same container/data as production;
+an isolated staging instance (profile `staging`, port 3200, own volumes) is
+prepared in `docker-compose.yml` and needs the one-time host steps in
+`DEPLOY.md`.
+
+**Remaining:**
+
+1. **Staging isolation** (T9) -- run the "Staging isolation" steps in
+   `DEPLOY.md` on the VPS, repoint the staging vhost to 3200, then run the
+   live e2e against staging. Needs host access; production is untouched by
+   the prepared profile.
+2. **Operational hygiene** -- nightly restic backups of the volumes are not
+   automated yet (see the release/infra queue in `xiom-lang/.github`);
+   `xiom.staging-e2e-probe` in the shared index is probe residue and goes
+   away with the isolated staging volumes.
+3. **Dependency maintenance** -- three dependabot PRs are open
+   (tar, multer, qs/express bumps); multer and tar are already on the
+   proposed versions in `package.json`, so those PRs are superseded and
+   can be closed.
 
 ---
 
@@ -60,13 +77,13 @@ Transport rules on the client: HTTPS enforced (plain http only when
 `XIOM_PKG_ALLOW_HTTP=1`); 30s GET timeout; 120s download timeout; max
 archive 256 MiB; multipart upload signed with the environment token.
 
-**Known client defect (compiler repo, not this service):** after an install
-fails any check, `xiom pkg install` falls back to
-`install_from_registry_download` (`crates/xiom-pkg/src/main.rs`), which
-verifies NEITHER sha256 NOR the signature. A tampered artifact is detected
-and then silently installed anyway. The server cannot compensate for a
-client that bypasses its own gate; fix the fallback to abort on integrity
-failures.
+**Known client defect (compiler repo, not this service) -- RESOLVED in
+xiom 43fbbbcc (R32/R33):** `xiom pkg install` used to fall back to an
+unverified download after any failure, silently installing tampered
+artifacts, and the trust-store lookup silently skipped signature
+enforcement when the pinned URL differed by a trailing slash or case. Both
+are fixed; the registry e2e locks the behavior (tamper -> non-zero exit
+with no fallback; non-canonical trust URL still enforces the pin).
 
 ### 2.2 Index schema the client accepts
 
@@ -167,16 +184,21 @@ client does not send them), and optional `compiler` compatibility range.
 - [x] T7. Limits: 50 MiB cap, rate limiting, index growth bounds.
 - [x] T8. End-to-end test (`npm run test:e2e`) wired into CI
       (`.github/workflows/e2e.yml`).
-- [ ] T9. Staging deploy at `staging.registry.xiom-lang.org`; run the e2e
-      against it; then promote to `registry.xiom-lang.org`.
-- [ ] T10. Finish the doc split (`README.md` covers quick start; keep this
-      file as SESSION handoff; add `DEPLOY.md` for the VPS runbook).
+- [~] T9. Staging deploy at `staging.registry.xiom-lang.org`: **live but
+      not isolated** -- both hostnames currently reach the same container
+      on 3100. The isolated staging profile (port 3200, own volumes, own
+      tokens, own `REGISTRY_URL`) is prepared in `docker-compose.yml`; run
+      the "Staging isolation" steps in `DEPLOY.md`, then the live e2e
+      against staging, before calling T9 done.
+- [x] T10. Doc split: `README.md` covers quick start, `DEPLOY.md` covers
+      the VPS runbook, this file stays the spec/handoff.
 
 ---
 
 ## 4. Architecture and operations
 
-- Node.js >= 18, Express + multer + semver (see `package.json`).
+- Node.js >= 18, Express + multer + semver + express-rate-limit (see
+  `package.json`).
 - Source layout:
   - `src/server.js` -- process entry point (listen, shutdown).
   - `src/app.js` -- Express app and the publish pipeline.
@@ -186,8 +208,12 @@ client does not send them), and optional `compiler` compatibility range.
   - `src/signatures.js` -- ed25519 verify (Node crypto, RFC 8410 SPKI).
   - `src/manifest.js` -- bounded `package.xi` extraction from tarballs.
   - `src/storage.js` -- artifact placement with path containment.
-  - `src/ratelimit.js`, `src/config.js`, `src/errors.js`.
+  - `src/config.js`, `src/errors.js`.
   - `scripts/keygen.js` -- publish-token generator.
+- Rate limiting: `express-rate-limit` on every route (general read budget,
+  stricter publish and download budgets); configured via the `RATE_LIMIT_*`
+  / `PUBLISH_RATE_*` / `DOWNLOAD_RATE_*` env knobs, disabled with
+  `RATE_LIMIT_DISABLED=1` (tests).
 - Storage at beta: `data/index.json` plus
   `packages/<name>/<version>/package.tar.gz`, both on Docker named volumes.
 - Env: `PORT` (3000), `HOST`, `DATA_DIR`, `PACKAGES_DIR`, `UPLOAD_TMP_DIR`,
@@ -208,8 +234,9 @@ client does not send them), and optional `compiler` compatibility range.
 ## 5. Test plan
 
 `npm test` runs the unit suite (index, names, auth, signatures, manifest,
-config, HTTP semantics). `npm run test:e2e` is the gate that matters -- it
-starts a sandboxed registry and drives the REAL `xiom-pkg` client:
+config, HTTP semantics). `npm run test:e2e` is the gate that matters -- 20
+checks; it starts a sandboxed registry and drives the REAL `xiom-pkg`
+client:
 
 1. Build a fixture package directory with a `package.xi`.
 2. `xiom pkg keygen` writes the test keyring; a trusted token is configured.

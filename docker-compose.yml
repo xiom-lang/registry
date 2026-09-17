@@ -14,6 +14,7 @@
 # into the image or this compose file.
 
 services:
+  # Production (default): `docker compose up -d`.
   registry:
     build: .
     image: xiom-registry:latest
@@ -21,7 +22,8 @@ services:
     restart: unless-stopped
     # Bind loopback only: Hestia nginx terminates TLS and proxies inward.
     # XIOM_REGISTRY_PORT exists because Gitea already owns 3000 on the panel
-    # host; staging uses 3100, production can use 3200.
+    # host; this deployment currently uses 3100 for both hostnames, and the
+    # staging profile below claims 3200 for a genuinely separate instance.
     ports:
       - "127.0.0.1:${XIOM_REGISTRY_PORT:-3000}:3000"
     volumes:
@@ -63,10 +65,60 @@ services:
     # tmpfs:
     #   - /tmp
 
+  # Staging: a separate instance with its own volumes, tokens, and URL.
+  # Opt-in only -- it carries a profile so a plain `docker compose up -d`
+  # on a host that lacks the staging files cannot fail the production run.
+  #
+  #   cp .env.staging.example .env.staging   # set the token path
+  #   docker compose --profile staging up -d --build
+  #
+  # Point the staging nginx vhost at 127.0.0.1:3200 (see DEPLOY.md).
+  staging:
+    profiles: ["staging"]
+    build: .
+    image: xiom-registry:latest
+    container_name: xiom-registry-staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${XIOM_STAGING_PORT:-3200}:3000"
+    volumes:
+      - staging_data:/app/data
+      - staging_packages:/app/packages
+      - ${XIOM_STAGING_TOKENS_FILE:-./tokens.staging.json}:/run/secrets/xiom-tokens.json:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TOKENS_FILE=/run/secrets/xiom-tokens.json
+      - REGISTRY_URL=${XIOM_STAGING_REGISTRY_URL:-https://staging.registry.xiom-lang.org}
+      - TRUST_PROXY=${TRUST_PROXY:-0}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - xiom
+
 volumes:
   registry_data:
     driver: local
   registry_packages:
+    driver: local
+  # Staging volumes are declared unconditionally; compose only creates them
+  # when the staging profile is active.
+  staging_data:
+    driver: local
+  staging_packages:
     driver: local
 
 networks:

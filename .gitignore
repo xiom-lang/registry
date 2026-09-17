@@ -9,6 +9,7 @@ tmp/
 
 # Publish tokens must never be committed.
 tokens.json
+tokens.staging.json
 # Local seed overlays (the tracked seed-index.json is the canonical seed).
 seed-index.local.json
 
