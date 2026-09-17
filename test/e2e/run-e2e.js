@@ -34,10 +34,11 @@ const TOKENS_FILE = path.join(TMP_ROOT, 'tokens.json');
 const FIXTURE_DIR = path.join(TMP_ROOT, 'fixture');
 const INSTALL_DIR = path.join(TMP_ROOT, 'install');
 
-// The client's installed-package cache is NOT XIOM_HOME-based: registry.rs
-// uses LOCALAPPDATA on Windows and HOME elsewhere. Point it at the test
-// sandbox so runs cannot collide with a developer's real cache.
-const CLIENT_CACHE = path.join(TMP_ROOT, 'client-cache', 'xiom', 'packages');
+// The client's package cache honors XIOM_HOME first (compiler R38 fix), so
+// the sandbox XIOM_HOME below isolates it. LOCALAPPDATA/HOME are still
+// pointed at the sandbox so a binary predating that fix cannot touch the
+// developer's real cache either.
+const CLIENT_CACHE = path.join(XIOM_HOME, 'packages');
 const CLIENT_CACHE_ENV = process.platform === 'win32'
   ? { LOCALAPPDATA: path.join(TMP_ROOT, 'client-cache') }
   : { HOME: path.join(TMP_ROOT, 'client-cache') };
@@ -271,6 +272,7 @@ function registerScenarios() {
     const result = client(['publish'], { cwd: FIXTURE_DIR, token: TRUSTED_TOKEN });
     assert.notStrictEqual(result.status, 0, 'unsigned publish must fail');
     assert.match(result.stderr, /422/, `expected 422, got: ${result.stderr}`);
+    assert.match(result.stderr, /signature_required/, `registry error body missing: ${result.stderr}`);
   });
 
   record('unsigned publish with an open token succeeds and indexes metadata', async () => {
@@ -292,12 +294,14 @@ function registerScenarios() {
     const result = client(['publish'], { cwd: FIXTURE_DIR, token: OPEN_TOKEN });
     assert.notStrictEqual(result.status, 0, 'republish must fail');
     assert.match(result.stderr, /409/, `expected 409, got: ${result.stderr}`);
+    assert.match(result.stderr, /version_exists/, `registry error body missing: ${result.stderr}`);
   });
 
   record('publish with a bad token is refused with 401', async () => {
     const result = client(['publish'], { cwd: FIXTURE_DIR, token: 'not-a-real-token' });
     assert.notStrictEqual(result.status, 0, 'bad token must fail');
     assert.match(result.stderr, /401/, `expected 401, got: ${result.stderr}`);
+    assert.match(result.stderr, /invalid_token/, `registry error body missing: ${result.stderr}`);
   });
 
   record('non-first-party token cannot publish the reserved xiom.* namespace', async () => {
@@ -310,6 +314,7 @@ function registerScenarios() {
     const result = client(['publish'], { cwd: dir, token: OPEN_TOKEN });
     assert.notStrictEqual(result.status, 0, 'reserved namespace publish must fail');
     assert.match(result.stderr, /403/, `expected 403, got: ${result.stderr}`);
+    assert.match(result.stderr, /reserved_namespace/, `registry error body missing: ${result.stderr}`);
   });
 
   record('signed publish with a trusted token succeeds', async () => {
@@ -357,6 +362,18 @@ function registerScenarios() {
     assert.match(combined, /NO signature|carries NO signature/, `unsigned artifact not refused: ${combined}`);
   });
 
+  record('pinned key enforcement survives a non-canonical trust-file URL', async () => {
+    // Hand-written trust files (fixtures, legacy installs) may spell the
+    // registry URL with a trailing slash and an uppercase host; the pin must
+    // still match or the fail-closed signature gate silently disappears (R33).
+    const trusted = path.join(XIOM_HOME, 'trusted_keys.json');
+    fs.writeFileSync(trusted, JSON.stringify({ keys: { [`HTTP://LOCALHOST:${port}/`]: PUBLIC_KEY } }));
+    const result = client(['install', `${PACKAGE_NAME}@${V2}`], { cwd: INSTALL_DIR });
+    const combined = `${result.stdout}\n${result.stderr}`;
+    assert.strictEqual(result.status, 0, `install failed: ${combined}`);
+    assert.match(result.stdout, /signature verified/, `signature not enforced: ${combined}`);
+  });
+
   record('install refuses a tampered artifact (checksum mismatch)', async () => {
     // Unpin so only the checksum gate is under test.
     fs.rmSync(path.join(XIOM_HOME, 'trusted_keys.json'), { force: true });
@@ -368,8 +385,13 @@ function registerScenarios() {
       const result = client(['install', `${PACKAGE_NAME}@${V1}`], { cwd: INSTALL_DIR });
       const combined = `${result.stdout}\n${result.stderr}`;
       assert.match(combined, /CHECKSUM MISMATCH/, `tamper not detected: ${combined}`);
-      // The client has an unverified fallback path; assert it did not
-      // silently install content from the tampered bytes.
+      assert.notStrictEqual(result.status, 0, `tampered install must exit non-zero: ${combined}`);
+      assert.ok(
+        !/trying local resolution/.test(combined),
+        `integrity failure must not trigger the local fallback: ${combined}`,
+      );
+      // R32: the unverified fallback download path is gone; additionally
+      // assert no content from the tampered bytes was extracted.
       const source = findFileRecursive(
         path.join(CLIENT_CACHE, `${PACKAGE_NAME}-${V1}`),
         'lib.xi',
@@ -441,6 +463,27 @@ function registerScenarios() {
     assert.ok(locked, `package missing from lockfile: ${JSON.stringify(lockfile)}`);
     const expected = `sha256-${readIndex().packages[PACKAGE_NAME].versions[V1].sha256}`;
     assert.strictEqual(locked.integrity, expected, 'lockfile integrity does not match the index');
+  });
+
+  record('all-yanked package fails with a clear message, not a bogus URL', async () => {
+    // latest became V1 after the V2 yank; yank V1 too so `latest` turns empty.
+    const yank = await fetchJson(
+      `http://localhost:${port}/packages/${PACKAGE_NAME}/${V1}/yank`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TRUSTED_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'e2e all-yanked' }),
+      },
+    );
+    assert.strictEqual(yank.status, 200, 'second yank failed');
+    const result = client(['install', PACKAGE_NAME], { cwd: INSTALL_DIR });
+    const combined = `${result.stdout}\n${result.stderr}`;
+    assert.notStrictEqual(result.status, 0, `all-yanked install must fail: ${combined}`);
+    assert.match(combined, /yanked/, `expected a yanked-package message: ${combined}`);
+    assert.ok(
+      !/\/\/package\.tar\.gz/.test(combined),
+      `bogus empty-version download URL surfaced: ${combined}`,
+    );
   });
 }
 
