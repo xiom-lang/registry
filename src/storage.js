@@ -6,17 +6,26 @@
 
 const fs = require('fs');
 const path = require('path');
+const semver = require('semver');
 
 const { atomicWriteFile } = require('./index');
-const { NotFoundError } = require('./errors');
+const { NotFoundError, BadRequestError } = require('./errors');
+const { validatePackageName } = require('./names');
 
 const TARBALL_NAME = 'package.tar.gz';
 
 /**
  * Content-addressed-adjacent layout: PACKAGES_DIR/<name>/<version>/package.tar.gz
- * (exactly what the client downloads). Names and versions are validated
- * before they reach this module, but every path builder re-asserts that the
- * resolved path stays inside PACKAGES_DIR as defense in depth.
+ * (exactly what the client downloads).
+ *
+ * Path safety is enforced HERE, at the sink, not only upstream:
+ *   1. the package name must satisfy the grammar (validatePackageName);
+ *   2. the version must be valid semver (no slashes, dots alone, or "..");
+ *   3. both components are passed through path.basename so no separators
+ *      can survive regardless of the caller;
+ *   4. the resolved path must still be contained in PACKAGES_DIR.
+ * Every route and pipeline reaches artifacts through tarballPath(), so the
+ * checks cannot be skipped. (CodeQL js/path-injection.)
  */
 class ArtifactStore {
   /** @param {{ packagesDir: string }} config */
@@ -25,9 +34,18 @@ class ArtifactStore {
     fs.mkdirSync(this.packagesDir, { recursive: true });
   }
 
-  /** Path of the artifact, resolving symlinks and checking containment. */
+  /** Path of the artifact, sanitized and contained. */
   tarballPath(name, version) {
-    const candidate = path.resolve(this.packagesDir, name, version, TARBALL_NAME);
+    validatePackageName(name);
+    if (!semver.valid(version)) {
+      throw new BadRequestError(
+        `invalid version "${version}": must be valid semver`,
+        'invalid_version',
+      );
+    }
+    const safeName = path.basename(name);
+    const safeVersion = path.basename(version);
+    const candidate = path.resolve(this.packagesDir, safeName, safeVersion, TARBALL_NAME);
     const root = this.packagesDir.endsWith(path.sep) ? this.packagesDir : this.packagesDir + path.sep;
     if (!candidate.startsWith(root)) {
       // Traversal attempt must be impossible; treat as a bad artifact request.

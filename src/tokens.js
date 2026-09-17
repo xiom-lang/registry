@@ -9,14 +9,23 @@ const crypto = require('crypto');
 const { UnauthorizedError, ForbiddenError } = require('./errors');
 
 /**
- * Constant-time string comparison that tolerates length differences
- * (timingSafeEqual throws on unequal lengths; comparing fixed-size digests
- * keeps the timing independent of the secret's length).
+ * Constant-time string comparison.
+ *
+ * The inputs are compared at their exact length: unequal lengths return
+ * false immediately (which leaks nothing usable -- token length is not
+ * secret; the entropy is). Equal-length comparisons use a zero-padded
+ * buffer so every candidate token is compared in constant time and the
+ * comparison never short-circuits on a matching prefix.
+ *
+ * Deliberately NOT a password hash: nothing is stored or derived here, the
+ * tokens live in the operator's config file, and hashing comparison inputs
+ * would only add a preimage step without changing the security argument.
  */
 function safeEqual(a, b) {
-  const ha = crypto.createHash('sha256').update(String(a)).digest();
-  const hb = crypto.createHash('sha256').update(String(b)).digest();
-  return crypto.timingSafeEqual(ha, hb);
+  const bufferA = Buffer.from(String(a), 'utf-8');
+  const bufferB = Buffer.from(String(b), 'utf-8');
+  if (bufferA.length !== bufferB.length) return false;
+  return crypto.timingSafeEqual(bufferA, bufferB);
 }
 
 /**
@@ -29,8 +38,17 @@ function safeEqual(a, b) {
 function extractToken(req) {
   const header = req.headers.authorization;
   if (typeof header === 'string') {
-    const match = /^Bearer[ \t]+(.+)$/i.exec(header.trim());
-    if (match) return { token: match[1].trim(), source: 'bearer' };
+    // No regex: split on horizontal whitespace so there is no backtracking
+    // surface, and compare the scheme case-insensitively.
+    const trimmed = header.trim();
+    const separator = trimmed.search(/[ \t]/);
+    if (separator > 0) {
+      const scheme = trimmed.slice(0, separator);
+      const value = trimmed.slice(separator).trim();
+      if (value && scheme.toLowerCase() === 'bearer') {
+        return { token: value, source: 'bearer' };
+      }
+    }
   }
   const apiKey = req.headers['x-api-key'];
   if (typeof apiKey === 'string' && apiKey.trim()) {
