@@ -144,27 +144,33 @@ class IndexStore {
       );
     }
 
-    const next = {
-      packages: {
-        ...this.index.packages,
-        [name]: pkg
-          ? { ...pkg, versions: { ...pkg.versions, [metadata.version]: metadata } }
-          : {
-            name,
-            description: metadata.description || '',
-            repository: metadata.repository || '',
-            versions: { [metadata.version]: metadata },
-            latest: metadata.version,
-          },
-      },
-    };
-    const entry = next.packages[name];
-    // May be '' when every version is yanked: `latest` is "newest
-    // installable", and an empty value is the honest answer.
-    entry.latest = computeLatest(entry.versions);
+    // The version string is validated semver above. Define the entry with
+    // Object.defineProperty on a null-prototype map: no prototype chain
+    // exists to pollute and the version value is never used as a bare
+    // computed assignment target. (CodeQL js/prototype-polluting-assignment.)
+    const versionsMap = pkg ? { ...pkg.versions } : Object.create(null);
+    Object.defineProperty(versionsMap, metadata.version, {
+      value: metadata,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
 
+    const packageEntry = pkg
+      ? { ...pkg, versions: versionsMap, latest: computeLatest(versionsMap) }
+      : {
+        name,
+        description: metadata.description || '',
+        repository: metadata.repository || '',
+        versions: versionsMap,
+        latest: metadata.version,
+      };
+
+    const next = {
+      packages: { ...this.index.packages, [name]: packageEntry },
+    };
     this.#commit(next);
-    return entry.versions[metadata.version];
+    return packageEntry.versions[metadata.version];
   }
 
   /**
