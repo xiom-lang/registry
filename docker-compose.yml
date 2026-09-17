@@ -20,8 +20,10 @@ services:
     container_name: xiom-registry
     restart: unless-stopped
     # Bind loopback only: Hestia nginx terminates TLS and proxies inward.
+    # XIOM_REGISTRY_PORT exists because Gitea already owns 3000 on the panel
+    # host; staging uses 3100, production can use 3200.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${XIOM_REGISTRY_PORT:-3000}:3000"
     volumes:
       - registry_data:/app/data
       - registry_packages:/app/packages
