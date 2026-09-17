@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const semver = require('semver');
 
-const { ConflictError, IndexLimitError, NotFoundError } = require('./errors');
+const { ConflictError, IndexLimitError, NotFoundError, BadRequestError } = require('./errors');
 const { validateTokenKey } = require('./signatures');
 
 const INDEX_SCHEMA_VERSION = '1.0.0';
@@ -111,6 +111,15 @@ class IndexStore {
    */
   publishVersion(name, metadata) {
     validateTokenKey(metadata.signature, metadata.publicKey);
+    // The version is used as a computed object key below; require a valid
+    // semver (a faithful, explicit sanitizer: `__proto__`, `constructor`,
+    // and every other non-semver string are rejected here).
+    if (!semver.valid(metadata.version)) {
+      throw new BadRequestError(
+        `invalid version "${metadata.version}": must be valid semver`,
+        'invalid_version',
+      );
+    }
     const pkg = this.index.packages[name];
     if (pkg && pkg.versions[metadata.version]) {
       throw new ConflictError(

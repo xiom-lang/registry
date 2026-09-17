@@ -7,8 +7,6 @@
 const path = require('path');
 const fs = require('fs');
 
-const { BadRequestError } = require('./errors');
-
 const MIB = 1024 * 1024;
 
 function intFromEnv(name, fallback) {
