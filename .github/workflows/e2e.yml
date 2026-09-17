@@ -20,6 +20,9 @@ on:
       - "src/**"
       - "test/e2e/**"
 
+permissions:
+  contents: read
+
 concurrency:
   group: registry-e2e-${{ github.ref }}
   cancel-in-progress: true
