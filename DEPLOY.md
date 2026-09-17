@@ -166,6 +166,41 @@ XIOM_REGISTRY_TOKEN=<token> xiom-pkg publish        # from a package directory
 XIOM_HOME=/tmp/e2e xiom-pkg install <name>@<ver>
 ```
 
+## Helper scripts on the VPS (Node is container-only)
+
+The host has **no Node binary** -- the registry runs Node inside its
+container and nothing else. Run repo scripts through the node image:
+
+```
+cd /opt/xiom/registry
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/live-check.js \
+  --staging https://staging.registry.xiom-lang.org \
+  --production https://registry.xiom-lang.org
+```
+
+For the production probe yank (reads the token inside the container; it
+never appears on the host command line):
+
+```
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine sh -c '
+TOKEN=$(node -p "require(\"/w/tokens.json\")[0].token")
+XIOM_REGISTRY_TOKEN="$TOKEN" node scripts/yank.js \
+  --registry https://registry.xiom-lang.org \
+  --name xiom.staging-e2e-probe --version 0.0.2 \
+  --reason "staging validation probe; superseded by isolated staging"
+'
+```
+
+The staging acceptance run (`scripts/staging-acceptance.js`) needs the
+native `xiom-pkg` client, which the VPS does not have; run it from a machine
+with the compiler checkout (it finds `target/debug|release/xiom-pkg`
+automatically) and pass the staging token privately:
+
+```
+node scripts/staging-acceptance.js --token <staging-token>
+```
+
 ## Gotchas
 
 - `container_name: xiom-registry` is fixed in the compose file; a second

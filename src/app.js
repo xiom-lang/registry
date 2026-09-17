@@ -42,6 +42,10 @@ const { extractManifest } = require('./manifest');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
+// Stable identity for deployment checks (see scripts/live-check.js): the
+// process start time survives restarts and lets two registries prove they
+// are different instances without comparing uptime.
+const SERVICE_STARTED_AT = new Date().toISOString();
 
 /**
  * Build the Express application. Exported for tests; `src/server.js` owns
@@ -193,7 +197,12 @@ function createApp(config = loadConfig()) {
   });
 
   app.get('/health', generalLimit, (req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      started_at: SERVICE_STARTED_AT,
+      version: SERVICE_VERSION,
+    });
   });
 
   app.get('/index.json', generalLimit, (req, res) => {

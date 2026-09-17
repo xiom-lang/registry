@@ -46,6 +46,22 @@ async function getJson(url) {
   return response.json();
 }
 
+/**
+ * Instance identity: the pieces that differ between genuinely separate
+ * deployments. Uptime is deliberately NOT used -- it looked like the right
+ * signal, but two containers started by the same host reboot legitimately
+ * have near-identical uptimes. Identity fields catch the real failure mode
+ * (a hostname silently routed to the other instance) without reboot flakes.
+ */
+function identityOf(root, index, health) {
+  return [
+    `registry=${index.registry}`,
+    `started=${health.started_at || 'unknown'}`,
+    `packages=${Object.keys(index.packages || {}).sort().join(',')}`,
+    `root=${root.name}@${root.version}`,
+  ].join('|');
+}
+
 async function checkInstance(label, baseUrl, { expectRegistry } = {}) {
   console.log(`\n[${label}] ${baseUrl}`);
   const root = await getJson(`${baseUrl}/`);
@@ -91,7 +107,7 @@ async function checkInstance(label, baseUrl, { expectRegistry } = {}) {
     console.log(`  ${name}@${latest}: artifact matches indexed sha256`);
   }
   console.log(`  verified ${verified} artifact(s)`);
-  return { index, health };
+  return { index, health, root };
 }
 
 async function main() {
@@ -106,20 +122,27 @@ async function main() {
       expectRegistry: args.production,
     });
 
-    // Isolation: the two instances must be distinct processes and must not
-    // have restarted between the two probes.
-    if (Math.abs(production.health.uptime - staging.health.uptime) < 1) {
-      throw new Error(
-        'staging and production report near-identical uptimes; they may be the same process',
+    // Isolation: the two instances must be genuinely distinct deployments.
+    // Compare identity (registry URL, start time, package set), not uptime --
+    // containers restarted by the same host reboot share uptime legitimately.
+    const stagingIdentity = identityOf(staging.root, staging.index, staging.health);
+    const productionIdentity = identityOf(production.root, production.index, production.health);
+    if (stagingIdentity === productionIdentity) {
+      fail(
+        'staging and production report identical identity; the staging hostname '
+        + 'is probably routed to the production instance',
       );
+    } else {
+      console.log('\nisolation ok: distinct identity between staging and production');
     }
+
     const stagingPackages = Object.keys(staging.index.packages || {});
     const productionPackages = new Set(Object.keys(production.index.packages || {}));
     const leaked = stagingPackages.filter((name) => productionPackages.has(name));
     if (leaked.length > 0) {
       fail(`packages present in BOTH indexes (isolation leak): ${leaked.join(', ')}`);
     } else {
-      console.log(`\nisolation ok: ${stagingPackages.length} staging package(s) absent from production`);
+      console.log(`isolation ok: ${stagingPackages.length} staging package(s) absent from production`);
     }
   }
 
