@@ -78,6 +78,12 @@ function createApp(config = loadConfig()) {
     });
   }
 
+  /**
+   * Per-IP limiter middleware. Kept as a small factory; every route either
+   * goes through the global `app.use(limit(generalLimiter))` below or a
+   * stricter limiter on the route itself, so no handler that touches the
+   * filesystem is unbounded. (CodeQL js/missing-rate-limiting.)
+   */
   const limit = (limiter) => (req, res, next) => {
     if (config.rateLimit.disabled) return next();
     try {
@@ -87,6 +93,9 @@ function createApp(config = loadConfig()) {
       next(err);
     }
   };
+
+  // General API bound, applied to every route registered after this point.
+  app.use(limit(generalLimiter));
 
   // ─── Multipart upload handling ────────────────────────────────────────────
 
@@ -169,16 +178,10 @@ function createApp(config = loadConfig()) {
   }
 
   // ─── Read routes ──────────────────────────────────────────────────────────
+  // All of these sit behind the global general limiter installed above; the
+  // download route adds the stricter download limiter on top.
 
-  /**
-   * Read-only routes that CodeQL's js/missing-rate-limiting query treats as
-   * file-system access (the package/version/download handlers). They are
-   * guarded by the same per-IP limiter as the rest of the API; the static
-   * middleware array shape keeps the query able to see it.
-   */
-  const readLimiter = limit(generalLimiter);
-
-  app.get('/', limit(generalLimiter), (req, res) => {
+  app.get('/', (req, res) => {
     const index = indexStore.snapshot();
     res.json({
       name: SERVICE_NAME,
@@ -190,23 +193,23 @@ function createApp(config = loadConfig()) {
     });
   });
 
-  app.get('/health', limit(generalLimiter), (req, res) => {
+  app.get('/health', (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
   });
 
-  app.get('/index.json', limit(generalLimiter), (req, res) => {
+  app.get('/index.json', (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json(indexStore.snapshot());
   });
 
-  app.get('/packages/:name', readLimiter, (req, res) => {
+  app.get('/packages/:name', (req, res) => {
     const name = req.params.name;
     const pkg = indexStore.getPackage(name);
     if (!pkg) throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
     res.json(pkg);
   });
 
-  app.get('/packages/:name/:version', readLimiter, (req, res) => {
+  app.get('/packages/:name/:version', (req, res) => {
     res.json(indexStore.requireVersion(req.params.name, req.params.version));
   });
 
@@ -241,7 +244,7 @@ function createApp(config = loadConfig()) {
     },
   );
 
-  app.get('/search', limit(generalLimiter), (req, res) => {
+  app.get('/search', (req, res) => {
     const query = String(req.query.q || '').toLowerCase();
     const index = indexStore.snapshot();
     const results = [];
