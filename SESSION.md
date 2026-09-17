@@ -12,21 +12,21 @@ this file is the normative working spec for the service itself.
 20-check end-to-end gate that drives the real client (`npm run test:e2e`),
 plus 71 unit tests (`npm test`). **Deployed:** `https://registry.xiom-lang.org`
 and `https://staging.registry.xiom-lang.org` are live and running the
-current `main`. Staging is currently the same container/data as production;
-an isolated staging instance (profile `staging`, port 3200, own volumes) is
-prepared in `docker-compose.yml` and needs the one-time host steps in
-`DEPLOY.md`.
+current `main`. The staging container (`xiom-registry-staging`, port 3200,
+own volumes and tokens) is up; the staging vhost still points at the
+production instance (3100), so isolating the hostname is the last deploy
+step -- see `DEPLOY.md` "Staging isolation".
 
 **Remaining:**
 
-1. **Staging isolation** (T9) -- run the "Staging isolation" steps in
-   `DEPLOY.md` on the VPS, repoint the staging vhost to 3200, then run the
-   live e2e against staging. Needs host access; production is untouched by
-   the prepared profile.
+1. **Repoint the staging vhost to 3200** (T9) -- one nginx template change
+   plus `v-rebuild-web-domain`, then verify the staging index advertises
+   `https://staging.registry.xiom-lang.org` and run a live publish/install
+   against it. Needs host access; commands are in `DEPLOY.md`.
 2. **Operational hygiene** -- nightly restic backups of the volumes are not
-   automated yet (see the release/infra queue in `xiom-lang/.github`);
-   `xiom.staging-e2e-probe` in the shared index is probe residue and goes
-   away with the isolated staging volumes.
+   automated yet (R4 in `RELEASE_INFRA_PLAN.md`), as are the uptime monitor
+   and the release -> registry deploy hook; log rotation is already handled
+   by the compose logging config.
 3. **Dependency maintenance** -- three dependabot PRs are open
    (tar, multer, qs/express bumps); multer and tar are already on the
    proposed versions in `package.json`, so those PRs are superseded and
@@ -184,12 +184,12 @@ client does not send them), and optional `compiler` compatibility range.
 - [x] T7. Limits: 50 MiB cap, rate limiting, index growth bounds.
 - [x] T8. End-to-end test (`npm run test:e2e`) wired into CI
       (`.github/workflows/e2e.yml`).
-- [~] T9. Staging deploy at `staging.registry.xiom-lang.org`: **live but
-      not isolated** -- both hostnames currently reach the same container
-      on 3100. The isolated staging profile (port 3200, own volumes, own
-      tokens, own `REGISTRY_URL`) is prepared in `docker-compose.yml`; run
-      the "Staging isolation" steps in `DEPLOY.md`, then the live e2e
-      against staging, before calling T9 done.
+- [~] T9. Staging deploy at `staging.registry.xiom-lang.org`: the isolated
+      staging container is running on 3200 with fresh volumes and tokens,
+      but the staging vhost still proxies to the production instance on
+      3100. **Last step:** repoint the vhost, verify the staging index
+      advertises the staging URL, run a live publish/install against it
+      (depends on host access; see `DEPLOY.md` "Staging isolation").
 - [x] T10. Doc split: `README.md` covers quick start, `DEPLOY.md` covers
       the VPS runbook, this file stays the spec/handoff.
 

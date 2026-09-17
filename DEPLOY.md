@@ -31,7 +31,10 @@ Read this before touching deployment. The service code and protocol live in
 
 ## Staging isolation
 
-Run these once on the host; production keeps running untouched throughout.
+The staging container (`xiom-registry-staging`, profile `staging`) runs on
+`127.0.0.1:3200` with its own volumes. Production keeps running on 3100.
+
+One-time host steps:
 
 ```
 cd /opt/xiom/registry
@@ -41,33 +44,42 @@ docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
   node scripts/keygen.js --label staging --scopes "*" --trusted --first-party \
   --out tokens.staging.json
 docker compose --profile staging up -d --build
+docker compose ps                              # both containers up, staging on 3200
 curl -s http://127.0.0.1:3200/health           # staging is up
 curl -s http://127.0.0.1:3100/health           # production still up
 ```
 
-Then repoint the staging vhost from 3100 to 3200 (the template argument):
+**Then repoint the staging vhost** -- until this is done, both hostnames
+still serve the production instance:
 
 ```
 # /usr/local/hestia/data/templates/web/nginx/php-fpm/xiom-registry*.tpl|stpl
-# change proxy_pass http://127.0.0.1:3100 -> http://127.0.0.1:3200
-# (keep a separate copy of the template for staging if production must stay
-#  on 3100 -- Hestia templates are per-domain assignments, so either two
-#  template variants or one parameterized copy works)
+# proxy_pass http://127.0.0.1:3100 -> http://127.0.0.1:3200 for the STAGING
+# domain only (keep the production domain on 3100; two template variants or
+# a per-domain copy)
 v-rebuild-web-domain lefteris staging.registry.xiom-lang.org
 nginx -t && systemctl reload nginx
 ```
 
-Verify isolation -- the two hostnames must have different uptimes and
-different index contents:
+Verify isolation and — this matters — that staging advertises itself:
 
 ```
-curl -s https://staging.registry.xiom-lang.org/health
-curl -s https://registry.xiom-lang.org/health
+curl -s https://staging.registry.xiom-lang.org/health     # uptime differs from prod
+curl -s https://staging.registry.xiom-lang.org/index.json # "registry": staging URL
+curl -s https://registry.xiom-lang.org/index.json         # production, unchanged
 ```
+
+The staging index must say
+`"registry": "https://staging.registry.xiom-lang.org"`. If it says the
+production URL, the container started without `XIOM_STAGING_REGISTRY_URL`
+(compose defaults to the right value; check `.env.staging` and
+`docker inspect xiom-registry-staging`). A wrong value matters: clients pin
+trust keys **per registry URL**, and the field is also what `xiom pkg
+trust` records.
 
 Once isolated, `npm run test:e2e` can be pointed at staging without
-polluting production data. The harness currently starts its own local
-server; a live run is:
+polluting production data. The harness starts its own local server; a live
+publish/install check is:
 
 ```
 $env:XIOM_REGISTRY = "https://staging.registry.xiom-lang.org"
@@ -76,10 +88,9 @@ xiom-pkg publish         # from a fixture package directory
 xiom-pkg install <name>@<version>
 ```
 
-Note: the e2e probe package (`xiom.staging-e2e-probe`) currently in the
-shared instance is leftover from validating the shared deployment; it is
-harmless (signed, one version yanked) but should be removed when staging
-gets its own volumes.
+Note: the e2e probe package (`xiom.staging-e2e-probe`) lives only in the
+old shared volumes; the staging volumes are fresh, and production's copy is
+harmless (signed, one version yanked).
 
 ## Hestia reverse proxy
 
