@@ -330,14 +330,27 @@ function normalizeVersionEntry(fallbackVersion, raw) {
  * Dependencies are a name -> spec map in the canonical schema. The legacy
  * seed used `[]` and /sync accepted arbitrary JSON; anything non-object
  * becomes an empty object.
+ *
+ * Hardening (CodeQL js/prototype-polluting-assignment): the result is a
+ * fresh null-prototype object built from an explicit allowlist of safe
+ * package-name keys, so `__proto__`, `constructor`, and `prototype` strings
+ * from a hostile seed/sync body can never alter an object prototype.
  */
+const SAFE_DEPENDENCY_KEY = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
+
 function normalizeDependencies(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const deps = {};
-  for (const [name, spec] of Object.entries(raw)) {
-    if (typeof spec === 'string') deps[name] = spec;
+  const deps = Object.create(null);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ...deps };
   }
-  return deps;
+  for (const [name, spec] of Object.entries(raw)) {
+    if (typeof spec !== 'string') continue;
+    if (!SAFE_DEPENDENCY_KEY.test(name) || name.length > 128) continue;
+    deps[name] = spec;
+  }
+  // Spread into a plain object for JSON serialization; the allowlist above
+  // already excluded every prototype-sensitive key.
+  return { ...deps };
 }
 
 /** Write a file atomically (temp file + rename) so readers never see partials. */
