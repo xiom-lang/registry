@@ -46,6 +46,11 @@ const CLIENT_CACHE_ENV = process.platform === 'win32'
 const PACKAGE_NAME = 'registry-e2e-fixture';
 const V1 = '0.1.0';
 const V2 = '0.2.0';
+// Transitive dependency of PACKAGE_NAME (its package.xi declares
+// `xiom-core: 0.1.0`); published below so installs resolve the closure.
+const CORE_NAME = 'xiom-core';
+const CORE_V1 = '0.1.0';
+const CORE_DIR = path.join(TMP_ROOT, 'core-fixture');
 const OPEN_TOKEN = 'e2e-open-token';
 const TRUSTED_TOKEN = 'e2e-trusted-token';
 const FIRSTPARTY_TOKEN = 'e2e-firstparty-token';
@@ -187,10 +192,16 @@ async function startServer() {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  serverProcess.stdout.on('data', () => {});
+  serverProcess.stdout.on('data', (chunk) => {
+    const text = chunk.toString();
+    if (text.trim()) console.log(`[server] ${text.trim()}`);
+  });
   serverProcess.stderr.on('data', (chunk) => {
     const text = chunk.toString();
     if (text.trim()) console.error(`[server] ${text.trim()}`);
+  });
+  serverProcess.on('exit', (code, signal) => {
+    console.error(`[server] exited code=${code} signal=${signal}`);
   });
 
   const deadline = Date.now() + 15_000;
@@ -227,7 +238,13 @@ function sleep(ms) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  // `connection: close`: client subprocess steps can idle long enough for the
+  // server's keep-alive timeout to close pooled sockets; undici retries GETs
+  // on the resulting ECONNRESET but surfaces it for POSTs (the second yank).
+  const response = await fetch(url, {
+    ...options,
+    headers: { connection: 'close', ...(options.headers || {}) },
+  });
   const text = await response.text();
   let body;
   try {
@@ -327,6 +344,27 @@ function registerScenarios() {
     const entry = readIndex().packages[PACKAGE_NAME].versions[V2];
     assert.strictEqual(entry.publicKey, PUBLIC_KEY, 'public key not stored');
     assert.match(entry.signature, /^[0-9a-f]{128}$/, 'signature not stored');
+  });
+
+  record('publish the dependency package used by transitive installs', async () => {
+    fs.rmSync(CORE_DIR, { recursive: true, force: true });
+    fs.mkdirSync(path.join(CORE_DIR, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(CORE_DIR, 'package.xi'),
+      `package xiom_core_e2e {\n`
+      + `  name: "${CORE_NAME}";\n`
+      + `  version: "${CORE_V1}";\n`
+      + `  description: "transitive dependency fixture";\n`
+      + `}\n`,
+    );
+    fs.writeFileSync(
+      path.join(CORE_DIR, 'src', 'lib.xi'),
+      `pub fn core_hello() -> Str { return "core"; }\n`,
+    );
+    const result = client(['publish'], { cwd: CORE_DIR, token: TRUSTED_TOKEN });
+    assert.strictEqual(result.status, 0, `core publish failed: ${result.stderr}`);
+    const entry = readIndex().packages[CORE_NAME].versions[CORE_V1];
+    assert.match(entry.signature, /^[0-9a-f]{128}$/, 'core signature missing');
   });
 
   record('index emits the root registry field the client requires', async () => {
@@ -463,18 +501,53 @@ function registerScenarios() {
     assert.ok(locked, `package missing from lockfile: ${JSON.stringify(lockfile)}`);
     const expected = `sha256-${readIndex().packages[PACKAGE_NAME].versions[V1].sha256}`;
     assert.strictEqual(locked.integrity, expected, 'lockfile integrity does not match the index');
+
+    // Stage 5 transitive locking: the fixture's dependency is pinned too.
+    const lockedCore = lockfile.packages[CORE_NAME];
+    assert.ok(lockedCore, `transitive dependency missing from lockfile: ${JSON.stringify(lockfile)}`);
+    assert.strictEqual(lockedCore.version, CORE_V1, 'transitive version not resolved');
+    assert.match(lockedCore.integrity, /^sha256-[0-9a-f]{64}$/, 'transitive integrity missing');
+  });
+
+  record('install resolves the transitive dependency closure', async () => {
+    fs.rmSync(path.join(CLIENT_CACHE, `${PACKAGE_NAME}-${V1}`), { recursive: true, force: true });
+    fs.rmSync(path.join(CLIENT_CACHE, `${CORE_NAME}-${CORE_V1}`), { recursive: true, force: true });
+    const result = client(['install', `${PACKAGE_NAME}@${V1}`], { cwd: INSTALL_DIR });
+    const combined = `${result.stdout}\n${result.stderr}`;
+    assert.strictEqual(result.status, 0, `transitive install failed: ${combined}`);
+    assert.match(
+      result.stdout,
+      new RegExp(`Installing dependency ${CORE_NAME} v${CORE_V1}`),
+      `dependency install not announced: ${combined}`,
+    );
+    assert.ok(
+      findFileRecursive(path.join(CLIENT_CACHE, `${CORE_NAME}-${CORE_V1}`), 'package.xi'),
+      'dependency artifact not extracted',
+    );
   });
 
   record('all-yanked package fails with a clear message, not a bogus URL', async () => {
     // latest became V1 after the V2 yank; yank V1 too so `latest` turns empty.
-    const yank = await fetchJson(
-      `http://localhost:${port}/packages/${PACKAGE_NAME}/${V1}/yank`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${TRUSTED_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'e2e all-yanked' }),
-      },
-    );
+    let yank;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        yank = await fetchJson(
+          `http://localhost:${port}/packages/${PACKAGE_NAME}/${V1}/yank`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${TRUSTED_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'e2e all-yanked' }),
+          },
+        );
+        break;
+      } catch (e) {
+        const cause = e.cause?.code || e.cause || 'none';
+        if (attempt >= 2 || cause !== 'ECONNRESET') {
+          throw new Error(`yank request failed (attempt ${attempt}): ${e.message}; cause=${cause}`);
+        }
+        console.error(`[e2e] yank ECONNRESET; retrying once (attempt ${attempt})`);
+      }
+    }
     assert.strictEqual(yank.status, 200, 'second yank failed');
     const result = client(['install', PACKAGE_NAME], { cwd: INSTALL_DIR });
     const combined = `${result.stdout}\n${result.stderr}`;
