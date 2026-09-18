@@ -37,10 +37,17 @@ two indexes stay separate.
    production (2026-09-18); both versions are now yanked and `latest` is
    empty, so nothing installable remains. The metadata entry is left as an
    audit trail; removing it entirely needs a VPS index edit, not HTTP.
-5. **Commit identity** -- all 35 commits in this repo were authored with the
-   work email; rewriting already-pushed history is owner-gated. See the
-   identity section in `DEPLOY.md`/session notes before the next rewrite
-   decision.
+5. **Commit identity** -- all pre-2026-09-18 commits in this repo were
+   authored with the work email; rewriting already-pushed history is
+   owner-gated and spans 7 repos (~2,310 commits: xiom, stdlib, .github,
+   website, playground, registry, ops). New commits are verified with
+   `git log -1 --format='%an <%ae>'` before every push (see the identity
+   section in `DEPLOY.md`). Do not rewrite without an explicit owner
+   request in the session.
+6. **Website coordination** -- nothing is needed from registry for the
+   website work; playground links are absolute and the
+   ecosystem/registry doc pointers stay deferred until stdlib is at 100%
+   (message from the website session, 2026-09-18).
 
 ---
 
