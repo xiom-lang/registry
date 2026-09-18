@@ -24,27 +24,36 @@ two indexes stay separate.
    `/opt/xiom/registry/tokens.staging.json` on the VPS (transfer
    out-of-band), then publish a fixture (e.g. `xiom.staging-isolation-probe`)
    and confirm production's index never lists it. This is the final T9
-   acceptance action; the ops isolation work is complete.
+   acceptance action; the ops isolation work is complete. Run
+   `scripts/staging-acceptance.js` from a machine with the native client.
 2. **Operational hygiene** -- nightly restic backups of the volumes are not
    automated yet (R4 in `RELEASE_INFRA_PLAN.md`), as are the uptime monitor
    and the release -> registry deploy hook; log rotation is already handled
    by the compose logging config.
-3. **Dependency maintenance** -- three dependabot PRs are open
-   (tar, multer, qs/express bumps); multer and tar are already on the
-   proposed versions in `package.json`, so those PRs are superseded and
-   can be closed.
+3. **Dependency maintenance** -- DONE: all three dependabot PRs are closed
+   (multer and tar were already current; the qs/express PR was superseded by
+   the tree-wide `qs 6.16.0` override on main, `npm audit` reports 0).
 4. **Probe residue** -- DONE: `xiom.staging-e2e-probe`@0.0.2 was yanked on
    production (2026-09-18); both versions are now yanked and `latest` is
    empty, so nothing installable remains. The metadata entry is left as an
    audit trail; removing it entirely needs a VPS index edit, not HTTP.
-5. **Commit identity** -- all pre-2026-09-18 commits in this repo were
-   authored with the work email; rewriting already-pushed history is
-   owner-gated and spans 7 repos (~2,310 commits: xiom, stdlib, .github,
-   website, playground, registry, ops). New commits are verified with
+5. **Commit identity** -- DONE for this repo (owner-authorized rewrite,
+   2026-09-18): all history rewritten to
+   `Lefteris Notas <lefterisnotas@gmail.com>`, main now
+   `d8eff222c0937c369b2378e9b8ca63f33a6396a1`, feature branch
+   `b9118ff7a7ee7aff6067c5989127122d01ac22b9`, 28 tags rewritten and
+   pushed; `noreply@github.com` and dependabot identities preserved; CI and
+   CodeQL green on the new SHA. The rewrite spans 7 repos; the others are
+   handled by their own sessions. **The VPS clone `/opt/xiom/registry` was
+   re-cloned by the owner.** New commits are verified with
    `git log -1 --format='%an <%ae>'` before every push (see the identity
-   section in `DEPLOY.md`). Do not rewrite without an explicit owner
-   request in the session.
-6. **Website coordination** -- nothing is needed from registry for the
+   section in `DEPLOY.md`).
+6. **Compiler packaging** -- DONE (compiler session, CRB-3): release
+   archives now build and stage both `xiom` and `xiom-pkg` with a
+   `--version` assertion before archiving, and the installer wrapper
+   dispatches `xiom pkg`; release users can publish/install from the next
+   tag (v0.61.0). Verified in `release.yml` (xiom repo) on 2026-09-18.
+7. **Website coordination** -- nothing is needed from registry for the
    website work; playground links are absolute and the
    ecosystem/registry doc pointers stay deferred until stdlib is at 100%
    (message from the website session, 2026-09-18).
