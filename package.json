@@ -20,7 +20,10 @@
     "tar": "^7.4.3"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   },
   "license": "MIT OR Apache-2.0"
 }
