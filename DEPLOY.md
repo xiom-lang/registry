@@ -201,6 +201,31 @@ automatically) and pass the staging token privately:
 node scripts/staging-acceptance.js --token <staging-token>
 ```
 
+## Commit identity (required in every clone)
+
+The machine-wide git config carries a work address and must not be used in
+this repository. Before the first commit in a fresh clone:
+
+```
+git config user.name "Lefteris Notas"
+git config user.email "lefterisnotas@gmail.com"
+```
+
+Verify before every push -- it must print
+`Lefteris Notas <lefterisnotas@gmail.com>`:
+
+```
+git log -1 --format='%an <%ae>'
+```
+
+An unpushed commit made with another identity:
+`git commit --amend --reset-author`. Several unpushed commits:
+`git rebase --exec "git commit --amend --no-edit --reset-author" --root`.
+Never change the global config and never push commits authored with another
+address. Rewriting already-pushed history is owner-gated: it needs
+`git filter-repo` and forces every deployment clone (and any open PR) to be
+re-cloned; a `.mailmap` does not fix GitHub attribution.
+
 ## Gotchas
 
 - `container_name: xiom-registry` is fixed in the compose file; a second

@@ -33,8 +33,14 @@ two indexes stay separate.
    (tar, multer, qs/express bumps); multer and tar are already on the
    proposed versions in `package.json`, so those PRs are superseded and
    can be closed.
-4. **Probe residue** -- `xiom.staging-e2e-probe` remains in the production
-   index (signed, one version yanked; harmless). Remove it when convenient.
+4. **Probe residue** -- DONE: `xiom.staging-e2e-probe`@0.0.2 was yanked on
+   production (2026-09-18); both versions are now yanked and `latest` is
+   empty, so nothing installable remains. The metadata entry is left as an
+   audit trail; removing it entirely needs a VPS index edit, not HTTP.
+5. **Commit identity** -- all 35 commits in this repo were authored with the
+   work email; rewriting already-pushed history is owner-gated. See the
+   identity section in `DEPLOY.md`/session notes before the next rewrite
+   decision.
 
 ---
 
