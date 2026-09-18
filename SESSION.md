@@ -20,12 +20,13 @@ two indexes stay separate.
 
 **Remaining:**
 
-1. **Live publish/install against staging** -- the staging token lives at
-   `/opt/xiom/registry/tokens.staging.json` on the VPS (transfer
-   out-of-band), then publish a fixture (e.g. `xiom.staging-isolation-probe`)
-   and confirm production's index never lists it. This is the final T9
-   acceptance action; the ops isolation work is complete. Run
-   `scripts/staging-acceptance.js` from a machine with the native client.
+1. **Live publish/install against staging** -- DONE (2026-09-18):
+   `scripts/staging-acceptance.js` published `xiom.staging-isolation-probe`
+   to staging through the real client, verified the index metadata (digest,
+   signature, advertised registry URL), installed it back with checksum
+   verification, confirmed production's index never listed it, and yanked
+   the probe. The staging token used for the run has been rotated by the
+   owner. T9 and the beta gate are complete.
 2. **Operational hygiene** -- nightly restic backups of the volumes are not
    automated yet (R4 in `RELEASE_INFRA_PLAN.md`), as are the uptime monitor
    and the release -> registry deploy hook; log rotation is already handled
@@ -212,10 +213,10 @@ client does not send them), and optional `compiler` compatibility range.
       (`.github/workflows/e2e.yml`).
 - [x] T9. Staging deploy at `staging.registry.xiom-lang.org`: isolated
       instance on port 3200 with its own volumes, tokens, and
-      `REGISTRY_URL`, verified by the live check. The final acceptance
-      step (publish a fixture to staging and confirm it never appears in
-      production) needs the staging token from the VPS -- see item 1 under
-      Status.
+      `REGISTRY_URL`, verified by the live check. Acceptance DONE
+      (2026-09-18): the real client published a signed fixture to staging,
+      installed it back with checksum verification, and production's index
+      never listed it; the probe was yanked and the token rotated.
 - [x] T10. Doc split: `README.md` covers quick start, `DEPLOY.md` covers
       the VPS runbook, this file stays the spec/handoff.
 

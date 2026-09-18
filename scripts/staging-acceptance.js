@@ -10,7 +10,7 @@
 //
 // Usage:
 //   node scripts/staging-acceptance.js --token <staging-token> \
-//     [--registry https://staging.registry.xiom-lang.org] \
+//     [--staging|--registry https://staging.registry.xiom-lang.org] \
 //     [--production https://registry.xiom-lang.org] \
 //     [--client <path to xiom-pkg>] [--keep]
 //
@@ -38,7 +38,9 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--token') args.token = argv[++i];
-    else if (argv[i] === '--registry') args.registry = argv[++i];
+    // `--staging` is an alias: the target is the staging registry by default,
+    // and the flag reads naturally in the documented command.
+    else if (argv[i] === '--registry' || argv[i] === '--staging') args.registry = argv[++i];
     else if (argv[i] === '--production') args.production = argv[++i];
     else if (argv[i] === '--client') args.client = argv[++i];
     else if (argv[i] === '--keep') args.keep = true;
