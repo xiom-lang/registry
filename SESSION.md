@@ -432,11 +432,14 @@ item.
       `xiom-hello`) to exactly one of each. Both instances verified with the
       no-publish probe -- a yank of a missing version returns 404
       `version_not_found` for a live token and 401 `invalid_token` for a
-      revoked or unloaded one. Ops to fold the CLI into
-      `REGISTRY_TOKENS.md` (relay sent).
-- [ ] Confirm the purpose/owner of the production `staging-admin` token
-      (scope `*`) and record it in the issuance log; consider rotating it
-      under an honest label such as `admin`.
+      revoked or unloaded one. Ops adopted the CLI for sections 1-6 of
+      `REGISTRY_TOKENS.md` (ops 18058fe), including the safe probe; legacy
+      `keygen` is noted as such.
+- [ ] (in progress) The production `staging-admin` token (scope `*`) is
+      undocumented: the owner is removing it (the default) or rotating it
+      under an honest label with an issuance-log entry. Expect the token
+      count in `docker logs` to drop on the next recreate; if anything
+      unexpected starts returning 401, recreate and coordinate with ops.
 - [ ] B1-B4: Backblaze B2 bucket + application key + `/etc/xiom-backup.env`,
       run `restic-backup.sh` once, verify the first snapshot -- only then is
       backup "done".
