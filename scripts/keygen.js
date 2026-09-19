@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // XIOM Package Registry -- publish token generator.
 // Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 //
 // Usage:
 //   node scripts/keygen.js [--label name] [--scopes a,b,*] [--trusted]
@@ -9,15 +9,18 @@
 //
 // Append a TOKENS_FILE entry (creating the file if needed). `--replace`
 // overwrites an existing file instead of appending, which is what token
-// rotation wants. Without it, re-running with `--out` accumulates entries.
+// rotation wants for a single-token file. For multi-token files prefer the
+// admin CLI (`scripts/tokens.js rotate`), which replaces one label in a
+// single atomic write and refuses to leave duplicates behind.
 // The token is 32 random bytes of hex; the registry compares tokens in
 // constant time, so the format only matters for entropy.
 
 'use strict';
 
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
+
+const { loadTokens, saveTokens } = require('./lib/token-file');
 
 function parseArgs(argv) {
   const args = {
@@ -44,25 +47,17 @@ function parseArgs(argv) {
   return args;
 }
 
-function loadExisting(outPath) {
-  if (!fs.existsSync(outPath)) return [];
-  try {
-    const parsed = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed && Array.isArray(parsed.tokens)) return parsed.tokens;
-    if (parsed && parsed.tokens && typeof parsed.tokens === 'object') {
-      return Object.entries(parsed.tokens).map(([token, cfg]) => ({ token, ...(cfg || {}) }));
-    }
-    throw new Error('unrecognized structure');
-  } catch (err) {
-    console.error(`refusing to overwrite ${outPath}: ${err.message}`);
-    process.exit(1);
-  }
-}
-
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const existing = loadExisting(args.out);
+
+  let existing;
+  try {
+    existing = loadTokens(args.out);
+  } catch (err) {
+    console.error(`refusing to overwrite ${args.out}: ${err.message}`);
+    process.exit(1);
+  }
+
   const tokens = args.replace ? [] : existing;
   if (!args.replace && existing.length > 0) {
     console.log(
@@ -86,6 +81,7 @@ function main() {
       );
     }
   }
+
   const token = crypto.randomBytes(32).toString('hex');
   tokens.push({
     token,
@@ -94,8 +90,8 @@ function main() {
     trusted: args.trusted,
     firstParty: args.firstParty,
   });
-  fs.mkdirSync(path.dirname(args.out), { recursive: true });
-  fs.writeFileSync(args.out, `${JSON.stringify(tokens, null, 2)}\n`, 'utf-8');
+  saveTokens(args.out, tokens);
+
   console.log(`Token written to ${args.out}${args.replace ? ' (replaced)' : ''}`);
   console.log(`  label:      ${args.label}`);
   console.log(`  scopes:     ${args.scopes.join(', ')}`);

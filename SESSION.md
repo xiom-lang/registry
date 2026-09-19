@@ -263,6 +263,9 @@ client does not send them), and optional `compiler` compatibility range.
     the JSON contract (`src/ui/negotiate.js`). No client-side framework, no
     build step.
   - `scripts/keygen.js` -- publish-token generator (`--replace` rotates).
+  - `scripts/tokens.js` -- token admin CLI (list/add/remove/rotate) so
+    operators never hand-edit JSON or paste heredocs; `list` prints no
+    values and `rotate` is a single atomic write.
   - `scripts/live-check.js` -- read-only deployed-instance smoke check;
     scheduled in `.github/workflows/live-check.yml` (health, registry
     self-advertisement, artifact digest equality, staging/production

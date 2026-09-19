@@ -153,6 +153,32 @@ docker compose up -d --force-recreate --no-deps registry
 docker logs --tail 6 xiom-registry      # expect: tokens: N configured
 ```
 
+For day-to-day token management prefer the admin CLI -- one line per
+operation, no hand-edited JSON and no heredocs that garble in a terminal
+paste. `rotate` replaces every entry for a label with one fresh token in a
+single atomic write; `list` never prints values:
+
+```
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js list --file tokens.json
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js rotate --file tokens.json --label <label> --scopes "<scopes>" [--trusted] [--first-party]
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js remove --file tokens.json --label <label>
+```
+
+Verify a token without publishing anything: yank a version that does not
+exist -- auth and scope run first, so a live token gets `404
+version_not_found` while a revoked or unloaded one gets `401 invalid_token`:
+
+```
+TOKEN="$(python3 -c 'import json;print(next(t["token"] for t in json.load(open("tokens.json")) if t["label"]=="<label>"))')"
+curl -s -w '\nHTTP %{http_code}\n' -X POST \
+  https://registry.xiom-lang.org/packages/<name>/9.9.9/yank \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}'
+unset TOKEN
+```
+
 Tokens are compared in constant time; `trusted` tokens require signed
 publishes, `first-party` allows the reserved `xiom.*` namespace.
 
