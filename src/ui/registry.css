@@ -108,8 +108,12 @@ code {
   letter-spacing: 0.02em;
   color: var(--paper);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .brand span { color: var(--signal); }
+.brand-logo { border-radius: 6px; display: block; height: 24px; width: 24px; }
 
 .site-header nav {
   display: flex;

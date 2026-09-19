@@ -67,17 +67,23 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${pageTitle}</title>
 <meta name="description" content="${escapeHtml(description)}">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="48x48" href="/ui/favicon.png">
 <link rel="stylesheet" href="/ui/registry.css">
 </head>
 <body>
 <header class="site-header">
   <div class="container">
-    <a class="brand" href="/">XIOM <span>Registry</span></a>
+    <a class="brand" href="/">
+      <img class="brand-logo" src="/ui/logo.png" alt="" width="24" height="24">
+      XIOM <span>Registry</span>
+    </a>
     <nav>
       <a href="/packages">Packages</a>
       <a href="/search">Search</a>
       <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>
+      <a href="https://xiom-lang.org">xiom-lang.org</a>
       <a href="https://github.com/xiom-lang/registry">GitHub</a>
     </nav>
   </div>

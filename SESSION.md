@@ -239,10 +239,12 @@ client does not send them), and optional `compiler` compatibility range.
   - `src/manifest.js` -- bounded `package.xi` extraction from tarballs.
   - `src/storage.js` -- artifact placement with path containment.
   - `src/config.js`, `src/errors.js`.
-  - `src/ui/` -- read-only web UI: layouts, page builders, and the shared
-    brand stylesheet. HTML is served only when the browser's FIRST Accept
-    entry is `text/html`; every other request keeps the JSON contract
-    (`src/ui/negotiate.js`). No client-side framework, no build step.
+  - `src/ui/` -- read-only web UI: layouts, page builders, the shared brand
+    stylesheet, and brand assets copied from the website (favicon/logo;
+    provenance in `src/ui/assets/SOURCES.md`). HTML is served only when the
+    browser's FIRST Accept entry is `text/html`; every other request keeps
+    the JSON contract (`src/ui/negotiate.js`). No client-side framework, no
+    build step.
   - `scripts/keygen.js` -- publish-token generator (`--replace` rotates).
   - `scripts/live-check.js` -- read-only deployed-instance smoke check;
     scheduled in `.github/workflows/live-check.yml` (health, registry

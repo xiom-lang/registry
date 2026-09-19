@@ -133,6 +133,9 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /href="\/ui\/registry\.css"/);
   assert.match(body, /PUBLISHING\.md/);   // community guides are linked
   assert.match(body, /USING\.md/);
+  assert.match(body, /rel="icon"/);       // brand marks
+  assert.match(body, /\/ui\/logo\.png/);
+  assert.match(body, /https:\/\/xiom-lang\.org/);
 
   const json = await fetch(`${baseUrl}/`, { headers: API });
   assert.match(json.headers.get('content-type'), /application\/json/);
@@ -288,6 +291,20 @@ test('stylesheet is served as CSS', async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /text\/css/);
   assert.match(await response.text(), /:root/);
+});
+
+test('brand assets are served for the UI', async () => {
+  const ico = await fetch(`${baseUrl}/favicon.ico`, { headers: BROWSER });
+  assert.equal(ico.status, 200);
+  assert.match(ico.headers.get('content-type'), /image\/x-icon/);
+  assert.ok((await ico.arrayBuffer()).byteLength > 0);
+
+  for (const path of ['/ui/favicon.png', '/ui/logo.png']) {
+    const asset = await fetch(`${baseUrl}${path}`, { headers: BROWSER });
+    assert.equal(asset.status, 200, path);
+    assert.match(asset.headers.get('content-type'), /image\/png/, path);
+    assert.ok((await asset.arrayBuffer()).byteLength > 0, path);
+  }
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

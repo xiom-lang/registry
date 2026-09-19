@@ -55,6 +55,12 @@ const SERVICE_VERSION = require('../package.json').version;
 const SERVICE_STARTED_AT = new Date().toISOString();
 // Read once: the UI stylesheet is static and small.
 const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
+// Brand assets shipped with the UI; provenance in src/ui/assets/SOURCES.md.
+const UI_ASSETS = {
+  faviconIco: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.ico')),
+  faviconPng: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.png')),
+  logo: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'logo.png')),
+};
 
 /**
  * Build the Express application. Exported for tests; `src/server.js` owns
@@ -225,6 +231,20 @@ function createApp(config = loadConfig()) {
   // Stylesheet for the read-only UI (module-level constant, no fs per request).
   app.get('/ui/registry.css', generalLimit, (req, res) => {
     res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(REGISTRY_CSS);
+  });
+
+  // Brand marks, served from memory (same files the website uses).
+  app.get('/favicon.ico', generalLimit, (req, res) => {
+    res.type('image/x-icon').set('Cache-Control', 'public, max-age=604800')
+      .send(UI_ASSETS.faviconIco);
+  });
+  app.get('/ui/favicon.png', generalLimit, (req, res) => {
+    res.type('image/png').set('Cache-Control', 'public, max-age=604800')
+      .send(UI_ASSETS.faviconPng);
+  });
+  app.get('/ui/logo.png', generalLimit, (req, res) => {
+    res.type('image/png').set('Cache-Control', 'public, max-age=604800')
+      .send(UI_ASSETS.logo);
   });
 
   // Package listing: JSON for API consumers, the same list the UI shows.
