@@ -16,6 +16,14 @@ const {
   fingerprint,
   layout,
 } = require('./layout');
+const { isFirstPartyNamespace } = require('../names');
+
+/** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
+function officialBadge(name) {
+  return isFirstPartyNamespace(name)
+    ? '<span class="badge official">official</span>'
+    : '';
+}
 
 /** Card used on the home and search pages. */
 function packageCard(name, pkg) {
@@ -27,6 +35,7 @@ function packageCard(name, pkg) {
   return `<li class="package-card">
   <div class="pkg-head">
     <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+    ${officialBadge(name)}
     ${latest}
   </div>
   ${description}
@@ -185,6 +194,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '') {
     body: `<section>
   <div class="pkg-title">
     <h1>${escapeHtml(name)}</h1>
+    ${officialBadge(name)}
     ${latestBadge}
     ${signedBadge}
   </div>

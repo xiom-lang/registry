@@ -80,14 +80,20 @@ function validatePackageName(name) {
 }
 
 /**
- * True when the name lives in the first-party `xiom.*` namespace (including
- * the bare `xiom` package). `xiomcore` is NOT first-party.
+ * True when the name belongs to the first-party namespace (including the
+ * bare `xiom` package). Both separator forms are reserved:
+ *   - `xiom.core`, `xiom.l10n.date` (the dotted official namespace)
+ *   - `xiom-core` (the hyphen form shipped in the packages monorepo)
+ * `xiomcore` is NOT first-party (no separator), and neither is a name that
+ * merely contains `xiom`, e.g. `my.xiom.core`.
  *
  * @param {string} name
  * @returns {boolean}
  */
 function isFirstPartyNamespace(name) {
-  return name === FIRST_PARTY_NAMESPACE || name.startsWith(`${FIRST_PARTY_NAMESPACE}.`);
+  return name === FIRST_PARTY_NAMESPACE
+    || name.startsWith(`${FIRST_PARTY_NAMESPACE}.`)
+    || name.startsWith(`${FIRST_PARTY_NAMESPACE}-`);
 }
 
 /**
@@ -100,8 +106,8 @@ function isFirstPartyNamespace(name) {
 function assertNamespaceAllowed(name, token) {
   if (isFirstPartyNamespace(name) && !token.firstParty) {
     throw new ForbiddenError(
-      `package "${name}" is in the reserved "${FIRST_PARTY_NAMESPACE}.*" namespace; `
-      + 'only first-party tokens may publish it',
+      `package "${name}" is in the reserved "${FIRST_PARTY_NAMESPACE}.*" / `
+      + `"${FIRST_PARTY_NAMESPACE}-*" namespace; only first-party tokens may publish it`,
       'reserved_namespace',
     );
   }

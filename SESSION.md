@@ -177,7 +177,7 @@ client does not send them), and optional `compiler` compatibility range.
 | Publish auth | `Authorization: Bearer <token>` | Bearer preferred; `x-api-key` and GET `api_key` accepted for legacy compatibility |
 | Signature fields | `signature` + `publicKey` per version | parsed, format-validated, stored, emitted; verified on publish for `trusted` tokens |
 | Immutability | locked installs depend on digests | duplicate version -> 409; `POST /packages/:name/:version/yank` |
-| Reserved names | first-party `xiom.*` namespace | `firstParty` token flag required for `xiom.*`; strict name validation |
+| Reserved names | first-party `xiom.*` namespace | `firstParty` token flag required for `xiom.*` and `xiom-*`; strict name validation |
 | `/index.json` fields | `size`, `published`, `dependencies` tolerated | all stored and emitted, plus the required root `registry` field |
 
 ### 2.5 Error semantics
@@ -206,8 +206,11 @@ client does not send them), and optional `compiler` compatibility range.
       `trusted: true`; 422 on missing/mismatched signatures.
 - [x] T5. Immutability (409 on republish) + `POST /packages/:name/:version/yank`
       (`yanked: true`; artifact stays; pinned installs keep working).
-- [x] T6. Reserved namespace policy (`xiom.*` first-party only) + name
-      validation (lowercase DNS-ish grammar, Windows reserved segments).
+- [x] T6. Reserved namespace policy (`xiom.*` and `xiom-*` first-party only;
+      the hyphen form guards against lookalikes while the packages monorepo
+      still ships `xiom-*` folders) + name validation (lowercase DNS-ish
+      grammar, Windows reserved segments). The UI marks first-party names
+      with an `official` badge.
 - [x] T7. Limits: 50 MiB cap, rate limiting, index growth bounds.
 - [x] T8. End-to-end test (`npm run test:e2e`) wired into CI
       (`.github/workflows/e2e.yml`).

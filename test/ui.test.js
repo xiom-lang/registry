@@ -94,6 +94,11 @@ test.before(async () => {
     name: 'hostile-pkg', version: '0.1.0', bytes: tarballBytes('hostile'),
   })).status, 201);
 
+  // First-party namespace fixture: the token is firstParty, so xiom.* is allowed.
+  assert.equal((await publish({
+    name: 'xiom.official-fixture', version: '0.1.0', bytes: tarballBytes('official'),
+  })).status, 201);
+
   const yank = await fetch(`${baseUrl}/packages/demo-pkg/0.9.0/yank`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${OPEN_TOKEN}`, 'Content-Type': 'application/json' },
@@ -133,7 +138,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(json.headers.get('content-type'), /application\/json/);
   const data = await json.json();
   assert.equal(data.status, 'operational');
-  assert.equal(data.packages, 2);
+  assert.equal(data.packages, 3);
 });
 
 test('GET /packages lists packages in both formats', async () => {
@@ -142,10 +147,56 @@ test('GET /packages lists packages in both formats', async () => {
 
   const json = await fetch(`${baseUrl}/packages`, { headers: API });
   const data = await json.json();
-  assert.equal(data.packages.length, 2);
+  assert.equal(data.packages.length, 3);
   const demo = data.packages.find((p) => p.name === 'demo-pkg');
   assert.equal(demo.latest, '1.0.0');
   assert.equal(demo.versions, 2);
+});
+
+test('first-party packages carry the official badge', async () => {
+  const official = await fetch(`${baseUrl}/packages/xiom.official-fixture`, { headers: BROWSER });
+  assert.match(await official.text(), /class="badge official"/);
+
+  const community = await fetch(`${baseUrl}/packages/demo-pkg`, { headers: BROWSER });
+  assert.doesNotMatch(await community.text(), /badge official/);
+
+  const home = await fetch(`${baseUrl}/`, { headers: BROWSER });
+  assert.match(await home.text(), /class="badge official"/);
+});
+
+test('community tokens cannot publish the reserved xiom-* hyphen namespace', async () => {
+  const communityToken = 'ui-token-community';
+  fs.writeFileSync(process.env.TOKENS_FILE, JSON.stringify([
+    { token: OPEN_TOKEN, label: 'open', scopes: ['*'], trusted: false, firstParty: true },
+    { token: communityToken, label: 'community', scopes: ['*'], trusted: false, firstParty: false },
+  ]));
+  // A fresh app instance loads the updated token file.
+  const { loadConfig } = require('../src/config');
+  const { createApp } = require('../src/app');
+  const fresh = createApp(loadConfig());
+  const freshServer = await new Promise((resolve) => {
+    const s = fresh.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const freshUrl = `http://127.0.0.1:${freshServer.address().port}`;
+  try {
+    const form = new FormData();
+    form.set('name', 'xiom-lookalike');
+    form.set('version', '0.1.0');
+    form.set('package', new Blob([tarballBytes('lookalike')]), 'package.tar.gz');
+    const response = await fetch(`${freshUrl}/publish`, {
+      method: 'POST',
+      body: form,
+      headers: { Authorization: `Bearer ${communityToken}` },
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, 'reserved_namespace');
+  } finally {
+    freshServer.close();
+    // Restore the original single-token file for the remaining tests.
+    fs.writeFileSync(process.env.TOKENS_FILE, JSON.stringify([
+      { token: OPEN_TOKEN, label: 'open', scopes: ['*'], trusted: false, firstParty: true },
+    ]));
+  }
 });
 
 test('package page shows install command, versions, digest, and signature', async () => {

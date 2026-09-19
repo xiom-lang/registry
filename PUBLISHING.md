@@ -62,8 +62,10 @@ package my_lib {
 - each segment starts with a letter and does not end with a hyphen
 - no `..`, no leading or trailing dot, no reserved system names (`con`,
   `com1`, `lpt1`, ...)
-- **`xiom.*` is reserved for XIOM Foundation packages.** Choose a name that
-  describes your project (`my-http-client`), not a namespace.
+- **`xiom.*` and `xiom-*` are reserved for XIOM Foundation packages.** Both
+  forms are enforced by the registry: community tokens receive
+  `403 reserved_namespace`. Choose a name that describes your project
+  (`my-http-client`), not a namespace.
 
 **Version** must be valid semver (`0.1.0`, `1.2.3-rc.1`).
 
@@ -169,7 +171,7 @@ is the supported path. Yanked versions show a badge on the package page.
 |---|---|---|
 | `401` | missing or unknown token | set `XIOM_REGISTRY_TOKEN`; if revoked, request a new token |
 | `403 scope_denied` | token not scoped to that package name | request a token covering the name |
-| `403 reserved_namespace` | tried to publish `xiom.*` | choose a non-reserved name |
+| `403 reserved_namespace` | tried to publish `xiom.*` or `xiom-*` | choose a non-reserved name |
 | `409 version_exists` | that version is already published | bump the version |
 | `413` | tarball over the 50 MiB beta limit | shrink the package |
 | `422 signature_required` | your token requires signatures | run `xiom pkg keygen` and publish again |

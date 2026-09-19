@@ -51,9 +51,13 @@ test('rejects Windows reserved segments', () => {
 test('first-party namespace detection', () => {
   assert.equal(isFirstPartyNamespace('xiom'), true);
   assert.equal(isFirstPartyNamespace('xiom.core'), true);
+  // The hyphen form is reserved too: the packages monorepo ships xiom-* names
+  // and a community token publishing xiom-core would look official.
+  assert.equal(isFirstPartyNamespace('xiom-core'), true);
+  assert.equal(isFirstPartyNamespace('xiom-l10n-date'), true);
   assert.equal(isFirstPartyNamespace('xiomcore'), false);
-  assert.equal(isFirstPartyNamespace('xiom-core'), false);
   assert.equal(isFirstPartyNamespace('my.xiom.core'), false);
+  assert.equal(isFirstPartyNamespace('my-xiom-lib'), false);
 });
 
 test('namespace policy allows first-party tokens only', () => {
@@ -61,7 +65,9 @@ test('namespace policy allows first-party tokens only', () => {
   const community = { firstParty: false, label: 'community' };
 
   assert.doesNotThrow(() => assertNamespaceAllowed('xiom.core', firstParty));
+  assert.doesNotThrow(() => assertNamespaceAllowed('xiom-core', firstParty));
   assert.doesNotThrow(() => assertNamespaceAllowed('my-lib', community));
   assert.throws(() => assertNamespaceAllowed('xiom.core', community), ForbiddenError);
+  assert.throws(() => assertNamespaceAllowed('xiom-core', community), ForbiddenError);
   assert.throws(() => assertNamespaceAllowed('xiom', community), ForbiddenError);
 });
