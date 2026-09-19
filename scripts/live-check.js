@@ -169,5 +169,10 @@ async function main() {
 
 main().catch((err) => {
   console.error(`live check error: ${err.message}`);
-  process.exit(1);
+  // Do not call process.exit() here: on Windows an abrupt exit while the
+  // fetch keep-alive sockets are closing trips a libuv assertion
+  // ("!(handle->flags & UV_HANDLE_CLOSING)") and buries the real error under
+  // a crash. Setting the exit code lets Node close its handles and exit
+  // cleanly with the same non-zero status.
+  process.exitCode = 1;
 });
