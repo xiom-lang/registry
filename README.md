@@ -102,3 +102,6 @@ Dual-licensed under your choice of:
 
 Copyright (c) 2026 Eleftherios Notas (Lefteris Notas) and XIOM Foundation.
 See `NOTICE` for attributions.
+
+Terms of Use: https://xiom-lang.org/terms.html (section 4 covers publishing) -
+Privacy: https://xiom-lang.org/privacy.html - support@xiom-lang.org

@@ -104,6 +104,13 @@ ${body}
     <a href="/health">health</a>
     <a href="https://xiom-lang.org">xiom-lang.org</a>
   </div>
+  <div class="container legal">
+    <span>Terms of Use: <a href="https://xiom-lang.org/terms.html">xiom-lang.org/terms.html</a></span>
+    <span>&middot;</span>
+    <span>Privacy: <a href="https://xiom-lang.org/privacy.html">xiom-lang.org/privacy.html</a></span>
+    <span>&middot;</span>
+    <span><a href="mailto:support@xiom-lang.org">support@xiom-lang.org</a></span>
+  </div>
 </footer>
 </body>
 </html>

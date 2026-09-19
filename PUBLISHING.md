@@ -183,12 +183,19 @@ client before it uploads anything - read its message first.
 
 ## 10. Ground rules
 
+The legal framework for the registry is the XIOM Terms of Use
+(https://xiom-lang.org/terms.html) -- **section 4 covers publishing:
+ownership, immutability, and takedown**. Privacy practices are described at
+https://xiom-lang.org/privacy.html. This guide stays the operational
+how-to; the Terms are the contract.
+
 - Publish only code you have the right to distribute, with a license file.
 - No squatting on names you do not use; maintainers may yank and reassign.
 - Keep version numbers honest: never reuse a version for different contents
   (the registry will not let you, but do not try to work around it).
 - Security issues in a published package: yank the affected version and
   publish a fixed release.
+- Questions or takedown requests: support@xiom-lang.org.
 
 ## Roadmap
 

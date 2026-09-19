@@ -289,6 +289,13 @@ table.versions tr:hover td { background: var(--panel); }
 .site-footer a { color: var(--paper-dim); }
 .site-footer a:hover { color: var(--paper); }
 .site-footer .spacer { margin-left: auto; }
+.site-footer .legal {
+  margin-top: var(--space-sm);
+  font-size: 12px;
+  color: var(--muted);
+}
+.site-footer .legal a { color: var(--muted); }
+.site-footer .legal a:hover { color: var(--paper); }
 
 @media (max-width: 640px) {
   h1 { font-size: 26px; }

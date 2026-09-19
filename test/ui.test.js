@@ -136,6 +136,9 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /rel="icon"/);       // brand marks
   assert.match(body, /\/ui\/logo\.png/);
   assert.match(body, /https:\/\/xiom-lang\.org/);
+  assert.match(body, /terms\.html/);      // legal links in the footer
+  assert.match(body, /privacy\.html/);
+  assert.match(body, /support@xiom-lang\.org/);
 
   const json = await fetch(`${baseUrl}/`, { headers: API });
   assert.match(json.headers.get('content-type'), /application\/json/);

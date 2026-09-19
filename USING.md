@@ -114,3 +114,5 @@ verifies is derived from what the publisher uploaded.
 - Package pages link to the publisher's repository.
 - Registry issues: https://github.com/xiom-lang/registry/issues
 - Site and docs: https://xiom-lang.org
+- Terms of Use: https://xiom-lang.org/terms.html · Privacy:
+  https://xiom-lang.org/privacy.html · support@xiom-lang.org
