@@ -79,6 +79,24 @@ async function checkInstance(label, baseUrl, { expectRegistry } = {}) {
   }
   console.log(`  registry: ${index.registry}`);
 
+  // The read-only UI must render for browsers (and only for browsers).
+  const page = await fetch(`${baseUrl}/`, { headers: { Accept: 'text/html' } });
+  if (!page.ok) throw new Error(`${label}: UI page HTTP ${page.status}`);
+  const pageHtml = await page.text();
+  if (!pageHtml.includes('<title>') || !pageHtml.includes('/ui/registry.css')) {
+    throw new Error(`${label}: UI page did not render expected markup`);
+  }
+  const packages = Object.keys(index.packages || {});
+  if (packages.length > 0) {
+    const deep = await fetch(`${baseUrl}/packages/${encodeURIComponent(packages[0])}`, {
+      headers: { Accept: 'text/html' },
+    });
+    if (!deep.ok || !(await deep.text()).includes(packages[0])) {
+      throw new Error(`${label}: package page for ${packages[0]} did not render`);
+    }
+  }
+  console.log(`  ui: html pages render`);
+
   // Verify the newest non-yanked version of each package end to end:
   // metadata is present and the served bytes match the indexed digest.
   let verified = 0;

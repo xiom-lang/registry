@@ -156,6 +156,8 @@ publishes, `first-party` allows the reserved `xiom.*` namespace.
 curl -s https://registry.xiom-lang.org/health
 curl -s https://registry.xiom-lang.org/
 curl -s https://registry.xiom-lang.org/index.json | head -c 300
+# read-only web UI (browsers only; the API stays JSON for these paths)
+curl -s -H 'Accept: text/html' https://registry.xiom-lang.org/ | head -c 120
 ```
 
 End-to-end client check (build `xiom-pkg` from the compiler repo):

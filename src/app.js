@@ -39,6 +39,13 @@ const {
   isValidPublicKeyHex,
 } = require('./signatures');
 const { extractManifest } = require('./manifest');
+const { wantsHtml } = require('./ui/negotiate');
+const {
+  homePage,
+  searchPage,
+  packagePage,
+  notFoundPage,
+} = require('./ui/pages');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
@@ -46,6 +53,8 @@ const SERVICE_VERSION = require('../package.json').version;
 // process start time survives restarts and lets two registries prove they
 // are different instances without comparing uptime.
 const SERVICE_STARTED_AT = new Date().toISOString();
+// Read once: the UI stylesheet is static and small.
+const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
 
 /**
  * Build the Express application. Exported for tests; `src/server.js` owns
@@ -186,6 +195,9 @@ function createApp(config = loadConfig()) {
 
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60').send(homePage(index));
+    }
     res.json({
       name: SERVICE_NAME,
       version: SERVICE_VERSION,
@@ -210,15 +222,56 @@ function createApp(config = loadConfig()) {
     res.json(indexStore.snapshot());
   });
 
+  // Stylesheet for the read-only UI (module-level constant, no fs per request).
+  app.get('/ui/registry.css', generalLimit, (req, res) => {
+    res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(REGISTRY_CSS);
+  });
+
+  // Package listing: JSON for API consumers, the same list the UI shows.
+  app.get('/packages', generalLimit, (req, res) => {
+    const index = indexStore.snapshot();
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60').send(homePage(index));
+    }
+    res.json({
+      packages: Object.entries(index.packages).map(([name, pkg]) => ({
+        name,
+        description: pkg.description,
+        latest: pkg.latest,
+        versions: Object.keys(pkg.versions).length,
+      })),
+    });
+  });
+
   app.get('/packages/:name', generalLimit, (req, res) => {
     const name = req.params.name;
     const pkg = indexStore.getPackage(name);
-    if (!pkg) throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+    if (!pkg) {
+      if (wantsHtml(req)) {
+        return res.status(404).type('html').send(notFoundPage(`Package "${name}" was not found.`));
+      }
+      throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+    }
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(packagePage(pkg, indexStore.snapshot().registry));
+    }
     res.json(pkg);
   });
 
   app.get('/packages/:name/:version', generalLimit, (req, res) => {
-    res.json(indexStore.requireVersion(req.params.name, req.params.version));
+    const { name, version } = req.params;
+    if (wantsHtml(req)) {
+      const pkg = indexStore.getPackage(name);
+      const entry = pkg?.versions?.[version];
+      if (!pkg || !entry) {
+        return res.status(404).type('html')
+          .send(notFoundPage(`Version "${version}" of "${name}" was not found.`));
+      }
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(packagePage(pkg, indexStore.snapshot().registry, version));
+    }
+    res.json(indexStore.requireVersion(name, version));
   });
 
   // T1: the exact path the client builds (registry.rs install_from_registry),
@@ -253,8 +306,13 @@ function createApp(config = loadConfig()) {
   );
 
   app.get('/search', generalLimit, (req, res) => {
-    const query = String(req.query.q || '').toLowerCase();
+    const rawQuery = String(req.query.q || '');
+    const query = rawQuery.toLowerCase();
     const index = indexStore.snapshot();
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(searchPage(index, rawQuery));
+    }
     const results = [];
     for (const [name, pkg] of Object.entries(index.packages)) {
       if (
@@ -271,7 +329,7 @@ function createApp(config = loadConfig()) {
         });
       }
     }
-    res.json({ query: req.query.q || '', results });
+    res.json({ query: rawQuery, results });
   });
 
   // ─── Publish ──────────────────────────────────────────────────────────────
@@ -383,8 +441,13 @@ function createApp(config = loadConfig()) {
 
   // ─── Errors ───────────────────────────────────────────────────────────────
 
-  // 404 for unknown API paths.
+  // 404 for unknown paths: HTML for browsers, JSON for API consumers. The
+  // negotiation rule means a navigation from a browser renders the UI 404
+  // while every CLI/protocol request keeps the JSON contract.
   app.use((req, res) => {
+    if (wantsHtml(req)) {
+      return res.status(404).type('html').send(notFoundPage('This page does not exist.'));
+    }
     res.status(404).json({ error: `no such endpoint: ${req.method} ${req.path}`, code: 'no_route' });
   });
 
@@ -395,15 +458,29 @@ function createApp(config = loadConfig()) {
       if (err instanceof RateLimitedError) {
         res.setHeader('Retry-After', String(err.retryAfterSeconds));
       }
+      if (wantsHtml(req)) {
+        return res.status(err.status).type('html').send(notFoundPage(err.message));
+      }
       return res.status(err.status).json({ error: err.message, code: err.code });
     }
     if (err && err.type === 'entity.too.large') {
+      if (wantsHtml(req)) {
+        return res.status(413).type('html')
+          .send(notFoundPage('That upload is too large for this registry.'));
+      }
       return res.status(413).json({ error: 'request body too large', code: 'payload_too_large' });
     }
     if (err instanceof SyntaxError && 'body' in err) {
+      if (wantsHtml(req)) {
+        return res.status(400).type('html').send(notFoundPage('Malformed request body.'));
+      }
       return res.status(400).json({ error: 'malformed JSON body', code: 'bad_json' });
     }
     console.error('unhandled error:', err);
+    if (wantsHtml(req)) {
+      return res.status(500).type('html')
+        .send(notFoundPage('Something went wrong handling this request.'));
+    }
     return res.status(500).json({ error: 'internal server error', code: 'internal' });
   });
 

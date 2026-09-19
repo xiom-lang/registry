@@ -11,10 +11,18 @@ Service endpoint: `https://registry.xiom-lang.org` (staging:
 
 ## Status
 
-Beta-ready, not yet deployed. The server speaks the full `xiom pkg`
-protocol and passes a 16-check end-to-end gate that drives the real client.
-`SESSION.md` is the normative spec and handoff - read it before changing
-anything. Remaining work: T9 (staging deploy) and T10 (deployment doc).
+Beta-ready, deployed. The server speaks the full `xiom pkg` protocol and
+passes a 20-check end-to-end gate that drives the real client, plus 82 unit
+tests. `SESSION.md` is the normative spec and handoff - read it before
+changing anything.
+
+## Web UI
+
+Browsers get a read-only UI at `https://registry.xiom-lang.org`: package
+list, search, package/version pages with digests, signatures, yank state,
+and copy-ready install/trust commands. The API is unchanged - HTML is
+served only when the browser's first `Accept` entry is `text/html`; every
+CLI and protocol request still receives JSON.
 
 ## Quick start (local)
 
