@@ -144,11 +144,23 @@ Generate or append a publish token (never commit the file):
 ```
 docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
   node scripts/keygen.js --label <label> --scopes "*" --trusted --first-party --out tokens.json
-docker compose up -d
+# keygen appends: do not re-run it for the same label unless you revoked the
+# old entry first, or use --replace for a single-token file.
+chown 1000:1000 tokens.json && chmod 600 tokens.json
+# The container reads the token file at startup only; force a recreate so the
+# new entry is loaded (a plain `up -d` is a no-op for bind-mount changes).
+docker compose up -d --force-recreate --no-deps registry
+docker logs --tail 6 xiom-registry      # expect: tokens: N configured
 ```
 
 Tokens are compared in constant time; `trusted` tokens require signed
 publishes, `first-party` allows the reserved `xiom.*` namespace.
+
+Operator runbook -- issue a scoped token, prove least privilege with canary
+publishes, list tokens without printing secrets, revoke, rotate, incident
+response and backups: `xiom-lang/ops` `docs/REGISTRY_TOKENS.md` (private
+repository) --
+https://github.com/xiom-lang/ops/blob/main/docs/REGISTRY_TOKENS.md
 
 ## Verification after any change
 
