@@ -391,19 +391,20 @@ item.
 
 ### Compiler lane
 
-- [ ] Retire the git-clone channel: `xiom install` / `xiom update` fetch
-      `/packages.json`, which the registry will not serve; `xiom update` is
-      broken (`_update` unused). Remap to `xiom pkg install` or remove.
-- [ ] Dotted package-name follow-ups: `crates/xiom-pkg/src/main.rs` stdlib
-      resolution key `xiom-std` (~lines 420, 441-442, 1168, 1175) and its
-      tests; `crates/xiom-graph/src/manifest.rs`;
-      `crates/xiom-codegen/tests/feature_regression_tests.rs`. Coordinate
-      the `xiom.std` rename with the stdlib session. Do not rename Cargo
-      crate or tool names.
-- [ ] Optional wins: `xiom pkg update|outdated` reading `/index.json`;
-      `xiom self-update` from `dl./latest.json` with SHA256 verification.
+- [x] Retire the git-clone channel (R50, commit `6241f367`): `xiom install`
+      delegates to the verified `xiom pkg install`; `xiom update` is retired
+      with guidance; the legacy `/packages.json` handlers were deleted, so no
+      install path can skip checksum/signature/yank. Verified 2026-09-19.
+- [x] Dotted package names: the resolver accepts canonical `xiom.std` with
+      the legacy `xiom-std` alias (`main.rs` ~421/425, ~447-451). The pinned
+      stdlib manifest still declares the hyphen form; the full switch is
+      coordinated with the stdlib session (drop the alias once `xiom.std` is
+      declared and published).
+- [ ] Optional wins, queued as documented: `xiom pkg update|outdated`
+      reading `/index.json`; `xiom self-update` from `dl./latest.json` with
+      SHA256 verification.
 - [ ] C3 CI publish: GitHub Actions workflow issuing the OIDC token (after
-      the registry feature lands).
+      the registry feature lands; no client change needed).
 
 ### Ops lane
 
