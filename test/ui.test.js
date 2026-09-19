@@ -299,7 +299,7 @@ test('brand assets are served for the UI', async () => {
   assert.match(ico.headers.get('content-type'), /image\/x-icon/);
   assert.ok((await ico.arrayBuffer()).byteLength > 0);
 
-  for (const path of ['/ui/favicon.png', '/ui/logo.png']) {
+  for (const path of ['/ui/favicon.png', '/ui/icon.png', '/ui/logo.png']) {
     const asset = await fetch(`${baseUrl}${path}`, { headers: BROWSER });
     assert.equal(asset.status, 200, path);
     assert.match(asset.headers.get('content-type'), /image\/png/, path);

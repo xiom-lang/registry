@@ -59,6 +59,7 @@ const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'),
 const UI_ASSETS = {
   faviconIco: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.ico')),
   faviconPng: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.png')),
+  icon: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'icon.png')),
   logo: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'logo.png')),
 };
 
@@ -241,6 +242,10 @@ function createApp(config = loadConfig()) {
   app.get('/ui/favicon.png', generalLimit, (req, res) => {
     res.type('image/png').set('Cache-Control', 'public, max-age=604800')
       .send(UI_ASSETS.faviconPng);
+  });
+  app.get('/ui/icon.png', generalLimit, (req, res) => {
+    res.type('image/png').set('Cache-Control', 'public, max-age=604800')
+      .send(UI_ASSETS.icon);
   });
   app.get('/ui/logo.png', generalLimit, (req, res) => {
     res.type('image/png').set('Cache-Control', 'public, max-age=604800')

@@ -69,6 +69,7 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
 <meta name="description" content="${escapeHtml(description)}">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="48x48" href="/ui/favicon.png">
+<link rel="apple-touch-icon" href="/ui/icon.png">
 <link rel="stylesheet" href="/ui/registry.css">
 </head>
 <body>
