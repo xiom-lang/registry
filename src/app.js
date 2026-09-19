@@ -210,6 +210,8 @@ function createApp(config = loadConfig()) {
       version: SERVICE_VERSION,
       packages: Object.keys(index.packages).length,
       status: 'operational',
+      // Reviewers and scripts read this raw; point them at both surfaces.
+      web: index.registry || null,
       docs: 'https://xiom-lang.org/docs/registry',
       protocol: index.version,
     });

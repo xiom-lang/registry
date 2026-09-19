@@ -145,6 +145,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   const data = await json.json();
   assert.equal(data.status, 'operational');
   assert.equal(data.packages, 3);
+  assert.equal(data.web, 'https://registry.ui.test', 'raw readers get pointed at the UI');
 });
 
 test('GET /packages lists packages in both formats', async () => {
