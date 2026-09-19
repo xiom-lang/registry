@@ -27,18 +27,32 @@ two indexes stay separate.
    verification, confirmed production's index never listed it, and yanked
    the probe. The staging token used for the run has been rotated by the
    owner. T9 and the beta gate are complete.
-2. **Operational hygiene** -- nightly restic backups of the volumes are not
-   automated yet (R4 in `RELEASE_INFRA_PLAN.md`), as are the uptime monitor
-   and the release -> registry deploy hook; log rotation is already handled
-   by the compose logging config.
+2. **Operational hygiene (R4) -- prepared, not live.** The ops repo has
+   `scripts/restic-backup.sh` (registry volumes + both token files + both
+   env files) and `scripts/xiom-uptime-check.sh` (six endpoints including
+   staging `/health`), but neither is scheduled yet: restic needs the
+   Backblaze B2 bucket + application key and `/etc/xiom-backup.env` (owner
+   actions B1-B4), and the uptime check needs the cron with MAILTO plus an
+   external monitor account for host-level outages (B6/B7). See
+   `ops/docs/VPS_BACKUP_MONITORING.md`. Do not count backups as done until
+   the first snapshot verifies. The release -> registry deploy hook is
+   intentionally not built: deploys stay pull-based, and first-party
+   publishing lands with C3 via GitHub OIDC (no HMAC webhook). Log rotation,
+   pull-based cron deploys, and docroot permission hardening are done.
 3. **Dependency maintenance** -- DONE: all three dependabot PRs are closed
    (multer and tar were already current; the qs/express PR was superseded by
    the tree-wide `qs 6.16.0` override on main, `npm audit` reports 0).
 4. **Probe residue** -- DONE: `xiom.staging-e2e-probe`@0.0.2 was yanked on
    production (2026-09-18); both versions are now yanked and `latest` is
-   empty, so nothing installable remains. The metadata entry is left as an
-   audit trail; removing it entirely needs a VPS index edit, not HTTP.
-5. **Commit identity** -- DONE for this repo (owner-authorized rewrite,
+   empty, so nothing installable remains. Ops accepted the all-versions-
+   yanked semantics as final, so no further residue action is required; the
+   metadata entry stays as an audit trail (removing it would need a VPS
+   index edit, not HTTP).
+5. **Package channels** -- decided and recorded in `ops/docs/PACKAGE_CHANNELS.md`
+   (commit 844d790): the registry protocol is the only install channel; the
+   git-clone channel (`xiom install/update`, `/packages.json`) is to be
+   retired by the compiler lane, not reimplemented here.
+6. **Commit identity** -- DONE for this repo (owner-authorized rewrite,
    2026-09-18): all history rewritten to
    `Lefteris Notas <lefterisnotas@gmail.com>`, main now
    `d8eff222c0937c369b2378e9b8ca63f33a6396a1`, feature branch
@@ -49,12 +63,12 @@ two indexes stay separate.
    re-cloned by the owner.** New commits are verified with
    `git log -1 --format='%an <%ae>'` before every push (see the identity
    section in `DEPLOY.md`).
-6. **Compiler packaging** -- DONE (compiler session, CRB-3): release
+7. **Compiler packaging** -- DONE (compiler session, CRB-3): release
    archives now build and stage both `xiom` and `xiom-pkg` with a
    `--version` assertion before archiving, and the installer wrapper
    dispatches `xiom pkg`; release users can publish/install from the next
    tag (v0.61.0). Verified in `release.yml` (xiom repo) on 2026-09-18.
-7. **Website coordination** -- nothing is needed from registry for the
+8. **Website coordination** -- nothing is needed from registry for the
    website work; playground links are absolute and the
    ecosystem/registry doc pointers stay deferred until stdlib is at 100%
    (message from the website session, 2026-09-18).
