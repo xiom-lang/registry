@@ -126,6 +126,8 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /<title>XIOM Registry<\/title>/);
   assert.match(body, /demo-pkg/);
   assert.match(body, /href="\/ui\/registry\.css"/);
+  assert.match(body, /PUBLISHING\.md/);   // community guides are linked
+  assert.match(body, /USING\.md/);
 
   const json = await fetch(`${baseUrl}/`, { headers: API });
   assert.match(json.headers.get('content-type'), /application\/json/);

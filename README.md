@@ -24,6 +24,13 @@ and copy-ready install/trust commands. The API is unchanged - HTML is
 served only when the browser's first `Accept` entry is `text/html`; every
 CLI and protocol request still receives JSON.
 
+## Community guides
+
+- [PUBLISHING.md](PUBLISHING.md) - request a token, sign, publish, verify,
+  yank, troubleshooting.
+- [USING.md](USING.md) - browse, install, lock, signatures and trust.
+- Token requests: use the repository's "Token request" issue template.
+
 ## Quick start (local)
 
 ```

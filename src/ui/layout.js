@@ -76,6 +76,7 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
     <nav>
       <a href="/packages">Packages</a>
       <a href="/search">Search</a>
+      <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>
       <a href="https://github.com/xiom-lang/registry">GitHub</a>
     </nav>
@@ -90,6 +91,8 @@ ${body}
   <div class="container">
     <span>${SITE_NAME} -- MIT OR Apache-2.0 -- XIOM Foundation</span>
     <span class="spacer"></span>
+    <a href="https://github.com/xiom-lang/registry/blob/main/USING.md">Using the registry</a>
+    <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publishing</a>
     <a href="/index.json">index.json</a>
     <a href="/health">health</a>
     <a href="https://xiom-lang.org">xiom-lang.org</a>

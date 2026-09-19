@@ -1,0 +1,70 @@
+# Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Token request
+description: Request a publish token for your package name(s)
+title: "Token request: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Request a publish token for the XIOM registry. A maintainer reviews
+        the request and sends the token to you **privately** - never paste a
+        token into this issue or anywhere public.
+
+        Read [PUBLISHING.md](https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md)
+        first if you have not published before.
+
+  - type: input
+    id: handle
+    attributes:
+      label: GitHub handle
+      description: Your account name, so we can reach you.
+      placeholder: octocat
+    validations:
+      required: true
+
+  - type: input
+    id: packages
+    attributes:
+      label: Package name(s)
+      description: Exact names you need to publish, comma-separated. The token will be scoped to these only.
+      placeholder: my-lib, my-lib-cli
+    validations:
+      required: true
+
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: Where the package source lives.
+      placeholder: https://github.com/you/my-lib
+    validations:
+      required: true
+
+  - type: input
+    id: key
+    attributes:
+      label: Signing public key (optional)
+      description: Run `xiom pkg keygen` and paste the printed public key hex. Tokens that require signatures are issued against a known key.
+      placeholder: 64 hex characters
+
+  - type: textarea
+    id: purpose
+    attributes:
+      label: What are you publishing?
+      description: One or two sentences about the package and its license.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: agreement
+    attributes:
+      label: Agreement
+      options:
+        - label: I own or represent the package name(s) listed above.
+          required: true
+        - label: I will keep the token secret and report it immediately if it leaks.
+          required: true
+        - label: I have read the ground rules in PUBLISHING.md (no squatting, honest versions, licenses in place).
+          required: true

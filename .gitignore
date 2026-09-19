@@ -5,11 +5,13 @@ node_modules/
 tmp/
 *.log
 .env
+.env.*
+!.env.example
+!.env.staging.example
 *.code-workspace
 
 # Publish tokens must never be committed.
-tokens.json
-tokens.staging.json
+tokens*.json
 # Local seed overlays (the tracked seed-index.json is the canonical seed).
 seed-index.local.json
 

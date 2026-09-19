@@ -335,6 +335,9 @@ is staging-first; production is behind a required-reviewer environment.
 ## 9. Related documents
 
 - `README.md` -- quick start and repository rules.
+- `PUBLISHING.md` -- package-author guide (token request, signing, publish,
+  yank, troubleshooting); linked from the registry UI.
+- `USING.md` -- consumer guide (install, lock, signatures and trust).
 - `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` -- dual MIT OR Apache-2.0;
   Copyright (c) 2026 Eleftherios Notas and XIOM Foundation.
 - `docs/RELEASE_INFRA_PLAN.md` (monorepo until split): R3 release
