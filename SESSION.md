@@ -10,13 +10,16 @@ this file is the normative working spec for the service itself.
 
 **Status:** the server speaks the full `xiom pkg` protocol and passes a
 20-check end-to-end gate that drives the real client (`npm run test:e2e`),
-plus 71 unit tests (`npm test`). **Deployed and verified:**
+plus 88 unit tests (`npm test`). **Deployed and verified:**
 `https://registry.xiom-lang.org` (port 3100) and
 `https://staging.registry.xiom-lang.org` (isolated instance on port 3200,
 own volumes and tokens). Both advertise their own `registry` URL; the
 scheduled live check (`.github/workflows/live-check.yml`,
 `npm run live-check`) verifies health and artifact digests and asserts the
-two indexes stay separate.
+two indexes stay separate. The index carries its **first real package**:
+`xiom.hello@0.1.0`, signed, on both instances -- independently verified by
+this session (clean install, checksum, fingerprint, and served-bytes hash
+equal to the index digest) on 2026-09-19.
 
 **Remaining:**
 
@@ -403,6 +406,18 @@ item.
 - [ ] Optional wins, queued as documented: `xiom pkg update|outdated`
       reading `/index.json`; `xiom self-update` from `dl./latest.json` with
       SHA256 verification.
+- [ ] Deterministic archives (found during the first real publish): the
+      client packs gzip/tar with current mtimes, so the same source produced
+      different digests on staging and production. Prefer `gzip -n` plus a
+      fixed `--mtime=@0` (or a content hash) in the packer so digests are
+      reproducible and OIDC attestations compare meaningfully. Registry
+      stores bytes as-is; no server change needed.
+- [ ] `trust` hint wording: install prints "pin it with `xiom pkg trust
+      --registry <url> --key <publisher key>`", but `trust` pins a registry
+      key. Reword for accuracy (per-publisher pinning is a registry-side
+      future feature).
+- [ ] `xiom pkg --resolve` prints an empty tree outside a compiler workspace
+      (it looks for a sibling `stdlib/`); misleading for package authors.
 - [ ] C3 CI publish: GitHub Actions workflow issuing the OIDC token (after
       the registry feature lands; no client change needed).
 
@@ -428,6 +443,10 @@ item.
 
 ### Content milestone (cross-lane)
 
-- [ ] Publish the first real first-party packages (`xiom.core`, ...) from
-      the packages monorepo via CI, with OIDC once available; the monorepo
-      rename to dotted names is done (`packages` @ f743308).
+- [x] First real package published manually: `xiom.hello@0.1.0` to **staging
+      and production** on 2026-09-19 (signed, `xiom.*` official badge),
+      published by the packages session with a scoped trusted+firstParty
+      token; independently verified by the registry session (clean install,
+      checksum, fingerprint, served-bytes hash equals the index digest).
+- [ ] CI publishing automation for `xiom.*` packages via OIDC (C3), so the
+      release flow stops depending on a hand-delivered token.

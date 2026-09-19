@@ -70,6 +70,22 @@ function main() {
       + 'use --replace to rotate the file instead',
     );
   }
+  if (!args.replace) {
+    const sameLabel = existing.filter((entry) => entry.label === args.label).length;
+    if (sameLabel > 0) {
+      // The documented rotation recipe is append-then-remove-old on a
+      // multi-token file, so this must not be a hard error -- but two live
+      // tokens under one label is how a "rotated" secret quietly stays
+      // valid. Make it loud and say what to do.
+      console.warn(
+        `WARNING: label "${args.label}" already exists (${sameLabel} `
+        + `entr${sameLabel === 1 ? 'y' : 'ies'}). Both tokens stay valid until the old `
+        + 'entry is removed: delete the older one, then recreate the container '
+        + '(ops REGISTRY_TOKENS.md section 6). Only the last entry for a label '
+        + 'is the one you just minted.',
+      );
+    }
+  }
   const token = crypto.randomBytes(32).toString('hex');
   tokens.push({
     token,
