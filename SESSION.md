@@ -365,3 +365,68 @@ is staging-first; production is behind a required-reviewer environment.
   was carved, CI wiring after the split.
 - Client: `crates/xiom-pkg/src/registry.rs`, `crates/xiom-pkg/src/main.rs`,
   `crates/xiom-pkg/src/signing.rs`, `crates/xiom-pkg/src/lockfile.rs`.
+
+---
+
+## 10. Cross-lane roadmap (2026-09-19)
+
+The registry beta is complete and deployed; what follows is the remaining
+work across lanes, with owners. Keep this list current when a lane closes an
+item.
+
+### Registry lane (this repo)
+
+- [ ] **OIDC trusted publishing** (the next feature): trusted-publisher
+      config (repo / workflow / ref -> scopes + firstParty), GitHub JWKS JWT
+      verification (Node crypto, no new deps), claim validation, publisher
+      provenance recorded per version, tests. Replaces long-lived CI tokens;
+      enables C3 publish-from-Actions with no client change (the workflow
+      sets `XIOM_REGISTRY_TOKEN` to the OIDC token and `xiom pkg publish`
+      sends it as the bearer value).
+- [ ] First real end-to-end publish/consume validation (owner publishes a
+      community package; registry session installs it and runs the boundary
+      checks).
+- [ ] Phase 3 (post-beta, unplanned): download stats, mirror/offline mode,
+      object storage, index sharding.
+
+### Compiler lane
+
+- [ ] Retire the git-clone channel: `xiom install` / `xiom update` fetch
+      `/packages.json`, which the registry will not serve; `xiom update` is
+      broken (`_update` unused). Remap to `xiom pkg install` or remove.
+- [ ] Dotted package-name follow-ups: `crates/xiom-pkg/src/main.rs` stdlib
+      resolution key `xiom-std` (~lines 420, 441-442, 1168, 1175) and its
+      tests; `crates/xiom-graph/src/manifest.rs`;
+      `crates/xiom-codegen/tests/feature_regression_tests.rs`. Coordinate
+      the `xiom.std` rename with the stdlib session. Do not rename Cargo
+      crate or tool names.
+- [ ] Optional wins: `xiom pkg update|outdated` reading `/index.json`;
+      `xiom self-update` from `dl./latest.json` with SHA256 verification.
+- [ ] C3 CI publish: GitHub Actions workflow issuing the OIDC token (after
+      the registry feature lands).
+
+### Ops lane
+
+- [ ] B1-B4: Backblaze B2 bucket + application key + `/etc/xiom-backup.env`,
+      run `restic-backup.sh` once, verify the first snapshot -- only then is
+      backup "done".
+- [ ] B6/B7: alert mailbox + cron MAILTO for `xiom-uptime-check.sh`, plus an
+      external monitor account for host-level outages.
+- [ ] Deploy hook: intentionally none (pull-based deploys; no HMAC webhook).
+- Done: log rotation, pull-based cron deploys, docroot permission hardening,
+      SHA pinning compliance, restic/uptime scripts prepared and tested.
+
+### Playground lane
+
+- [ ] C1 registry search panel: unblocked (public JSON API + UI deep links).
+- [x] C2 GitHub auth: live (host-side OAuth helper; the accepted pattern for
+      any future registry identity surface).
+- [ ] C3 package examples: wait on the first real packages being published.
+- [ ] C4 design system: shared tokens in use; extraction to one canonical
+      file is a later refactor.
+
+### Content milestone (cross-lane)
+
+- [ ] Publish the first real first-party packages (`xiom.core`, ...) from
+      the packages monorepo via CI, with OIDC once available; the monorepo
+      rename to dotted names is done (`packages` @ f743308).
