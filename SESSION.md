@@ -426,6 +426,17 @@ item.
 
 ### Ops lane
 
+- [x] Token hygiene (2026-09-19): the tokens exposed during the first-publish
+      run were rotated by the owner with `scripts/tokens.js`; the staging file
+      was collapsed from four entries (three duplicate `staging` + one
+      `xiom-hello`) to exactly one of each. Both instances verified with the
+      no-publish probe -- a yank of a missing version returns 404
+      `version_not_found` for a live token and 401 `invalid_token` for a
+      revoked or unloaded one. Ops to fold the CLI into
+      `REGISTRY_TOKENS.md` (relay sent).
+- [ ] Confirm the purpose/owner of the production `staging-admin` token
+      (scope `*`) and record it in the issuance log; consider rotating it
+      under an honest label such as `admin`.
 - [ ] B1-B4: Backblaze B2 bucket + application key + `/etc/xiom-backup.env`,
       run `restic-backup.sh` once, verify the first snapshot -- only then is
       backup "done".
