@@ -247,6 +247,39 @@ When approving the request, post this note in the issue:
 
 Static tokens do not expire, so revocation is manual.
 
+Community token flow (operator checklist, 2026-09-21):
+
+1. Request arrives via the token-request issue template. Validate: exact
+   package names -> scopes (no `*`, no first-party), repository/handle,
+   whether artifacts are signed (this decides `--trusted`), and that the
+   requester accepts yank-only immutability plus the 90-day rotation policy.
+   No private e-mail address in the request -> create nothing; ask in the
+   issue for one.
+2. Mint and deliver in one step (installed on the VPS at
+   `/opt/xiom/bin/issue-token.sh`; source lives in the private ops repo):
+
+   ```
+   /opt/xiom/bin/issue-token.sh --issue <issue-url> --label alice \
+     --email <member-address> --scopes "alice-lib" [--trusted]
+   ```
+
+   The script refuses duplicate labels (use `--rotate`), refuses without an
+   address, mails the value plain-text from registry@xiom-lang.org, prints
+   only a summary (label, scopes, flags, sha256 prefix, issue URL), appends
+   the issuance-log line, recreates the container and prints
+   `tokens: N configured`.
+3. Post the after-approval note in the issue, then close it.
+4. Lifecycle: static tokens, no expiry. Rotate every 90 days with `--rotate`
+   and tell the holder to replace `XIOM_REGISTRY_TOKEN`; revoke with
+   `--revoke`; prove liveness with `--verify` (404 `version_not_found` means
+   the token authenticates, 401 means revoked or not loaded).
+5. CI publishing uses OIDC instead (see "OIDC trusted publishers"); the
+   production entries wait for the stdlib/packages canaries after v0.61.0.
+6. Spam placement is a reputation artifact, not a failure: MX, SPF, DKIM and
+   PTR are live, but Gmail/Outlook may need one "not spam" mark on first
+   contact -- which is why the request template and the delivery mail both
+   carry the note.
+
 Semantics worth knowing before answering a publisher:
 
 - Token rotation (`tokens.js rotate`) and the publisher's signing-key

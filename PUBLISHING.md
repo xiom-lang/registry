@@ -126,7 +126,9 @@ on first contact it may land in your spam folder - check there and mark it as
 not spam before asking for a resend. Treat the token like a password: anyone
 who has it can publish your package names. If it leaks, report it and it will
 be revoked - publishes already made stay immutable, and abusive versions can
-be yanked.
+be yanked. Maintainers rotate tokens at least every 90 days: a replacement
+arrives from the same address and the old value stops working, so keep the
+token somewhere easy to update (a CI secret or your environment).
 
 ## 5. Publish
 
