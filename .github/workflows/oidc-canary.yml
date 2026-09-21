@@ -1,0 +1,64 @@
+# OIDC canary -- staging proof for GitHub trusted publishing.
+# Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Dispatch-only. Mints a GitHub OIDC token, publishes one tiny signed package
+# to the target registry and reads the recorded provenance back. It exists so
+# the OIDC path can be proven on staging without a compiler release and
+# without any registry secret: the staging trusted-publishers entry maps
+# xiom-lang/registry + oidc-canary.yml + refs/heads/main to the canary scope.
+#
+# Never point this at production unless the owners explicitly want a canary
+# version there: the publish is real and immutable once accepted.
+
+name: OIDC canary (staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: "Registry base URL"
+        required: false
+        default: "https://staging.registry.xiom-lang.org"
+      package:
+        description: "Canary package name"
+        required: false
+        default: "xiom.canary-oidc"
+      version:
+        description: "Canary version (default: 0.0.0-canary.<epoch>)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: publish a canary through OIDC
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required to mint the OIDC token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Mint registry OIDC token
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=xiom-registry" | jq -r .value)"
+          test -n "$token" && test "$token" != "null"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Run canary
+        env:
+          XIOM_REGISTRY: ${{ inputs.registry }}
+          XIOM_REGISTRY_TOKEN: ${{ steps.oidc.outputs.token }}
+          CANARY_PACKAGE: ${{ inputs.package }}
+          CANARY_VERSION: ${{ inputs.version }}
+          CANARY_EXPECT_REPOSITORY: xiom-lang/registry
+        run: node scripts/oidc-canary.js

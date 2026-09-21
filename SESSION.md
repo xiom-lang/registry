@@ -683,12 +683,13 @@ archives and the VSIX, not registry packages, so it needs no entry.
   `xiom-std-<ver>.tar.gz`, or add an asset-wait loop.
 - Canary prerequisite: both lane canaries download v0.61.0 compiler archives
   that must contain `xiom-pkg`, so they wait on the compiler release. The
-  registry owns an independent canary that does not: a dispatch workflow in
-  `xiom-lang/registry` that mints the JWT and talks to the staging `/publish`
-  endpoint directly, with staging entry
-  `{ label: registry-canary, repository: xiom-lang/registry,
-     workflow: oidc-canary.yml, refs: ["refs/heads/main"],
-     scopes: ["xiom.canary"], firstParty: true }`.
+  registry owns an independent canary that does not: `.github/workflows/
+  oidc-canary.yml` (dispatch, default staging URL) runs
+  `scripts/oidc-canary.js`, which publishes `xiom.canary-oidc@0.0.0-canary.
+  <epoch>` through a real OIDC token and asserts the stored provenance.
+  Staging entry: `{ label: registry-canary, repository: xiom-lang/registry,
+  workflow: oidc-canary.yml, refs: ["refs/heads/main"],
+  scopes: ["xiom.canary-oidc"], firstParty: true }`.
 
 **Packages scope list (71 names, bbabfa1):**
 
