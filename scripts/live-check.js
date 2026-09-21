@@ -163,11 +163,16 @@ async function main() {
 
     const stagingPackages = Object.keys(staging.index.packages || {});
     const productionPackages = new Set(Object.keys(production.index.packages || {}));
-    const leaked = stagingPackages.filter((name) => productionPackages.has(name));
-    if (leaked.length > 0) {
-      fail(`packages present in BOTH indexes (isolation leak): ${leaked.join(', ')}`);
+    const shared = stagingPackages.filter((name) => productionPackages.has(name));
+    // Package-name overlap is EXPECTED: staging rehearses production
+    // publishes, so the same package legitimately exists in both. Isolation
+    // is proven by the identity check above (and by the acceptance script,
+    // which publishes a staging-only probe and asserts it never reaches
+    // production).
+    if (shared.length > 0) {
+      console.log(`content overlap: ${shared.length} package(s) also in production (expected for rehearsals)`);
     } else {
-      console.log(`isolation ok: ${stagingPackages.length} staging package(s) absent from production`);
+      console.log(`content: ${stagingPackages.length} staging package(s), none in production`);
     }
   }
 
