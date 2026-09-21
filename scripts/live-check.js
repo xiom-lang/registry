@@ -97,6 +97,13 @@ async function checkInstance(label, baseUrl, { expectRegistry } = {}) {
   }
   console.log(`  ui: html pages render`);
 
+  // Category vocabulary (browse/facet surface for humans and agents).
+  const categories = await getJson(`${baseUrl}/categories`);
+  if (!Array.isArray(categories.categories)) {
+    throw new Error(`${label}: /categories did not return a categories array`);
+  }
+  console.log(`  categories: ${categories.categories.length} vocabulary entries`);
+
   // Verify the newest non-yanked version of each package end to end:
   // metadata is present and the served bytes match the indexed digest.
   let verified = 0;

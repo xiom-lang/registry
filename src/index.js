@@ -157,11 +157,18 @@ class IndexStore {
     });
 
     const packageEntry = pkg
-      ? { ...pkg, versions: versionsMap, latest: computeLatest(versionsMap) }
+      ? {
+        ...mergePackageMetadata(pkg, metadata),
+        versions: versionsMap,
+        latest: computeLatest(versionsMap),
+      }
       : {
         name,
         description: metadata.description || '',
         repository: metadata.repository || '',
+        license: metadata.license || '',
+        categories: Array.isArray(metadata.categories) ? metadata.categories : [],
+        keywords: Array.isArray(metadata.keywords) ? metadata.keywords : [],
         versions: versionsMap,
         latest: metadata.version,
       };
@@ -233,6 +240,25 @@ class IndexStore {
 }
 
 /**
+ * Package-level metadata is refreshed from each publish, but only when the
+ * new manifest actually carries a value: a later version that omits
+ * categories must not wipe the ones a publisher set earlier.
+ */
+function mergePackageMetadata(pkg, metadata) {
+  const next = { ...pkg };
+  if (metadata.description) next.description = metadata.description;
+  if (metadata.repository) next.repository = metadata.repository;
+  if (metadata.license) next.license = metadata.license;
+  if (Array.isArray(metadata.categories) && metadata.categories.length > 0) {
+    next.categories = metadata.categories;
+  }
+  if (Array.isArray(metadata.keywords) && metadata.keywords.length > 0) {
+    next.keywords = metadata.keywords;
+  }
+  return next;
+}
+
+/**
  * Highest installable version (non-yanked), preferring stable releases over
  * prereleases. Returns '' when every version is yanked -- `latest` must never
  * point at a withdrawn release, or a version-less install would silently
@@ -293,6 +319,9 @@ function normalizeIndex(parsed, registryUrl = '') {
       name: typeof rawPkg.name === 'string' && rawPkg.name ? rawPkg.name : name,
       description: typeof rawPkg.description === 'string' ? rawPkg.description : '',
       repository: typeof rawPkg.repository === 'string' ? rawPkg.repository : '',
+      license: typeof rawPkg.license === 'string' ? rawPkg.license : '',
+      categories: stringArray(rawPkg.categories),
+      keywords: stringArray(rawPkg.keywords),
       versions: {},
       latest: typeof rawPkg.latest === 'string' ? rawPkg.latest : '',
     };
@@ -339,6 +368,12 @@ function normalizeVersionEntry(fallbackVersion, raw) {
     entry.download_url = raw.download_url;
   }
   return entry;
+}
+
+/** Keep only string members of an array-valued index field. */
+function stringArray(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((value) => typeof value === 'string');
 }
 
 /**

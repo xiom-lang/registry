@@ -39,10 +39,12 @@ const {
   isValidPublicKeyHex,
 } = require('./signatures');
 const { extractManifest } = require('./manifest');
+const { normalizePackageMetadata, categoryCounts, CATEGORIES } = require('./categories');
 const { wantsHtml } = require('./ui/negotiate');
 const {
   homePage,
   searchPage,
+  categoriesPage,
   packagePage,
   notFoundPage,
 } = require('./ui/pages');
@@ -266,8 +268,23 @@ function createApp(config = loadConfig()) {
         description: pkg.description,
         latest: pkg.latest,
         versions: Object.keys(pkg.versions).length,
+        categories: pkg.categories || [],
+        keywords: pkg.keywords || [],
+        license: pkg.license || '',
+        repository: pkg.repository || '',
       })),
     });
+  });
+
+  // Category vocabulary with package counts: the browse/facet surface for
+  // humans and agents (category names are registry-owned).
+  app.get('/categories', generalLimit, (req, res) => {
+    const index = indexStore.snapshot();
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(categoriesPage(index));
+    }
+    res.json({ categories: categoryCounts(index) });
   });
 
   app.get('/packages/:name', generalLimit, (req, res) => {
@@ -335,28 +352,36 @@ function createApp(config = loadConfig()) {
   app.get('/search', generalLimit, (req, res) => {
     const rawQuery = String(req.query.q || '');
     const query = rawQuery.toLowerCase();
+    const category = String(req.query.category || '').trim().toLowerCase();
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(searchPage(index, rawQuery));
+        .send(searchPage(index, rawQuery, category));
     }
     const results = [];
     for (const [name, pkg] of Object.entries(index.packages)) {
-      if (
-        !query
+      const categories = pkg.categories || [];
+      const keywords = pkg.keywords || [];
+      const matchesQuery = !query
         || name.toLowerCase().includes(query)
         || (pkg.description || '').toLowerCase().includes(query)
-      ) {
+        || keywords.some((keyword) => keyword.includes(query))
+        || categories.some((entry) => entry.includes(query));
+      const matchesCategory = !category || categories.includes(category);
+      if (matchesQuery && matchesCategory) {
         results.push({
           name,
           description: pkg.description,
           latest: pkg.latest,
           versions: Object.keys(pkg.versions).length,
+          categories,
+          keywords,
+          license: pkg.license || '',
           repository: pkg.repository,
         });
       }
     }
-    res.json({ query: rawQuery, results });
+    res.json({ query: rawQuery, category, results });
   });
 
   // ─── Publish ──────────────────────────────────────────────────────────────
@@ -371,6 +396,7 @@ function createApp(config = loadConfig()) {
         sha256: result.sha256,
         signature: result.signature || undefined,
         publicKey: result.publicKey || undefined,
+        ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
         message: `Successfully published ${result.name}@${result.version}`,
       });
     } catch (err) {
@@ -619,8 +645,10 @@ function publish(req, { config, indexStore, artifacts, token }) {
     }
   }
 
-  // T3: description/repository/dependencies only exist inside package.xi.
+  // T3: package metadata (description, categories, keywords, license,
+  // repository) and dependencies only exist inside package.xi.
   const manifest = extractManifest(staged, config);
+  const packageMeta = normalizePackageMetadata(manifest);
   const metadata = {
     version,
     sha256,
@@ -630,10 +658,17 @@ function publish(req, { config, indexStore, artifacts, token }) {
     published: new Date().toISOString(),
     dependencies: manifest.dependencies,
     ...(manifest.description ? { description: manifest.description } : {}),
+    ...(packageMeta.license ? { license: packageMeta.license } : {}),
+    ...(packageMeta.repository ? { repository: packageMeta.repository } : {}),
+    ...(packageMeta.categories.length > 0 ? { categories: packageMeta.categories } : {}),
+    ...(packageMeta.keywords.length > 0 ? { keywords: packageMeta.keywords } : {}),
   };
   if (typeof req.body?.compiler === 'string' && req.body.compiler) {
     metadata.compiler = req.body.compiler.slice(0, 64);
   }
+  const warnings = packageMeta.unknownCategories.map(
+    (category) => `unknown category "${category}" ignored; valid categories: ${CATEGORIES.join(', ')}`,
+  );
 
   // Move the artifact into place, then index it. If indexing fails (e.g. a
   // race lost to a concurrent publish), remove the artifact again.
@@ -649,7 +684,7 @@ function publish(req, { config, indexStore, artifacts, token }) {
     `Published: ${name}@${version} (${(fileBuffer.length / 1024).toFixed(1)} KB, `
     + `sha256:${sha256.slice(0, 12)}..., by ${token.label})`,
   );
-  return { name, version, sha256, signature, publicKey };
+  return { name, version, sha256, signature, publicKey, warnings };
 }
 
 module.exports = { createApp, publish, computeLatest };

@@ -50,6 +50,48 @@ test('parses inline deps', () => {
   assert.deepEqual(parsed.dependencies, { 'xiom-core': '0.1.0', other: '^2.0.0' });
 });
 
+test('parses categories, keywords, license, and repository', () => {
+  const parsed = parseManifest([
+    'name: "d";',
+    'version: "1.0.0";',
+    'categories: ["graphics", "gpu"];',
+    'keywords: ["vulkan", "swapchain"];',
+    'license: "MIT OR Apache-2.0";',
+    'repository: "https://github.com/xiom-packages/packages";',
+  ].join('\n'));
+  assert.deepEqual(parsed.categories, ['graphics', 'gpu']);
+  assert.deepEqual(parsed.keywords, ['vulkan', 'swapchain']);
+  assert.equal(parsed.license, 'MIT OR Apache-2.0');
+  assert.equal(parsed.repository, 'https://github.com/xiom-packages/packages');
+});
+
+test('parses multiline categories and keywords arrays', () => {
+  const parsed = parseManifest([
+    'name: "d";',
+    'version: "1.0.0";',
+    'categories: [',
+    '  "database",',
+    '];',
+    'keywords: [',
+    '  "redis",',
+    '  "cache",',
+    '  "key-value",',
+    '];',
+    'license: "MIT";',
+  ].join('\n'));
+  assert.deepEqual(parsed.categories, ['database']);
+  assert.deepEqual(parsed.keywords, ['redis', 'cache', 'key-value']);
+  assert.equal(parsed.license, 'MIT');
+});
+
+test('metadata fields default to empty when absent', () => {
+  const parsed = parseManifest('name: "d";\nversion: "1.0.0";\n');
+  assert.deepEqual(parsed.categories, []);
+  assert.deepEqual(parsed.keywords, []);
+  assert.equal(parsed.license, '');
+  assert.equal(parsed.repository, '');
+});
+
 test('parses multiline deps with comma-containing specs', () => {
   const parsed = parseManifest([
     'name: "d";',
@@ -66,7 +108,10 @@ test('parses multiline deps with comma-containing specs', () => {
 });
 
 test('handles an empty or fieldless manifest', () => {
-  assert.deepEqual(parseManifest(''), { name: '', version: '', description: '', dependencies: {} });
+  assert.deepEqual(parseManifest(''), {
+    name: '', version: '', description: '', dependencies: {},
+    categories: [], keywords: [], license: '', repository: '',
+  });
   assert.deepEqual(
     parseManifest('// only a comment').dependencies,
     {},
@@ -106,7 +151,10 @@ test('returns empty metadata for a non-tarball upload instead of throwing', () =
     maxManifestBytes: 1024,
     maxDecompressedBytes: 4096,
   });
-  assert.deepEqual(parsed, { name: '', version: '', description: '', dependencies: {} });
+  assert.deepEqual(parsed, {
+    name: '', version: '', description: '', dependencies: {},
+    categories: [], keywords: [], license: '', repository: '',
+  });
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

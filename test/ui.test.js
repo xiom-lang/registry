@@ -250,7 +250,7 @@ test('version page renders and unknown versions 404 in both formats', async () =
 test('search page filters and escapes the query', async () => {
   const html = await fetch(`${baseUrl}/search?q=demo`, { headers: BROWSER });
   const body = await html.text();
-  assert.match(body, /1 result/);
+  assert.match(body, /1 package matching &quot;demo&quot;|1 package matching "demo"/);
   assert.match(body, /demo-pkg/);
   assert.doesNotMatch(body, /hostile-pkg/);
 

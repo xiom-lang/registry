@@ -50,11 +50,32 @@ package my_lib {
   name: "my-lib";
   version: "0.1.0";
   description: "What this package does, in one sentence";
+  categories: ["graphics"];
+  keywords: ["vulkan", "gpu", "rendering"];
+  license: "MIT OR Apache-2.0";
+  repository: "https://github.com/you/my-lib";
   deps: {
     "xiom.core": "0.1.0";
   };
 }
 ```
+
+**Metadata fields** (all optional except name/version, all shown in search,
+on the package page, and to tooling/agents):
+
+- `description` — one sentence; this is what users and AI agents see first.
+- `categories` — up to 3 from the registry's fixed vocabulary, so browsing
+  stays predictable:
+  `core`, `data`, `database`, `web`, `network`, `graphics`, `media`,
+  `ai-ml`, `science`, `crypto-security`, `cloud-infra`, `observability`,
+  `concurrency`, `systems`, `tooling`, `testing`, `text-nlp`.
+  Common aliases are mapped automatically (`gpu` → `graphics`, `db` →
+  `database`, `ai`/`ml` → `ai-ml`, ...). Unknown values are ignored and the
+  publish response lists them under `warnings`.
+- `keywords` — up to 10 free-form lowercase terms (letters, digits,
+  `. + # -`), e.g. `["redis", "cache", "key-value"]`. Keywords are
+  search-only; niche topics belong here rather than in the vocabulary.
+- `license` — SPDX expression; `repository` — canonical URL.
 
 **Name rules** (enforced by the registry):
 

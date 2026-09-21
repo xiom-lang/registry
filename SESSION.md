@@ -140,6 +140,9 @@ with no fallback; non-canonical trust URL still enforces the pin).
       "name": "xiom.example",
       "description": "...",
       "repository": "https://github.com/...",
+      "license": "MIT OR Apache-2.0",
+      "categories": ["graphics"],
+      "keywords": ["vulkan", "gpu"],
       "latest": "0.1.0",
       "versions": {
         "0.1.0": {
@@ -184,7 +187,15 @@ with no fallback; non-canonical trust URL still enforces the pin).
 `version`, `sha256`, `signature`, `publicKey`, `size`, `published`,
 `dependencies` (extracted from `package.xi` inside the tarball, since the
 client does not send them), and optional `compiler` compatibility range.
-`description` is likewise extracted from the manifest.
+
+Package-level metadata is likewise extracted from the manifest and refreshed
+on each publish (only when the new manifest carries a value, so a later
+version cannot wipe it): `description`, `repository`, `license`,
+`categories` (controlled vocabulary, max 3, aliases mapped, unknown values
+dropped and reported in the publish response as `warnings`), and `keywords`
+(free-form, max 10, search-only). The vocabulary lives in
+`src/categories.js`; `GET /categories` returns every entry with its package
+count.
 
 ### 2.4 Reconciled mismatches (T1-T7, all done)
 
@@ -255,7 +266,8 @@ client does not send them), and optional `compiler` compatibility range.
   - `src/signatures.js` -- ed25519 verify (Node crypto, RFC 8410 SPKI).
   - `src/manifest.js` -- bounded `package.xi` extraction from tarballs.
   - `src/storage.js` -- artifact placement with path containment.
-  - `src/config.js`, `src/errors.js`.
+  - `src/config.js`, `src/errors.js`, `src/categories.js` (category
+    vocabulary, aliases, keyword limits, counts).
   - `src/ui/` -- read-only web UI: layouts, page builders, the shared brand
     stylesheet, and brand assets copied from the website (favicon/logo;
     provenance in `src/ui/assets/SOURCES.md`). HTML is served only when the
@@ -394,6 +406,14 @@ item.
       checks).
 - [ ] Phase 3 (post-beta, unplanned): download stats, mirror/offline mode,
       object storage, index sharding.
+- [x] Category vocabulary and package metadata (2026-09-21): `categories`
+      (17 canonical + aliases, max 3), `keywords` (max 10), `license`,
+      `repository` extracted from `package.xi` and emitted across the API;
+      `GET /categories`; `?category=` on `/search`; UI chips, category strip,
+      and `/categories` page; publish warnings for unknown categories. The
+      72 first-party manifests are annotated (packages 2d2513b); the client
+      (`xiom pkg search --category`, `xiom pkg info`, MCP `search_packages` /
+      `package_info`) consumes the same fields.
 
 ### Compiler lane
 

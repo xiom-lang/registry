@@ -14,13 +14,18 @@ locking, and verifying packages. For publishing your own packages, see
 
 Open **https://registry.xiom-lang.org** in a browser:
 
-- the home page lists every package with its latest version
-- search filters by name or description
-- a package page shows all versions with published date, size, sha256 digest,
-  signature fingerprint, and yank state
+- the home page lists every package with its latest version and a category
+  strip for browsing
+- search filters by name, description, and keywords; `?category=<name>`
+  narrows to one category (the vocabulary is fixed — see
+  [categories](https://registry.xiom-lang.org/categories))
+- a package page shows categories, keywords, license, and repository next to
+  all versions with published date, size, sha256 digest, signature
+  fingerprint, and yank state
 - every version links to its tarball and shows the exact install command
 
-The JSON API behind the UI is public too: `https://registry.xiom-lang.org/index.json`.
+The JSON API behind the UI is public too: `/index.json`, `/categories`, and
+`/search?q=&category=`.
 
 ## Install a package
 

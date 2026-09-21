@@ -81,6 +81,7 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
     </a>
     <nav>
       <a href="/packages">Packages</a>
+      <a href="/categories">Categories</a>
       <a href="/search">Search</a>
       <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>

@@ -272,6 +272,31 @@ table.versions tr:hover td { background: var(--panel); }
   padding: var(--space-sm) var(--space-md);
 }
 
+/* ---------- Categories ---------- */
+
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; vertical-align: middle; }
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--paper-dim);
+  font-size: 12px;
+  padding: 1px 9px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.chip:hover { border-color: var(--signal-dim); color: var(--paper); }
+.chip-active { border-color: var(--signal); color: var(--paper); }
+.chip-empty { opacity: 0.5; }
+.chip-count { color: var(--muted); font-size: 11px; }
+.category-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-md); }
+.category-list {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  list-style: none;
+  margin-top: var(--space-lg);
+}
+.category-item { align-items: center; display: flex; gap: var(--space-md); }
+
 /* ---------- Footer ---------- */
 
 .site-footer {

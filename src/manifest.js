@@ -27,6 +27,10 @@ const EMPTY_MANIFEST = Object.freeze({
   version: '',
   description: '',
   dependencies: {},
+  categories: [],
+  keywords: [],
+  license: '',
+  repository: '',
 });
 
 /**
@@ -35,7 +39,9 @@ const EMPTY_MANIFEST = Object.freeze({
  *
  * @param {string} tarballPath
  * @param {{ maxManifestBytes: number, maxDecompressedBytes: number }} limits
- * @returns {{ name: string, version: string, description: string, dependencies: Record<string,string> }}
+ * @returns {{ name: string, version: string, description: string,
+ *   dependencies: Record<string,string>, categories: string[],
+ *   keywords: string[], license: string, repository: string }}
  */
 function extractManifest(tarballPath, limits) {
   let buffer;
@@ -124,7 +130,16 @@ function parseManifest(text) {
   const source = stripOuterBlock(text);
   const lines = source.split(/\r?\n/);
 
-  const fields = { name: '', version: '', description: '', dependencies: {} };
+  const fields = {
+    name: '',
+    version: '',
+    description: '',
+    dependencies: {},
+    categories: [],
+    keywords: [],
+    license: '',
+    repository: '',
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -136,6 +151,20 @@ function parseManifest(text) {
     if (version !== null) { fields.version = version; continue; }
     const description = readField(line, 'description:');
     if (description !== null) { fields.description = description; continue; }
+    const license = readField(line, 'license:');
+    if (license !== null) { fields.license = license; continue; }
+    const repository = readField(line, 'repository:');
+    if (repository !== null) { fields.repository = repository; continue; }
+
+    // Array-valued metadata: inline (`categories: ["graphics"];`) or
+    // multiline blocks. Values are normalized by src/categories.js.
+    const arrayField = /^(categories|keywords)\s*[:=]/.exec(line);
+    if (arrayField) {
+      const { values, consumed } = parseStringList(lines, i);
+      fields[arrayField[1]] = values;
+      i += consumed;
+      continue;
+    }
 
     if (/^deps\s*[:=]/.test(line)) {
       const { deps, consumed } = parseDepsBlock(lines, i);
@@ -144,6 +173,33 @@ function parseManifest(text) {
     }
   }
   return fields;
+}
+
+/**
+ * Collect the quoted strings of an array literal starting on `lines[start]`
+ * (`key: ["a", "b"];` on one line, or a multiline block ending with `]`).
+ * Returns `consumed` = how many extra lines the caller must skip.
+ */
+function parseStringList(lines, start) {
+  let block = '';
+  let i = start;
+  let consumed = 0;
+  for (; i < lines.length; i++) {
+    block += `\n${lines[i]}`;
+    if (block.includes(']')) break;
+  }
+  if (i > start) consumed = i - start;
+
+  const open = block.indexOf('[');
+  const close = block.lastIndexOf(']');
+  if (open === -1 || close <= open) return { values: [], consumed };
+
+  const inner = block.slice(open + 1, close);
+  const values = [];
+  const re = /["']([^"']*)["']/g;
+  let match;
+  while ((match = re.exec(inner)) !== null) values.push(match[1]);
+  return { values, consumed };
 }
 
 /**

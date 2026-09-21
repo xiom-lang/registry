@@ -19,10 +19,11 @@ changing anything.
 ## Web UI
 
 Browsers get a read-only UI at `https://registry.xiom-lang.org`: package
-list, search, package/version pages with digests, signatures, yank state,
-and copy-ready install/trust commands. The API is unchanged - HTML is
-served only when the browser's first `Accept` entry is `text/html`; every
-CLI and protocol request still receives JSON.
+list, category browsing and search, package/version pages with digests,
+signatures, keywords, license, and yank state. The API is unchanged - HTML
+is served only when the browser's first `Accept` entry is `text/html`; every
+CLI and protocol request still receives JSON. Agents and tools read
+`/index.json`, `/categories`, and `/search?q=&category=`.
 
 ## Community guides
 

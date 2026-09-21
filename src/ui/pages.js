@@ -17,12 +17,36 @@ const {
   layout,
 } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
+const { categoryCounts } = require('../categories');
 
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
 function officialBadge(name) {
   return isFirstPartyNamespace(name)
     ? '<span class="badge official">official</span>'
     : '';
+}
+
+/** Clickable category chips (registry-owned vocabulary, so always safe). */
+function categoryChips(categories, limit = 3) {
+  const list = Array.isArray(categories) ? categories.slice(0, limit) : [];
+  if (list.length === 0) return '';
+  return `<span class="chips">${list
+    .map((category) => `<a class="chip" href="/search?category=${encodeURIComponent(category)}">${escapeHtml(category)}</a>`)
+    .join('')}</span>`;
+}
+
+/** Strip of every category with a package count, for browsing. */
+function categoryStrip(index, activeCategory = '') {
+  const counts = categoryCounts(index);
+  const chips = counts
+    .map(({ name, count }) => {
+      const active = name === activeCategory ? ' chip-active' : '';
+      const zero = count === 0 ? ' chip-empty' : '';
+      return `<a class="chip${active}${zero}" href="/search?category=${encodeURIComponent(name)}">`
+        + `${escapeHtml(name)} <span class="chip-count">${count}</span></a>`;
+    })
+    .join('');
+  return `<div class="category-strip" aria-label="Categories">${chips}</div>`;
 }
 
 /** Card used on the home and search pages. */
@@ -32,6 +56,7 @@ function packageCard(name, pkg) {
     ? `<p class="pkg-desc">${escapeHtml(pkg.description)}</p>`
     : '';
   const versions = Object.keys(pkg.versions).length;
+  const chips = categoryChips(pkg.categories, 3);
   return `<li class="package-card">
   <div class="pkg-head">
     <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
@@ -39,7 +64,7 @@ function packageCard(name, pkg) {
     ${latest}
   </div>
   ${description}
-  <p class="pkg-meta">${versions} version${versions === 1 ? '' : 's'}</p>
+  <p class="pkg-meta">${versions} version${versions === 1 ? '' : 's'} ${chips}</p>
 </li>`;
 }
 
@@ -78,6 +103,7 @@ function homePage(index) {
     <span>Protocol ${escapeHtml(index.version)}</span>
     <span>${escapeHtml(lastUpdated)}</span>
   </div>
+  ${categoryStrip(index)}
 </section>
 <h2>Packages</h2>
 ${packageList(index)}`,
@@ -85,19 +111,28 @@ ${packageList(index)}`,
 }
 
 /** Search results (or the full list when the query is empty). */
-function searchPage(index, query = '') {
+function searchPage(index, query = '', category = '') {
   const needle = query.trim().toLowerCase();
+  const active = category.trim().toLowerCase();
   const matches = Object.entries(index.packages)
     .filter(([name, pkg]) => {
+      const categories = pkg.categories || [];
+      const keywords = pkg.keywords || [];
+      const matchesCategory = active === '' || categories.includes(active);
+      if (!matchesCategory) return false;
       if (needle === '') return true;
       return name.toLowerCase().includes(needle)
-        || (pkg.description || '').toLowerCase().includes(needle);
+        || (pkg.description || '').toLowerCase().includes(needle)
+        || keywords.some((keyword) => keyword.includes(needle))
+        || categories.some((entry) => entry.includes(needle));
     })
     .sort(([a], [b]) => a.localeCompare(b));
 
-  const summary = needle === ''
-    ? `${matches.length} package${matches.length === 1 ? '' : 's'}`
-    : `${matches.length} result${matches.length === 1 ? '' : 's'} for "${query}"`;
+  const parts = [];
+  parts.push(`${matches.length} package${matches.length === 1 ? '' : 's'}`);
+  if (active) parts.push(`in category "${active}"`);
+  if (needle) parts.push(`matching "${query}"`);
+  const summary = parts.join(' ');
 
   const list = matches.length === 0
     ? '<div class="empty">No packages match this search.</div>'
@@ -106,13 +141,37 @@ ${matches.map(([name, pkg]) => packageCard(name, pkg)).join('\n')}
 </ul>`;
 
   return layout({
-    title: 'Search',
+    title: active ? `Category: ${active}` : 'Search',
     body: `<section class="hero">
-  <h1>Search</h1>
+  <h1>${active ? `Category: ${escapeHtml(active)}` : 'Search'}</h1>
   ${searchForm(query)}
   <div class="meta-row"><span>${escapeHtml(summary)}</span></div>
+  ${categoryStrip(index, active)}
 </section>
 ${list}`,
+  });
+}
+
+/** Category index: every vocabulary entry with its package count. */
+function categoriesPage(index) {
+  const counts = categoryCounts(index);
+  const items = counts
+    .map(({ name, count }) => `<li class="category-item">
+  <a class="chip" href="/search?category=${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+  <span class="pkg-meta">${count} package${count === 1 ? '' : 's'}</span>
+</li>`)
+    .join('\n');
+  return layout({
+    title: 'Categories',
+    description: 'Browse XIOM registry packages by category',
+    body: `<section class="hero">
+  <h1>Categories</h1>
+  <p>The registry vocabulary is fixed so browsing and tooling stay predictable;
+     niche topics live in per-package keywords.</p>
+</section>
+<ul class="category-list">
+${items}
+</ul>`,
   });
 }
 
@@ -148,6 +207,9 @@ function packagePage(pkg, registryUrl, selectedVersion = '') {
   <div class="detail"><dt>Size</dt><dd>${escapeHtml(formatBytes(detail.size))}</dd></div>
   <div class="detail"><dt>SHA-256</dt><dd title="${escapeHtml(detail.sha256)}">${escapeHtml(detail.sha256 || '--')}</dd></div>
   <div class="detail"><dt>Signature</dt><dd>${signatureCell(detail)}</dd></div>
+  ${pkg.categories && pkg.categories.length > 0 ? `<div class="detail"><dt>Categories</dt><dd>${categoryChips(pkg.categories)}</dd></div>` : ''}
+  ${pkg.keywords && pkg.keywords.length > 0 ? `<div class="detail"><dt>Keywords</dt><dd>${escapeHtml(pkg.keywords.join(', '))}</dd></div>` : ''}
+  ${pkg.license ? `<div class="detail"><dt>License</dt><dd>${escapeHtml(pkg.license)}</dd></div>` : ''}
   ${pkg.repository ? `<div class="detail"><dt>Repository</dt><dd><a href="${escapeHtml(pkg.repository)}" rel="noopener">${escapeHtml(pkg.repository)}</a></dd></div>` : ''}
 </dl>` : '';
 
@@ -228,6 +290,7 @@ function notFoundPage(message) {
 module.exports = {
   homePage,
   searchPage,
+  categoriesPage,
   packagePage,
   notFoundPage,
 };
