@@ -151,6 +151,68 @@ Useful environment variables:
 | `XIOM_REGISTRY_TOKEN` | your publish token |
 | `XIOM_PKG_ALLOW_HTTP` | allow plain http - local development only |
 
+### Publishing from GitHub Actions (OIDC)
+
+First-party packages publish from CI without any long-lived registry token:
+the workflow exchanges its GitHub identity for a short-lived OIDC token, the
+registry verifies it against GitHub's JWKS, and maps repository + workflow +
+ref to a fixed set of package scopes. An invalid token is `401`; a valid
+token whose repository/workflow/ref is not mapped is `403`. The JWT is never
+stored or logged; the registry records provenance (repository, workflow, ref,
+commit, run URL) on the version and shows it on the package page.
+
+Community trusted publishing is not open yet - community packages still use
+manual tokens (section 4). The first-party repositories
+(`xiom-lang/stdlib`, `xiom-packages/packages`) are configured by the registry
+operators. The contract they follow:
+
+```yaml
+name: Publish to the XIOM Registry
+on:
+  push:
+    tags: ["stdlib-v*"]          # your release tag scheme
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: registry-publish   # optional human gate, owner-configured
+    permissions:
+      contents: read
+      id-token: write              # required to mint the OIDC token
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4; org policy pins SHAs
+      # ... build/stage the package and put `xiom pkg` on PATH ...
+      - name: Mint registry OIDC token
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=xiom-registry" | jq -r .value)"
+          test -n "$token" && test "$token" != "null"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - name: Sign (trusted publishers must sign)
+        run: xiom pkg keygen
+      - name: Publish
+        env:
+          XIOM_REGISTRY_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: xiom pkg publish
+```
+
+Rules that matter:
+
+- The audience is pinned to `xiom-registry`; requesting any other audience
+  fails verification.
+- Production trust is tag-only: the workflow file must exist in the tagged
+  commit, and tag protection stops moved or deleted release tags.
+- `id-token: write` is the only extra permission, and there is no registry
+  secret to create. The client is unchanged - it sends the JWT as an opaque
+  bearer value.
+- Trusted publishers must sign: the registry rejects unsigned artifacts from
+  them (`422 signature_required`), so keep the keygen step.
+
 ## 6. Verify your release
 
 1. Open `https://registry.xiom-lang.org/packages/<your-name>` - check the
@@ -221,7 +283,9 @@ how-to; the Terms are the contract.
 
 ## Roadmap
 
-GitHub OIDC **trusted publishing** is planned: repositories will publish from
-CI without a long-lived token, tied to their GitHub identity, with provenance
-recorded per version. Until then, tokens are issued manually as described
-above.
+GitHub OIDC **trusted publishing** is live for the first-party repositories
+(see "Publishing from GitHub Actions (OIDC)" in section 5): CI publishes
+without a long-lived token, tied to the GitHub identity that ran the
+workflow, with provenance recorded per version. Community trusted publishing
+(open self-service) is not available yet; community packages still use
+tokens issued manually as described above.

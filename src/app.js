@@ -31,6 +31,7 @@ const { loadConfig } = require('./config');
 const { IndexStore, computeLatest, normalizeDependencies } = require('./index');
 const { ArtifactStore } = require('./storage');
 const { authenticate, assertPublishScope } = require('./tokens');
+const { createJwksCache } = require('./oidc');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
 const {
   verify: verifySignature,
@@ -188,10 +189,16 @@ function createApp(config = loadConfig()) {
 
   // Authentication is a header check, so it runs BEFORE the body is read:
   // unauthenticated or forbidden publishes are rejected without buffering a
-  // single byte of payload.
-  function authenticated(req, res, next) {
+  // single byte of payload. One JWKS cache per process: keys are fetched
+  // lazily and cached by kid (see src/oidc.js).
+  const jwks = createJwksCache(config.oidcJwksUrl ? { url: config.oidcJwksUrl } : undefined);
+  async function authenticated(req, res, next) {
     try {
-      req.token = authenticate(req, config.tokens);
+      req.token = await authenticate(req, config.tokens, {
+        publishers: config.publishers,
+        audience: config.oidcAudience,
+        jwks,
+      });
       next();
     } catch (err) {
       cleanupAndNext(req, res, next, err);
@@ -396,6 +403,7 @@ function createApp(config = loadConfig()) {
         sha256: result.sha256,
         signature: result.signature || undefined,
         publicKey: result.publicKey || undefined,
+        ...(result.publisher ? { publisher: result.publisher } : {}),
         ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
         message: `Successfully published ${result.name}@${result.version}`,
       });
@@ -666,6 +674,9 @@ function publish(req, { config, indexStore, artifacts, token }) {
   if (typeof req.body?.compiler === 'string' && req.body.compiler) {
     metadata.compiler = req.body.compiler.slice(0, 64);
   }
+  // OIDC provenance: repository/workflow/ref/run recorded per version. Static
+  // tokens have no publisher and stay unchanged.
+  if (token.publisher) metadata.publisher = token.publisher;
   const warnings = packageMeta.unknownCategories.map(
     (category) => `unknown category "${category}" ignored; valid categories: ${CATEGORIES.join(', ')}`,
   );
@@ -682,9 +693,10 @@ function publish(req, { config, indexStore, artifacts, token }) {
 
   console.log(
     `Published: ${name}@${version} (${(fileBuffer.length / 1024).toFixed(1)} KB, `
-    + `sha256:${sha256.slice(0, 12)}..., by ${token.label})`,
+    + `sha256:${sha256.slice(0, 12)}..., by ${token.label}`
+    + `${token.publisher ? ` via ${token.publisher.repository}` : ''})`,
   );
-  return { name, version, sha256, signature, publicKey, warnings };
+  return { name, version, sha256, signature, publicKey, warnings, publisher: token.publisher };
 }
 
 module.exports = { createApp, publish, computeLatest };

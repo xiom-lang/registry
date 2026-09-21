@@ -10,7 +10,7 @@ this file is the normative working spec for the service itself.
 
 **Status:** the server speaks the full `xiom pkg` protocol and passes a
 20-check end-to-end gate that drives the real client (`npm run test:e2e`),
-plus 107 unit tests (`npm test`). **Deployed and verified:**
+plus 128 unit tests (`npm test`). **Deployed and verified:**
 `https://registry.xiom-lang.org` (port 3100) and
 `https://staging.registry.xiom-lang.org` (isolated instance on port 3200,
 own volumes and tokens). Both advertise their own `registry` URL; the
@@ -19,9 +19,13 @@ scheduled live check (`.github/workflows/live-check.yml`,
 `/categories` vocabulary, and asserts the two instances have distinct
 identities. Content: `xiom.hello@0.1.0` (signed) on both instances and
 `xiom.math@0.1.0` on staging with full metadata (categories/keywords/
-license/repository) -- both independently verified by this session. **The
-next feature is OIDC trusted publishing; section 11 is the handoff brief and
-the paste-ready prompt for the next session.**
+license/repository) -- both independently verified by this session. **OIDC
+trusted publishing is implemented** (`src/oidc.js`, `src/publishers.js`,
+`authenticate()`, provenance in `/index.json`, `/packages/:name` and the
+package page; 20 new tests). What remains is operational: ops deploys the
+staging trusted-publishers config, the staging canary runs, then production
+gains entries with the owner's OK. Section 11 is the spec, section 12 the
+lane handoffs.
 
 **Remaining:**
 
@@ -516,6 +520,14 @@ identity for a short-lived JWT, the registry verifies it against GitHub's
 JWKS and publishes only within the mapped scopes. It is the prerequisite for
 C3 (publish from Actions) and for per-version provenance.
 
+**Implementation status (2026-09-21):** increments 1-5 below are done in
+`src/oidc.js`, `src/publishers.js`, `authenticate()` and the provenance
+pipeline; the loader reads `TRUSTED_PUBLISHERS_FILE` (array or
+`{"publishers": [...]}`; missing/empty = no publishers; malformed = startup
+exit) and the audience is `OIDC_AUDIENCE` (default `xiom-registry`).
+Remaining: increment 6 (staging canary with ops, then production entries on
+the owner's OK), and the lane workflows noted in section 12.
+
 **Decisions already made -- do not relitigate:**
 
 - **No client change.** The workflow sets `XIOM_REGISTRY_TOKEN` to the OIDC
@@ -593,10 +605,11 @@ and `npm run test:e2e` before claiming anything done. Staging first --
 publish a canary via OIDC to https://staging.registry.xiom-lang.org and prove
 production isolation; do not touch production without the owner's OK.
 
-Current state: main is green (107 unit tests, 20 e2e, live check passing,
-categories/keywords shipped and verified). The owner still has manual work
-pending on the VS Code marketplace secrets and the production release-ci
-token; those do not block the registry-side implementation.
+Current state: main is green (128 unit tests, 20 e2e, live check passing,
+categories/keywords and OIDC trusted publishing shipped). The lane workflows
+are tracked in section 12; the compiler v0.61.0 release is the common
+dependency for the stdlib and packages canaries, while the registry-owned
+canary does not need it.
 ```
 
 ---

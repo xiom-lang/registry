@@ -7,6 +7,8 @@
 const crypto = require('crypto');
 
 const { UnauthorizedError, ForbiddenError } = require('./errors');
+const { verifyJwt, looksLikeJwt } = require('./oidc');
+const { matchPublisher } = require('./publishers');
 
 /**
  * Constant-time string comparison.
@@ -61,15 +63,78 @@ function extractToken(req) {
 }
 
 /**
- * Look up the presented token in the configured token map.
- * @returns {{ label: string, scopes: string[], trusted: boolean, firstParty: boolean }}
- * @throws UnauthorizedError on unknown/missing tokens
+ * Provenance recorded per version for an OIDC publish. Only fields that are
+ * safe to serve publicly; the JWT itself is never stored or logged.
  */
-function authenticate(req, tokens) {
+function publisherProvenance(payload, publisher) {
+  const provenance = {
+    repository: String(payload.repository),
+    workflow: publisher.workflow,
+    ref: String(payload.ref),
+    event: String(payload.event_name),
+  };
+  if (typeof payload.workflow_ref === 'string' && payload.workflow_ref) {
+    provenance.workflowRef = payload.workflow_ref;
+  }
+  if (typeof payload.sha === 'string' && payload.sha) provenance.commit = payload.sha;
+  if (payload.run_id !== undefined && payload.run_id !== null) {
+    provenance.runId = String(payload.run_id);
+    provenance.runUrl = `https://github.com/${payload.repository}/actions/runs/${provenance.runId}`;
+  }
+  return provenance;
+}
+
+/**
+ * Authenticate a request into the token shape used by the publish pipeline.
+ *
+ * A three-segment bearer value whose header looks like a JWT takes the
+ * GitHub OIDC path: verify signature and standard claims (401 on any
+ * failure), then map repository/workflow/ref claims to a trusted publisher
+ * (403 when no entry matches -- a valid token without a mapping must never
+ * publish). Everything else is a static token compared in constant time,
+ * exactly as before.
+ *
+ * @returns {Promise<{ label: string, scopes: string[], trusted: boolean,
+ *                     firstParty: boolean, source: string, publisher?: object }>}
+ */
+async function authenticate(req, tokens, { publishers = [], audience, jwks } = {}) {
   const presented = extractToken(req);
   if (!presented) {
     throw new UnauthorizedError('no bearer token provided; set XIOM_REGISTRY_TOKEN');
   }
+
+  if (looksLikeJwt(presented.token)) {
+    if (!jwks || typeof jwks.getKey !== 'function'
+      || typeof audience !== 'string' || audience === '') {
+      throw new UnauthorizedError(
+        'OIDC publishing is not configured on this registry',
+        'oidc_not_configured',
+      );
+    }
+    const { payload } = await verifyJwt(presented.token, { jwks, audience });
+    const publisher = matchPublisher(publishers, {
+      repository: payload.repository,
+      workflowRef: payload.workflow_ref,
+      ref: payload.ref,
+      event: payload.event_name,
+    });
+    if (!publisher) {
+      const repository = typeof payload.repository === 'string' ? payload.repository : 'unknown repository';
+      throw new ForbiddenError(
+        `OIDC token from "${repository}" is not a configured trusted publisher`,
+        'publisher_not_mapped',
+      );
+    }
+    return {
+      label: publisher.label,
+      scopes: [...publisher.scopes],
+      trusted: true,
+      firstParty: publisher.firstParty,
+      source: presented.source,
+      publisher: publisherProvenance(payload, publisher),
+    };
+  }
+
   if (tokens.size === 0) {
     throw new UnauthorizedError(
       'publishing is disabled on this registry (no tokens configured)',
@@ -120,10 +185,10 @@ function assertPublishScope(token, name) {
  * Express middleware requiring authentication. Attaches `req.token` on
  * success, responds 401/403 via the error handler otherwise.
  */
-function requireAuth(tokens) {
-  return (req, _res, next) => {
+function requireAuth(tokens, options) {
+  return async (req, _res, next) => {
     try {
-      req.token = authenticate(req, tokens);
+      req.token = await authenticate(req, tokens, options);
       next();
     } catch (err) {
       next(err);

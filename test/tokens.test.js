@@ -47,20 +47,20 @@ test('no credentials yields null', () => {
   assert.equal(extractToken(request()), null);
 });
 
-test('authenticate accepts a known token and rejects unknown/missing', () => {
+test('authenticate accepts a known token and rejects unknown/missing', async () => {
   const tokens = new Map([
     ['good', { label: 'good', scopes: ['*'], trusted: true, firstParty: true }],
   ]);
-  const ok = authenticate(request({ headers: { authorization: 'Bearer good' } }), tokens);
+  const ok = await authenticate(request({ headers: { authorization: 'Bearer good' } }), tokens);
   assert.equal(ok.label, 'good');
   assert.equal(ok.firstParty, true);
 
-  assert.throws(
-    () => authenticate(request({ headers: { authorization: 'Bearer bad' } }), tokens),
+  await assert.rejects(
+    authenticate(request({ headers: { authorization: 'Bearer bad' } }), tokens),
     UnauthorizedError,
   );
-  assert.throws(() => authenticate(request(), tokens), UnauthorizedError);
-  assert.throws(() => authenticate(request(), new Map()), UnauthorizedError);
+  await assert.rejects(authenticate(request(), tokens), UnauthorizedError);
+  await assert.rejects(authenticate(request(), new Map()), UnauthorizedError);
 });
 
 test('scopes are exact names, namespace prefixes, or ns.* globs', () => {

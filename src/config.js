@@ -7,6 +7,8 @@
 const path = require('path');
 const fs = require('fs');
 
+const { loadTrustedPublishers } = require('./publishers');
+
 const MIB = 1024 * 1024;
 
 function intFromEnv(name, fallback) {
@@ -132,6 +134,15 @@ function loadConfig() {
     uploadTmpDir,
     indexPath: path.join(dataDir, 'index.json'),
     tokens: loadTokens(),
+    // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get
+    // 403); malformed config throws here so startup fails loudly.
+    publishers: loadTrustedPublishers(),
+    // Audience pinned when the registry verifies OIDC tokens. Changing this
+    // is a breaking change for every publisher workflow's getIDToken() call.
+    oidcAudience: process.env.OIDC_AUDIENCE || 'xiom-registry',
+    // JWKS endpoint. Defaults to GitHub; overridable so tests (and a future
+    // mirror) can serve a local set without touching the issuer constant.
+    oidcJwksUrl: process.env.OIDC_JWKS_URL || undefined,
     maxTarballBytes,
     maxIndexPackages,
     maxIndexBytes,

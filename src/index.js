@@ -345,6 +345,20 @@ function normalizeIndex(parsed, registryUrl = '') {
   return index;
 }
 
+/**
+ * Public OIDC provenance recorded per version (additive; older indexes have
+ * none). Only allowlisted string fields survive, so a hostile seed/sync body
+ * cannot smuggle arbitrary structures into served metadata.
+ */
+function normalizePublisher(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  for (const field of ['repository', 'workflow', 'workflowRef', 'ref', 'commit', 'runId', 'runUrl', 'event']) {
+    if (typeof raw[field] === 'string' && raw[field]) out[field] = raw[field].slice(0, 256);
+  }
+  return out.repository ? out : null;
+}
+
 /** Normalize a single version entry to the canonical field set. */
 function normalizeVersionEntry(fallbackVersion, raw) {
   const entry = {
@@ -362,6 +376,8 @@ function normalizeVersionEntry(fallbackVersion, raw) {
   if (typeof raw.yankedAt === 'string') entry.yankedAt = raw.yankedAt;
   if (typeof raw.yankReason === 'string' && raw.yankReason) entry.yankReason = raw.yankReason;
   if (typeof raw.compiler === 'string' && raw.compiler) entry.compiler = raw.compiler;
+  const publisher = normalizePublisher(raw.publisher);
+  if (publisher) entry.publisher = publisher;
   if (typeof raw.download_url === 'string' && raw.download_url) {
     // Seed/sync entries point at GitHub Releases; keep the hint so operators
     // can migrate them, but never emit it as the primary location.

@@ -26,6 +26,8 @@ Read this before touching deployment. The service code and protocol live in
 | `/opt/xiom/registry/.env.staging` | staging port, tokens path, staging `REGISTRY_URL` (copy of `.env.staging.example`) |
 | `/opt/xiom/registry/tokens.json` | production publish tokens (mounted read-only; never commit) |
 | `/opt/xiom/registry/tokens.staging.json` | staging publish tokens (separate file) |
+| `/etc/xiom-registry/trusted-publishers.json` | production OIDC publishers (mounted read-only at the same path; `TRUSTED_PUBLISHERS_FILE`) |
+| `/etc/xiom-registry/staging/trusted-publishers.json` | staging OIDC publishers (own file; production entries are not visible inside the staging container) |
 | volumes `registry_registry_data` / `registry_registry_packages` | production index + artifacts |
 | volumes `registry_staging_data` / `registry_staging_packages` | staging index + artifacts |
 
@@ -109,6 +111,48 @@ xiom-pkg install <name>@<version>
 Note: the e2e probe package (`xiom.staging-e2e-probe`) lives only in the
 old shared volumes; the staging volumes are fresh, and production's copy is
 harmless (signed, one version yanked).
+
+## OIDC trusted publishers
+
+GitHub Actions publishers are configured by a JSON file per instance, not by
+registry tokens. `docker-compose.yml` mounts the directories read-only and
+sets `TRUSTED_PUBLISHERS_FILE`:
+
+- production: `/etc/xiom-registry/trusted-publishers.json`
+- staging: `/etc/xiom-registry/staging/trusted-publishers.json`
+
+The file is an array (or `{"publishers": [...]}`) of entries:
+
+```json
+[
+  {
+    "label": "stdlib-release",
+    "repository": "xiom-lang/stdlib",
+    "workflow": "publish-registry.yml",
+    "refs": ["refs/tags/stdlib-v*"],
+    "scopes": ["xiom.std", "xiom-std"],
+    "firstParty": true
+  }
+]
+```
+
+Operational rules:
+
+- Missing or empty file = no OIDC publishers: GitHub tokens get 403 while
+  static tokens keep working. Production starts as `[]` and only gains
+  entries after the staging canary and the owner's OK.
+- Malformed JSON or an invalid entry makes the process exit at startup, so
+  validate before restarting: `node -e "JSON.parse(require('fs').readFileSync('/etc/xiom-registry/trusted-publishers.json','utf8'))"`
+- After editing: `docker compose up -d --no-deps registry` (or the staging
+  equivalent); a recreate is enough, no image rebuild.
+- The registry needs outbound HTTPS to
+  `token.actions.githubusercontent.com` for JWKS, and a correct clock (JWT
+  expiry is checked with 60 s skew).
+- Audience is pinned to `xiom-registry` (`OIDC_AUDIENCE` overrides it, but
+  every publisher workflow must be changed to match).
+
+The full claim contract, staging/production entries and lane handoffs live in
+`SESSION.md` sections 11-12.
 
 ## Hestia reverse proxy
 

@@ -180,6 +180,22 @@ function signatureCell(entry) {
   return `<span class="badge signed">signed</span> <span class="mono">${escapeHtml(fingerprint(entry.publicKey))}</span>`;
 }
 
+/** OIDC provenance recorded on a version (empty for static-token publishes). */
+function publisherCell(publisher) {
+  if (!publisher || !publisher.repository) return '';
+  const workflow = publisher.workflow
+    ? ` <span class="mono">${escapeHtml(publisher.workflow)}</span>`
+    : '';
+  const ref = publisher.ref
+    ? ` @ <span class="mono">${escapeHtml(publisher.ref)}</span>`
+    : '';
+  const run = publisher.runUrl
+    ? ` <a href="${escapeHtml(publisher.runUrl)}" rel="noopener">run</a>`
+    : '';
+  return `<div class="detail"><dt>Published by</dt><dd>${escapeHtml(publisher.repository)}`
+    + `${workflow}${ref}${run}</dd></div>`;
+}
+
 /** Package detail: metadata, install command, trust instructions, versions. */
 function packagePage(pkg, registryUrl, selectedVersion = '') {
   const name = pkg.name;
@@ -207,6 +223,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '') {
   <div class="detail"><dt>Size</dt><dd>${escapeHtml(formatBytes(detail.size))}</dd></div>
   <div class="detail"><dt>SHA-256</dt><dd title="${escapeHtml(detail.sha256)}">${escapeHtml(detail.sha256 || '--')}</dd></div>
   <div class="detail"><dt>Signature</dt><dd>${signatureCell(detail)}</dd></div>
+  ${publisherCell(detail.publisher)}
   ${pkg.categories && pkg.categories.length > 0 ? `<div class="detail"><dt>Categories</dt><dd>${categoryChips(pkg.categories)}</dd></div>` : ''}
   ${pkg.keywords && pkg.keywords.length > 0 ? `<div class="detail"><dt>Keywords</dt><dd>${escapeHtml(pkg.keywords.join(', '))}</dd></div>` : ''}
   ${pkg.license ? `<div class="detail"><dt>License</dt><dd>${escapeHtml(pkg.license)}</dd></div>` : ''}
