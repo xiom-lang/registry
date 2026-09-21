@@ -10,18 +10,24 @@ this file is the normative working spec for the service itself.
 
 **Status:** the server speaks the full `xiom pkg` protocol and passes a
 20-check end-to-end gate that drives the real client (`npm run test:e2e`),
-plus 88 unit tests (`npm test`). **Deployed and verified:**
+plus 107 unit tests (`npm test`). **Deployed and verified:**
 `https://registry.xiom-lang.org` (port 3100) and
 `https://staging.registry.xiom-lang.org` (isolated instance on port 3200,
 own volumes and tokens). Both advertise their own `registry` URL; the
 scheduled live check (`.github/workflows/live-check.yml`,
-`npm run live-check`) verifies health and artifact digests and asserts the
-two indexes stay separate. The index carries its **first real package**:
-`xiom.hello@0.1.0`, signed, on both instances -- independently verified by
-this session (clean install, checksum, fingerprint, and served-bytes hash
-equal to the index digest) on 2026-09-19.
+`npm run live-check`) verifies health, artifact digests, the web UI, and the
+`/categories` vocabulary, and asserts the two instances have distinct
+identities. Content: `xiom.hello@0.1.0` (signed) on both instances and
+`xiom.math@0.1.0` on staging with full metadata (categories/keywords/
+license/repository) -- both independently verified by this session. **The
+next feature is OIDC trusted publishing; section 11 is the handoff brief and
+the paste-ready prompt for the next session.**
 
 **Remaining:**
+
+0. **OIDC trusted publishing** -- see section 11. The registry-side work is
+   fully specified there; nothing is implemented yet. This is the top item
+   for the next registry session.
 
 1. **Live publish/install against staging** -- DONE (2026-09-18):
    `scripts/staging-acceptance.js` published `xiom.staging-isolation-probe`
@@ -491,3 +497,96 @@ item.
       checksum, fingerprint, served-bytes hash equals the index digest).
 - [ ] CI publishing automation for `xiom.*` packages via OIDC (C3), so the
       release flow stops depending on a hand-delivered token.
+
+---
+
+## 11. Next session: OIDC trusted publishing (handoff brief)
+
+**Why.** Every CI publish currently needs a long-lived token hand-delivered
+by the operator. OIDC replaces that: a GitHub Actions workflow exchanges its
+identity for a short-lived JWT, the registry verifies it against GitHub's
+JWKS and publishes only within the mapped scopes. It is the prerequisite for
+C3 (publish from Actions) and for per-version provenance.
+
+**Decisions already made -- do not relitigate:**
+
+- **No client change.** The workflow sets `XIOM_REGISTRY_TOKEN` to the OIDC
+  token; `xiom pkg publish` sends it as the bearer value. The registry
+  distinguishes JWTs (three dot-separated segments) from static tokens inside
+  `authenticate()`; static tokens keep working for humans.
+- **Issuer** `https://token.actions.githubusercontent.com`; **audience** is
+  registry-defined and pinned (suggested value: `xiom-registry`); JWKS from
+  `https://token.actions.githubusercontent.com/.well-known/jwks`.
+- **RS256 verification with Node crypto only** (no new npm dependencies):
+  `crypto.createPublicKey({ key: jwk, format: 'jwk' })` plus
+  `crypto.verify('sha256', signingInput, key, signature)`.
+- **Claims checked:** `iss`, `aud`, `exp` (allow ~60s skew), `repository`,
+  `workflow`/`workflow_ref`, `ref`, `event_name`; `sub` kept for logs.
+- **Mapping lives in a trusted-publishers config** (path from
+  `TRUSTED_PUBLISHERS_FILE`, inline JSON fallback), each entry shaped like:
+  `{ label, repository: "xiom-lang/xiom", workflow: "release.yml",
+     refs: ["refs/tags/v*"], scopes: ["xiom.*"], firstParty: true }`.
+  Claims only *select* an entry; they never widen its scopes.
+- **Fail closed.** Invalid / expired / wrong-aud / unknown-kid -> 401. A valid
+  token with no matching entry -> 403. A JWKS fetch failure must never make a
+  signature check pass; serve the cached set and fail the request instead.
+- **Provenance per version**: record `publisher: { repository, workflow, ref,
+  commit (sha claim), runId, runUrl }` in the version entry and emit it in
+  `/index.json`, `/packages/:name`, and on the package page. Additive field;
+  deserializers tolerate it.
+- **JWKS caching**: in-memory, keyed by `kid`, ~1h TTL, refetch on unknown
+  kid, request timeout. GitHub rotates keys.
+
+**Increments (each with tests, in order):**
+
+1. `src/oidc.js` -- JWT parse, JWKS cache/fetch, RS256 verify, claim
+   validation as pure functions (test with a locally generated RSA keypair;
+   no network in unit tests).
+2. `src/publishers.js` -- trusted-publisher config load/normalize/match
+   (repository + workflow + ref glob + scopes), startup validation that
+   fails loudly on malformed config.
+3. `authenticate()` -- accept JWTs, map to the same token shape
+   (`label`, `scopes`, `trusted`, `firstParty`, `publisher`), 401/403 per the
+   rules above; the static-token path (constant-time) stays untouched.
+4. Publish pipeline + index + UI: store and render the `publisher` object.
+5. Docs: `PUBLISHING.md` "Publish from GitHub Actions" with a workflow
+   example (`permissions: id-token: write`, request the token with the pinned
+   audience, export `XIOM_REGISTRY_TOKEN`); SESSION schema update; ops gets a
+   pointer for the VPS config file placement (ops lane owns that).
+6. Live proof: dry-run publish from a real repo to **staging** first (canary
+   package), then production after owner approval.
+
+**Gotchas:**
+
+- GitHub OIDC tokens are short-lived (~5 min) and audience-pinned; request
+  the exact configured audience or verification fails.
+- `workflow_ref` looks like
+  `owner/repo/.github/workflows/x.yml@refs/tags/v1`; match `repository` +
+  `ref` + `workflow` rather than string-matching the whole ref.
+- Reusable/child workflows carry `job_workflow_ref`; decide explicitly
+  whether to accept it (default: no).
+- Never log the JWT; log `label`, `repository`, `run_id` only.
+- Keep `npm audit` at 0 and the 107-test suite green; add tests for every
+  claim rule and the cache behavior.
+
+**Paste-ready prompt for the next session:**
+
+```
+Work in xiom-lang/registry. Read SESSION.md first, especially section 11
+(OIDC trusted publishing handoff brief), section 2 (protocol contract) and
+section 5 (test plan). Implement OIDC trusted publishing for GitHub Actions
+exactly as specified in section 11, in the listed increments, with tests for
+every claim rule, the JWKS cache, and the trusted-publisher matcher.
+
+Rules: conventional commits with `git commit -s` (DCO); never weaken
+signature, checksum, or namespace checks; static tokens must keep working
+unchanged; no new npm dependencies if Node crypto can do it; run `npm test`
+and `npm run test:e2e` before claiming anything done. Staging first --
+publish a canary via OIDC to https://staging.registry.xiom-lang.org and prove
+production isolation; do not touch production without the owner's OK.
+
+Current state: main is green (107 unit tests, 20 e2e, live check passing,
+categories/keywords shipped and verified). The owner still has manual work
+pending on the VS Code marketplace secrets and the production release-ci
+token; those do not block the registry-side implementation.
+```
