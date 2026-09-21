@@ -12,6 +12,10 @@ body:
         the request and sends the token to you **privately** - never paste a
         token into this issue or anywhere public.
 
+        The token is sent by e-mail from registry@xiom-lang.org. On first
+        contact it may land in your spam folder - check there and mark it as
+        not spam.
+
         Read [PUBLISHING.md](https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md)
         first if you have not published before.
 

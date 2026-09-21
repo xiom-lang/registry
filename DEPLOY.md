@@ -238,8 +238,14 @@ docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
 After add/rotate/remove: `chown 1000:1000 tokens.json`, `chmod 600`, recreate
 the container (`up -d --force-recreate --no-deps registry`) and confirm
 `tokens: N configured`. The printed value is the only time the token becomes
-visible; deliver it privately (Discord DM, or the address from the request),
-never in the issue. Static tokens do not expire, so revocation is manual.
+visible; deliver it by e-mail from `registry@xiom-lang.org` to the address in
+the request (or a private channel if none was given), never in the issue.
+When approving the request, post this note in the issue:
+
+> The token is sent by e-mail from registry@xiom-lang.org. On first contact it
+> may land in your spam folder -- check there and mark it as not spam.
+
+Static tokens do not expire, so revocation is manual.
 
 Semantics worth knowing before answering a publisher:
 
