@@ -412,6 +412,14 @@ item.
       checks).
 - [ ] Phase 3 (post-beta, unplanned): download stats, mirror/offline mode,
       object storage, index sharding.
+- [x] Footer social row (2026-09-21): the xiom-lang.org `.footer-social`
+      block now renders in the registry UI footer -- same order (Discord, X,
+      Mastodon, Bluesky, Reddit, Hacker News, LinkedIn, Facebook), same
+      aria-labels, titles and rel/target rules, Discord wording identical,
+      inline Simple Icons (CC0) paths sharing the website's `.footer-social`
+      CSS. `registry@xiom-lang.org` (mailto) sits beside the row as the
+      registry-specific contact; the legal line keeps support@xiom-lang.org.
+      Covered by the UI test asserting the exact anchors and their order.
 - [x] Category vocabulary and package metadata (2026-09-21): `categories`
       (17 canonical + aliases, max 3), `keywords` (max 10), `license`,
       `repository` extracted from `package.xi` and emitted across the API;

@@ -148,6 +148,36 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.equal(data.web, 'https://registry.ui.test', 'raw readers get pointed at the UI');
 });
 
+test('footer carries the website social row and the registry contact', async () => {
+  const body = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();
+  assert.match(body, /class="footer-social"/);
+
+  // Same order, labels and rel/target rules as xiom-lang.org. The exact
+  // attribute sequence is asserted so a drift in wording or rel is a failure.
+  const social = [
+    ['https://discord.gg/fsxQfDUg9', 'XIOM community Discord (open invite)', 'Discord', 'noopener'],
+    ['https://x.com/XiomLang', 'XIOM on X', 'X', 'noopener'],
+    ['https://mastodon.social/@xiom_lang', 'XIOM on Mastodon', 'Mastodon', 'me noopener'],
+    ['https://bsky.app/profile/xiom-lang.bsky.social', 'XIOM on Bluesky', 'Bluesky', 'noopener'],
+    ['https://www.reddit.com/r/xiom_lang/', 'XIOM on Reddit', 'Reddit', 'noopener'],
+    ['https://news.ycombinator.com/user?id=xiom-lang', 'XIOM on Hacker News', 'Hacker News', 'noopener'],
+    ['https://www.linkedin.com/company/145216062/', 'XIOM on LinkedIn', 'LinkedIn', 'noopener'],
+    ['https://www.facebook.com/profile.php?id=61594524426045', 'XIOM on Facebook', 'Facebook', 'noopener'],
+  ];
+  const positions = social.map(([href, label, title, rel]) => {
+    const anchor = `<a href="${href}" aria-label="${label}" title="${title}" target="_blank" rel="${rel}"`;
+    const at = body.indexOf(anchor);
+    assert.notEqual(at, -1, `${title} link keeps the website label and rel`);
+    return at;
+  });
+  for (let i = 1; i < positions.length; i++) {
+    assert.ok(positions[i] > positions[i - 1], 'social links keep the website order');
+  }
+
+  // Registry-specific contact sits beside the row, not in the generic legal line.
+  assert.match(body, /footer-social-row[\s\S]*mailto:registry@xiom-lang\.org/);
+});
+
 test('GET /packages lists packages in both formats', async () => {
   const html = await fetch(`${baseUrl}/packages`, { headers: BROWSER });
   assert.match(await html.text(), /demo-pkg/);
