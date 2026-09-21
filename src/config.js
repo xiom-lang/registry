@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { loadTrustedPublishers } = require('./publishers');
+const { isValidPublicKeyHex } = require('./signatures');
 
 const MIB = 1024 * 1024;
 
@@ -40,7 +41,8 @@ function boolFromEnv(name, fallback) {
  *      production registry must never accept anonymous publishes.
  *
  * Token fields: { token, label?, scopes? (array of prefixes; "*" = any),
- *                 trusted?, firstParty? }
+ *                 trusted?, firstParty?, publicKey? (64 hex; pins trusted
+ *                 publishes to that signing key), issuedAt? (informational) }
  */
 function loadTokens() {
   const file = process.env.TOKENS_FILE;
@@ -94,11 +96,22 @@ function normalizeTokens(parsed, source) {
     const scopes = Array.isArray(entry.scopes) && entry.scopes.length > 0
       ? entry.scopes.map(String)
       : ['*'];
+    // A pinned signing key is a security control, so a malformed value must
+    // fail startup rather than silently accept every key (or reject every
+    // publish with a confusing 422).
+    let publicKey = '';
+    if (entry.publicKey !== undefined && entry.publicKey !== null && entry.publicKey !== '') {
+      publicKey = String(entry.publicKey).trim().toLowerCase();
+      if (!isValidPublicKeyHex(publicKey)) {
+        throw new Error(`${source}: token entry ${map.size + 1} has an invalid publicKey (expected 64 hex characters)`);
+      }
+    }
     map.set(token, {
       label: typeof entry.label === 'string' && entry.label ? entry.label : `token-${map.size + 1}`,
       scopes,
       trusted: Boolean(entry.trusted),
       firstParty: Boolean(entry.firstParty),
+      ...(publicKey ? { publicKey } : {}),
     });
   }
   return map;

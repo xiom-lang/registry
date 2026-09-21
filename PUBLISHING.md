@@ -130,6 +130,11 @@ be yanked. Maintainers rotate tokens at least every 90 days: a replacement
 arrives from the same address and the old value stops working, so keep the
 token somewhere easy to update (a CI secret or your environment).
 
+If you supplied a signing public key, the token is **pinned** to it: every
+publish must be signed with that key, and a different key is rejected with
+`422 public_key_mismatch`. To change keys later, send the maintainers the new
+public key - the old key stops working for publishing immediately.
+
 ## 5. Publish
 
 From the package directory:

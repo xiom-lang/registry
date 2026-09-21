@@ -109,3 +109,60 @@ test('invalid JSON is refused before any write', () => {
   assert.match(result.stderr, /not valid JSON/);
   assert.equal(fs.readFileSync(file, 'utf-8'), '{ not json');
 });
+
+test('add records issuedAt and prints its age', () => {
+  const file = seed([]);
+  const result = run(['add', '--file', file, '--label', 'alice', '--scopes', 'alice-lib']);
+  assert.equal(result.status, 0);
+  const [entry] = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  assert.ok(!Number.isNaN(Date.parse(entry.issuedAt)), 'issuedAt is an ISO timestamp');
+  assert.match(result.stdout, /issued=\d{4}-\d{2}-\d{2} age=0d/);
+});
+
+test('list flags tokens past the 90-day rotation window', () => {
+  const old = new Date(Date.now() - 100 * 86_400_000).toISOString();
+  const fresh = new Date().toISOString();
+  const file = seed([
+    ENTRY('alice', 'a'.repeat(64), { issuedAt: old }),
+    ENTRY('bob', 'b'.repeat(64), { issuedAt: fresh }),
+    ENTRY('legacy', 'c'.repeat(64)),
+  ]);
+  const result = run(['list', '--file', file]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /label=alice .* age=100d ROTATION-DUE/);
+  assert.match(result.stdout, /label=bob .* age=0d(?! ROTATION-DUE)/);
+  assert.match(result.stdout, /label=legacy .* issued=unknown(?! .*ROTATION-DUE)/);
+
+  const json = run(['list', '--file', file, '--json']);
+  const parsed = JSON.parse(json.stdout);
+  assert.equal(parsed.find((e) => e.label === 'alice').rotationDue, true);
+  assert.equal(parsed.find((e) => e.label === 'bob').rotationDue, false);
+  assert.equal(parsed.find((e) => e.label === 'legacy').rotationDue, undefined);
+  assert.doesNotMatch(json.stdout, /a{16}/, 'never prints token values');
+});
+
+test('--key pins trusted tokens and refuses mismatched flags or bad keys', () => {
+  const file = seed([]);
+  const key = 'a1'.repeat(32);
+  const pinned = run(['add', '--file', file, '--label', 'alice', '--scopes', 'alice-lib', '--trusted', '--key', key]);
+  assert.equal(pinned.status, 0);
+  const [entry] = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  assert.equal(entry.publicKey, key);
+  assert.match(pinned.stdout, /key=[0-9a-f]{2}:[0-9a-f]{2}/, 'describe shows a key fingerprint');
+
+  const noTrusted = run(['add', '--file', file, '--label', 'bob', '--key', key]);
+  assert.equal(noTrusted.status, 1);
+  assert.match(noTrusted.stderr, /--key requires --trusted/);
+
+  const badKey = run(['add', '--file', file, '--label', 'bob', '--trusted', '--key', 'not-hex']);
+  assert.equal(badKey.status, 1);
+  assert.match(badKey.stderr, /--key must be 64 hex characters/);
+
+  // Colon- or space-separated pastes are normalized to 64 hex.
+  const colonKey = 'a1:'.repeat(31) + 'a1';
+  const colon = run(['rotate', '--file', file, '--label', 'alice', '--scopes', 'alice-lib', '--trusted', '--key', colonKey]);
+  assert.equal(colon.status, 0);
+  const rotated = JSON.parse(fs.readFileSync(file, 'utf-8')).find((e) => e.label === 'alice');
+  assert.equal(rotated.publicKey, key);
+});
+

@@ -218,9 +218,9 @@ Worked examples (label = who, scopes = what they may publish):
 docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
   node scripts/tokens.js add --file tokens.json --label user1 --scopes "my-lib"
 
-# same user gave a signing public key: signatures become mandatory (--trusted)
+# user1 gave a signing public key: signatures mandatory and pinned to that key
 docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
-  node scripts/tokens.js add --file tokens.json --label user1 --scopes "my-lib" --trusted
+  node scripts/tokens.js add --file tokens.json --label user1 --scopes "my-lib" --trusted --key <64-hex>
 
 # break-glass first-party token for org CI only -- prefer OIDC instead
 docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
@@ -287,6 +287,23 @@ Semantics worth knowing before answering a publisher:
   signature + public key per version and does not pin a publisher key to the
   token, so a publisher can use a fresh signing key for every version;
   rotating either one never invalidates already-published versions.
+- `--trusted` decision: use it when the requester supplied a signing public
+  key and their release process signs every publish. Without a key in the
+  request, issue a plain token -- `--trusted` would reject their unsigned
+  publishes (422), and there would be no key to pin.
+- `--key <hex>` pins the trusted token to that signing key: publishes whose
+  submitted key differs get `422 public_key_mismatch`, so a stolen token
+  alone cannot publish under another key. When the requester rotates their
+  signing key, they send the new public key and the operator runs
+  `rotate --file tokens.json --label user1 --scopes "my-lib" --trusted
+  --key <new-hex>`; the old key stops working immediately.
+  64-hex strings can be pasted with or without colons or spaces -- `--key`
+  normalizes both (the fingerprint display uses colons, and it is a short
+  hash, not the key: paste the 64-hex value from `xiom pkg keygen`).
+- Rotation report: `list` prints `issued=` and `age=` and marks
+  `ROTATION-DUE` at 90 days; `list --json` emits `ageDays`/`rotationDue` for
+  a monthly ops cron. Static tokens have no server-side expiry, so the policy
+  is enforced by this report.
 - Revoking a token stops future publishes (401). It does not unpublish:
   published versions stay downloadable and installable.
 - Yanking (`POST /packages/<name>/<version>/yank`) is the only withdrawal:

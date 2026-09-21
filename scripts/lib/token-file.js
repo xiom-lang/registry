@@ -39,12 +39,15 @@ function saveTokens(file, tokens) {
 
 /** The non-secret shape of an entry, for list output and logs. */
 function summarize(entry) {
-  return {
+  const summary = {
     label: typeof entry.label === 'string' ? entry.label : '',
     scopes: Array.isArray(entry.scopes) ? entry.scopes : [],
     trusted: Boolean(entry.trusted),
     firstParty: Boolean(entry.firstParty),
   };
+  if (typeof entry.issuedAt === 'string' && entry.issuedAt) summary.issuedAt = entry.issuedAt;
+  if (typeof entry.publicKey === 'string' && entry.publicKey) summary.publicKey = entry.publicKey;
+  return summary;
 }
 
 module.exports = { loadTokens, saveTokens, summarize };

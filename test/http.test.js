@@ -257,6 +257,43 @@ test('republish is 409 with immutable-version code', async () => {
   assert.equal((await second.json()).code, 'version_exists');
 });
 
+test('a token pinned to a signing key rejects any other key', async () => {
+  const pinned = keypair();
+  const other = keypair();
+  const registry = await startIsolatedRegistry({
+    tokens: [{
+      token: 'pinned-token',
+      label: 'pinned',
+      scopes: ['*'],
+      trusted: true,
+      firstParty: false,
+      publicKey: pinned.publicKeyHex,
+    }],
+  });
+  try {
+    const bytes = tarballBytes('pinned');
+    const signature = crypto.sign(null, bytes, pinned.privateKey).toString('hex');
+    const ok = await publishForm({
+      name: 'pinned-ok', version: '0.1.0', bytes, signature,
+      publicKey: pinned.publicKeyHex, token: 'pinned-token', url: registry.url,
+    });
+    assert.equal(ok.status, 201, await ok.clone().text());
+
+    const otherBytes = tarballBytes('pinned-other');
+    const otherSignature = crypto.sign(null, otherBytes, other.privateKey).toString('hex');
+    const mismatch = await publishForm({
+      name: 'pinned-bad', version: '0.1.0', bytes: otherBytes, signature: otherSignature,
+      publicKey: other.publicKeyHex, token: 'pinned-token', url: registry.url,
+    });
+    assert.equal(mismatch.status, 422);
+    const body = await mismatch.json();
+    assert.equal(body.code, 'public_key_mismatch');
+    assert.doesNotMatch(body.error, new RegExp(other.publicKeyHex), 'never echoes the submitted key');
+  } finally {
+    registry.stop();
+  }
+});
+
 test('invalid names and versions are 400', async () => {
   for (const [name, version] of [
     ['Bad_Name', '0.1.0'],

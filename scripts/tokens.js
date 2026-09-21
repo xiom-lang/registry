@@ -26,12 +26,15 @@
 const crypto = require('crypto');
 
 const { loadTokens, saveTokens, summarize } = require('./lib/token-file');
+const { fingerprint, isValidPublicKeyHex } = require('../src/signatures');
+
+const ROTATION_DAYS = 90;
 
 const USAGE = `Usage:
-  node scripts/tokens.js list   --file <path>
-  node scripts/tokens.js add    --file <path> --label <label> [--scopes a,b] [--trusted] [--first-party]
+  node scripts/tokens.js list   --file <path> [--json]
+  node scripts/tokens.js add    --file <path> --label <label> [--scopes a,b] [--trusted] [--first-party] [--key <64-hex>]
   node scripts/tokens.js remove --file <path> --label <label>
-  node scripts/tokens.js rotate --file <path> --label <label> [--scopes a,b] [--trusted] [--first-party]`;
+  node scripts/tokens.js rotate --file <path> --label <label> [--scopes a,b] [--trusted] [--first-party] [--key <64-hex>]`;
 
 function parseArgs(argv) {
   const args = {
@@ -41,6 +44,8 @@ function parseArgs(argv) {
     scopes: ['*'],
     trusted: false,
     firstParty: false,
+    key: '',
+    json: false,
   };
   const [command, ...rest] = argv;
   args.command = command || '';
@@ -50,8 +55,10 @@ function parseArgs(argv) {
     else if (arg === '--label') args.label = rest[++i];
     else if (arg === '--scopes') {
       args.scopes = String(rest[++i] || '*').split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (arg === '--trusted') args.trusted = true;
+    } else if (arg === '--key') args.key = String(rest[++i] || '').trim().toLowerCase().replace(/[\s:]/g, '');
+    else if (arg === '--trusted') args.trusted = true;
     else if (arg === '--first-party') args.firstParty = true;
+    else if (arg === '--json') args.json = true;
     else {
       console.error(`unknown argument: ${arg}`);
       console.error(USAGE);
@@ -95,13 +102,27 @@ function newEntry(args) {
     scopes: args.scopes,
     trusted: args.trusted,
     firstParty: args.firstParty,
+    issuedAt: new Date().toISOString(),
+    ...(args.key ? { publicKey: args.key } : {}),
   };
+}
+
+/** Whole days since issuance; null when the entry predates issuedAt. */
+function ageDays(issuedAt, now = Date.now()) {
+  const ms = Date.parse(issuedAt);
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.floor((now - ms) / 86_400_000));
 }
 
 function describe(entry) {
   const s = summarize(entry);
+  const days = ageDays(s.issuedAt);
+  const issued = s.issuedAt ? s.issuedAt.slice(0, 10) : 'unknown';
+  const age = days === null ? '' : ` age=${days}d`;
+  const due = days !== null && days >= ROTATION_DAYS ? ' ROTATION-DUE' : '';
+  const key = s.publicKey ? ` key=${fingerprint(s.publicKey)}` : '';
   return `label=${s.label || '(none)'} scopes=${s.scopes.join(',') || '(none)'} `
-    + `trusted=${s.trusted} firstParty=${s.firstParty}`;
+    + `trusted=${s.trusted} firstParty=${s.firstParty} issued=${issued}${age}${due}${key}`;
 }
 
 function postWriteHint(file) {
@@ -122,9 +143,30 @@ function main() {
   }
   requireFileAndLabel(args);
 
+  if (args.key) {
+    if (!args.trusted) {
+      fail('--key requires --trusted (a pinned key only has meaning when signatures are enforced)');
+    }
+    if (!isValidPublicKeyHex(args.key)) {
+      fail('--key must be 64 hex characters (the ed25519 public key printed by `xiom pkg keygen`)');
+    }
+  }
+
   const tokens = readTokens(args.file);
 
   if (args.command === 'list') {
+    if (args.json) {
+      const now = Date.now();
+      console.log(JSON.stringify(tokens.map((entry) => {
+        const s = summarize(entry);
+        const days = ageDays(s.issuedAt, now);
+        return {
+          ...s,
+          ...(days === null ? {} : { ageDays: days, rotationDue: days >= ROTATION_DAYS }),
+        };
+      }), null, 2));
+      return;
+    }
     console.log(args.file);
     if (tokens.length === 0) {
       console.log('  (no tokens)');

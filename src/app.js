@@ -633,6 +633,17 @@ function publish(req, { config, indexStore, artifacts, token }) {
         'signature_required',
       );
     }
+    // A registered key pins the publisher: a stolen token alone cannot
+    // publish under a different key. Tokens without a registered key keep
+    // the previous behavior (any internally consistent signature).
+    if (token.publicKey && publicKey !== token.publicKey) {
+      removeUpload();
+      throw new UnprocessableEntityError(
+        `token "${token.label}" is pinned to signing key fp ${fingerprint(token.publicKey)}; `
+        + `the submitted key fp ${fingerprint(publicKey)} does not match`,
+        'public_key_mismatch',
+      );
+    }
     let valid;
     try {
       valid = verifySignature(publicKey, fileBuffer, signature);
