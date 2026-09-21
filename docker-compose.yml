@@ -32,10 +32,17 @@ services:
       # Host token file, read-only. Create it with scripts/keygen.js and
       # point XIOM_TOKENS_FILE at it (defaults to ./tokens.json).
       - ${XIOM_TOKENS_FILE:-./tokens.json}:/run/secrets/xiom-tokens.json:ro
+      # Host trusted-publishers directory, read-only at the same path. The
+      # service reads /etc/xiom-registry/trusted-publishers.json; the VPS
+      # keeps it at that exact path (0755, owner-managed). An absent or empty
+      # file trusts no OIDC publishers (JWTs get 403); static tokens keep
+      # working. Local runs can set XIOM_TRUSTED_PUBLISHERS_DIR to any dir.
+      - ${XIOM_TRUSTED_PUBLISHERS_DIR:-/etc/xiom-registry}:/etc/xiom-registry:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
       - TOKENS_FILE=/run/secrets/xiom-tokens.json
+      - TRUSTED_PUBLISHERS_FILE=${XIOM_TRUSTED_PUBLISHERS_FILE:-/etc/xiom-registry/trusted-publishers.json}
       - REGISTRY_URL=${REGISTRY_URL:-https://registry.xiom-lang.org}
       # Set TRUST_PROXY=1 when running behind the Hestia nginx vhost so the
       # rate limiter sees client IPs from X-Forwarded-For.
@@ -85,10 +92,14 @@ services:
       - staging_data:/app/data
       - staging_packages:/app/packages
       - ${XIOM_STAGING_TOKENS_FILE:-./tokens.staging.json}:/run/secrets/xiom-tokens.json:ro
+      # Staging sees only its own trusted-publishers subdirectory; the
+      # production file is not mounted into this container.
+      - ${XIOM_STAGING_TRUSTED_PUBLISHERS_DIR:-/etc/xiom-registry/staging}:/etc/xiom-registry/staging:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
       - TOKENS_FILE=/run/secrets/xiom-tokens.json
+      - TRUSTED_PUBLISHERS_FILE=${XIOM_STAGING_TRUSTED_PUBLISHERS_FILE:-/etc/xiom-registry/staging/trusted-publishers.json}
       - REGISTRY_URL=${XIOM_STAGING_REGISTRY_URL:-https://staging.registry.xiom-lang.org}
       - TRUST_PROXY=${TRUST_PROXY:-0}
     security_opt:
