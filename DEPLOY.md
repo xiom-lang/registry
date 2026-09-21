@@ -211,6 +211,52 @@ docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
   node scripts/tokens.js remove --file tokens.json --label <label>
 ```
 
+Worked examples (label = who, scopes = what they may publish):
+
+```
+# user1 may publish my-lib and my-lib.* names
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js add --file tokens.json --label user1 --scopes "my-lib"
+
+# same user gave a signing public key: signatures become mandatory (--trusted)
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js add --file tokens.json --label user1 --scopes "my-lib" --trusted
+
+# break-glass first-party token for org CI only -- prefer OIDC instead
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js add --file tokens.json --label xiom-release --scopes "xiom" --trusted --first-party
+
+# rotate: one fresh token replaces every entry with that label (atomic write)
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js rotate --file tokens.json --label user1 --scopes "my-lib"
+
+# revoke: remove every entry with that label (future publishes only)
+docker run --rm -v "$PWD:/w" -w /w node:22-alpine \
+  node scripts/tokens.js remove --file tokens.json --label user1
+```
+
+After add/rotate/remove: `chown 1000:1000 tokens.json`, `chmod 600`, recreate
+the container (`up -d --force-recreate --no-deps registry`) and confirm
+`tokens: N configured`. The printed value is the only time the token becomes
+visible; deliver it privately (Discord DM, or the address from the request),
+never in the issue. Static tokens do not expire, so revocation is manual.
+
+Semantics worth knowing before answering a publisher:
+
+- Token rotation (`tokens.js rotate`) and the publisher's signing-key
+  rotation (`xiom pkg keygen`) are independent. The registry stores
+  signature + public key per version and does not pin a publisher key to the
+  token, so a publisher can use a fresh signing key for every version;
+  rotating either one never invalidates already-published versions.
+- Revoking a token stops future publishes (401). It does not unpublish:
+  published versions stay downloadable and installable.
+- Yanking (`POST /packages/<name>/<version>/yank`) is the only withdrawal:
+  the version leaves `latest` and fresh resolution but stays downloadable, so
+  lockfiles that pin it keep working.
+- Versions are immutable and all are kept. `xiom pkg install <name>@<version>`
+  installs an exact version; `xiom pkg install <name>` resolves the highest
+  non-yanked version.
+
 Verify a token without publishing anything: yank a version that does not
 exist -- auth and scope run first, so a live token gets `404
 version_not_found` while a revoked or unloaded one gets `401 invalid_token`:
