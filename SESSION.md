@@ -426,6 +426,15 @@ item.
       CSS. `registry@xiom-lang.org` (mailto) sits beside the row as the
       registry-specific contact; the legal line keeps support@xiom-lang.org.
       Covered by the UI test asserting the exact anchors and their order.
+- [x] Token lifecycle and issuance (2026-09-21): static tokens can be pinned to
+      a signing key (`tokens.js add/rotate --key`, `--key` implies `--trusted`;
+      a different key gets `422 public_key_mismatch`) and now carry `issuedAt`;
+      `list` marks `ROTATION-DUE` at 90 days and `list --json` feeds the ops
+      rotation report. Ops runs `issue-token.sh` (e-mail delivery from
+      registry@xiom-lang.org, key passthrough, issuance log) and a monthly
+      rotation cron over both token files. Official CI stays on OIDC;
+      community publishing uses these static tokens (PUBLISHING.md section 4,
+      DEPLOY.md "Tokens").
 - [x] Category vocabulary and package metadata (2026-09-21): `categories`
       (17 canonical + aliases, max 3), `keywords` (max 10), `license`,
       `repository` extracted from `package.xi` and emitted across the API;
