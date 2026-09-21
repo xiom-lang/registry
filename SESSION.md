@@ -22,10 +22,12 @@ identities. Content: `xiom.hello@0.1.0` (signed) on both instances and
 license/repository) -- both independently verified by this session. **OIDC
 trusted publishing is implemented** (`src/oidc.js`, `src/publishers.js`,
 `authenticate()`, provenance in `/index.json`, `/packages/:name` and the
-package page; 20 new tests). What remains is operational: ops deploys the
-staging trusted-publishers config, the staging canary runs, then production
-gains entries with the owner's OK. Section 11 is the spec, section 12 the
-lane handoffs.
+package page; 20 new tests). **Staging canary verified** (2026-09-21, ops):
+the registry-owned workflow published through a real OIDC token and the
+stored version carries provenance (run 35654475479); production remains `[]`.
+Remaining: the stdlib and packages canaries wait on the v0.61.0 compiler
+release, then production entries with the owner's OK. Section 11 is the spec,
+section 12 the lane handoffs.
 
 **Remaining:**
 
@@ -648,6 +650,23 @@ archives and the VSIX, not registry packages, so it needs no entry.
   keep this repo's production entry disabled.
 - Both orgs: no OIDC subject-claim customization (`null`) -- correct; tokens
   carry the default `sub`, which we never match on.
+- Registry staging canary verified (2026-09-21, ops): `xiom.canary-oidc@
+  0.0.0-canary.1790024378343` published through OIDC and the stored entry
+  carries `publisher {repository xiom-lang/registry, workflow oidc-canary.yml,
+  ref refs/heads/main, commit 5079f57, runUrl}`, signature included.
+  Production stayed `[]` and was not recreated.
+
+**Open owner decisions (2026-09-21):**
+
+- `xiom-packages/packages` stays private until the first batch is curated
+  (real source, README/LICENSE per package). Public (or a paid org) is what
+  unlocks tag rulesets and environment reviewers there; until then the repo
+  is owner-only and its production entry stays disabled.
+- The packages session owns a graduation runbook (criteria, repo template,
+  workflow, ruleset, registry-config change, ops handoff).
+- Community self-service trusted publishing is not open: community publishers
+  keep using manually issued tokens; an approval/registration flow is a
+  future feature (accounts are not needed for reading the registry).
 
 **Config contract confirmed for ops (increment 2):**
 
