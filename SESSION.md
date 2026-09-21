@@ -598,3 +598,171 @@ categories/keywords shipped and verified). The owner still has manual work
 pending on the VS Code marketplace secrets and the production release-ci
 token; those do not block the registry-side implementation.
 ```
+
+---
+
+## 12. OIDC lane handoffs (2026-09-21)
+
+The publisher configuration is locked. This section is the relay sheet for
+the compiler/stdlib, packages, ops and website sessions (there are no
+managed Agent Manager sessions to message directly; the owner relays).
+Audience `xiom-registry`; production trusts tag refs only; scope lists are
+enumerated, never a blanket `xiom`.
+
+**Production entries (trusted-publishers config):**
+
+| repository | workflow | refs | scopes | firstParty |
+|---|---|---|---|---|
+| `xiom-lang/stdlib` | `publish-registry.yml` | `["refs/tags/stdlib-v*"]` | `["xiom.std", "xiom-std"]` | true |
+| `xiom-packages/packages` | `publish-registry.yml` (added, bbabfa1) | `["refs/tags/eco-v*"]` | 71 enumerated names (list below) | true |
+
+Staging adds the same two repos with `["refs/heads/main"]` so the existing
+dispatch path can canary; graduated repos get one entry each later with a
+single `xiom.<name>` scope. `xiom-lang/xiom` (compiler) publishes toolchain
+archives and the VSIX, not registry packages, so it needs no entry.
+
+**Verified GitHub state (2026-09-21):**
+
+- `xiom-lang/stdlib`: environment `registry-publish` exists with required
+  reviewer Lefteris-Notas. Rulesets: `protect-release-tags` (active;
+  `refs/tags/v*` + `stdlib-v*`; deletion + non-fast-forward only) and
+  `release tags` (covers `stdlib-v*`; creation/update/deletion; admin
+  bypass) -- **`release tags` is currently disabled and must be enabled**.
+- `xiom-packages/packages`: private repo on a Free org -- GitHub refuses
+  rulesets (API 403) and environment required-reviewers. Options: make the
+  repo public (recommended: unlocks both plus unmetered Actions minutes for
+  the batch publish), upgrade the org, or accept no GitHub-side gate and
+  keep this repo's production entry disabled.
+- Both orgs: no OIDC subject-claim customization (`null`) -- correct; tokens
+  carry the default `sub`, which we never match on.
+
+**Config contract confirmed for ops (increment 2):**
+
+- Top-level JSON: an array `[ ... ]` or `{ "publishers": [ ... ] }`.
+- Entry: `{ label, repository, workflow, refs, scopes, firstParty, events? }`.
+- `workflow`: bare file name or `.github/workflows/<file>`, matched against
+  the file portion of the `workflow_ref` claim; `job_workflow_ref` ignored.
+- `refs`: globs over the `ref` claim. Default events: tag refs allow
+  `push`/`release`; branch refs allow `workflow_dispatch`/`push`.
+- Missing or empty file: no publishers (JWTs 403, static tokens unaffected).
+  Malformed JSON: the process exits at startup (fail closed).
+- Ops staging entry: scope must be `["xiom.std", "xiom-std"]`, not
+  `xiom.stdlib` -- the package is `xiom.std` (target name) / `xiom-std`
+  (current manifest).
+
+**Registry answers to the lane reports (2026-09-21):**
+
+- Package name: scopes are exact package-name prefixes. The stdlib entry
+  keeps `xiom.std` and `xiom-std`, so the current manifest name publishes
+  unchanged; drop `xiom-std` after the rename.
+- Signatures: OIDC tokens map to trusted first-party tokens, so the existing
+  rule holds -- trusted tokens require a valid ed25519 signature (422
+  otherwise). No exemption in this feature; the packages workflow's per-run
+  key is acceptable for the canary, but a stable first-party signing key
+  should be decided before the first production batch (a signing key is not a
+  registry credential). The migrated stdlib workflow has no keygen step, so
+  it must add one (`xiom pkg keygen`) or it will publish unsigned and be
+  rejected 422.
+- Stub packages: publishing a placeholder 0.1.0 makes that version immutable
+  forever and forces real code to 0.1.1+. Gate the eco batch to packages with
+  real source before pushing `eco-v0.1.0`.
+- Stdlib tag race: re-run the publish workflow after the release job uploads
+  `xiom-std-<ver>.tar.gz`, or add an asset-wait loop.
+- Canary prerequisite: both lane canaries download v0.61.0 compiler archives
+  that must contain `xiom-pkg`, so they wait on the compiler release. The
+  registry owns an independent canary that does not: a dispatch workflow in
+  `xiom-lang/registry` that mints the JWT and talks to the staging `/publish`
+  endpoint directly, with staging entry
+  `{ label: registry-canary, repository: xiom-lang/registry,
+     workflow: oidc-canary.yml, refs: ["refs/heads/main"],
+     scopes: ["xiom.canary"], firstParty: true }`.
+
+**Packages scope list (71 names, bbabfa1):**
+
+```json
+["xiom.algo", "xiom.arrow", "xiom.assimp", "xiom.blas", "xiom.box2d",
+ "xiom.bullet", "xiom.control", "xiom.core", "xiom.cuda", "xiom.directx11",
+ "xiom.directx12", "xiom.dxc", "xiom.eigen", "xiom.ffi", "xiom.ffmpeg",
+ "xiom.gazebo", "xiom.glfw", "xiom.graphql", "xiom.grpc", "xiom.hello",
+ "xiom.http", "xiom.imgui", "xiom.jolt", "xiom.json", "xiom.kafka",
+ "xiom.libpq", "xiom.libsodium", "xiom.libtorch", "xiom.libuv", "xiom.log",
+ "xiom.lzfse", "xiom.math", "xiom.meshopt", "xiom.micro", "xiom.miniaudio",
+ "xiom.moveit", "xiom.net", "xiom.numpy", "xiom.onnx", "xiom.openal",
+ "xiom.openblas", "xiom.opencv", "xiom.opengl", "xiom.openssl", "xiom.ozz",
+ "xiom.pandas", "xiom.phonon", "xiom.portaudio", "xiom.postgres",
+ "xiom.protobuf", "xiom.raylib", "xiom.realtime", "xiom.redis", "xiom.rest",
+ "xiom.ros2", "xiom.scipy", "xiom.sdl3", "xiom.sensor", "xiom.sql",
+ "xiom.sqlite", "xiom.stb", "xiom.tensorflow", "xiom.test", "xiom.torch",
+ "xiom.ui", "xiom.vma", "xiom.vulkan", "xiom.wasmtime", "xiom.websocket",
+ "xiom.zeromq", "xiom.zstd"]
+```
+
+`xiom.ecosystem` is intentionally excluded (umbrella manifest). `xiom-hello`
+at 0.1.0 is skipped by the workflow's version check until bumped.
+
+**Compiler/stdlib session:**
+
+```
+OIDC for xiom-lang/stdlib is locked: production refs refs/tags/stdlib-v*;
+staging adds refs/heads/main for dispatch canaries; scopes
+["xiom.std","xiom-std"]; firstParty true; audience xiom-registry. Migrate
+.github/workflows/publish-registry.yml:
+1. Add push: tags: ["stdlib-v*"] beside workflow_dispatch; keep the registry
+   input for staging.
+2. Job permissions contents: read + id-token: write; add
+   environment: registry-publish (exists with required reviewer).
+3. Mint the JWT in-job (curl -H "Authorization: bearer
+   $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=xiom-registry",
+   then ::add-mask::) and feed it to XIOM_REGISTRY_TOKEN; never echo it.
+4. Do not create REGISTRY_PUBLISH_TOKEN; no client change.
+5. Enable the disabled "release tags" ruleset (Settings -> Rules -> Rulesets
+   -> release tags -> Active); the active protect-release-tags only blocks
+   deletion/force-push, not tag creation.
+6. Report the final workflow path, trigger refs, and the published package
+   name (xiom.std vs xiom-std).
+```
+
+**Packages session:**
+
+```
+OIDC for xiom-packages/packages: production refs refs/tags/eco-v*, batch
+publish, scopes enumerated (no blanket xiom), firstParty true, audience
+xiom-registry. Add .github/workflows/publish-registry.yml:
+1. on: push: tags ["eco-v*"] plus workflow_dispatch with inputs version and
+   registry (default https://registry.xiom-lang.org).
+2. contents: read + id-token: write; mint the JWT the same way as stdlib ->
+   XIOM_REGISTRY_TOKEN. Publish every implemented package in one run; skip
+   versions already published.
+3. Report the exact list of xiom.* names the workflow publishes (top-level
+   prefixes are enough; include xiom.core; never xiom.std).
+4. Protection caveat: the repo is private on a Free org, so tag rulesets and
+   environment required-reviewers are unavailable (API 403). Either make the
+   repo public (recommended) or accept no GitHub-side gate -- until then the
+   registry keeps its production entry disabled.
+5. Staging canary: one package (xiom.core) against
+   https://staging.registry.xiom-lang.org once the registry session confirms
+   the staging config is deployed.
+```
+
+**Ops session:**
+
+```
+Re: docs/REGISTRY_OIDC_PREP.md (576ef6e). The compose change landed in the
+registry repo (xiom-lang/registry): read-only mounts /etc/xiom-registry
+(production) and /etc/xiom-registry/staging (staging), with container env
+TRUSTED_PUBLISHERS_FILE=/etc/xiom-registry/trusted-publishers.json (prod) and
+/etc/xiom-registry/staging/trusted-publishers.json (staging); host overrides
+XIOM_TRUSTED_PUBLISHERS_DIR and XIOM_STAGING_TRUSTED_PUBLISHERS_DIR.
+Loader contract confirmed: top-level array or {"publishers":[...]}; entry
+{label, repository, workflow, refs, scopes, firstParty, events?}; workflow
+matched as file name or .github/workflows/<file> against the file portion of
+workflow_ref (job_workflow_ref ignored); refs glob over the ref claim;
+missing/empty file -> no publishers (JWTs 403, static tokens fine); malformed
+JSON -> process exits at startup, so validate with JSON.parse before deploy.
+Correct the staging entry scope to ["xiom.std","xiom-std"] (not xiom.stdlib);
+keep refs/heads/main; production starts as [].
+```
+
+**Website session:** provenance display ("Published by ...", run URL) comes
+after the registry ships the `publisher` field in `/index.json` and the
+package pages; no action yet.
