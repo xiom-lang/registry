@@ -1,5 +1,5 @@
 // XIOM Package Registry -- token-file IO shared by keygen and the admin CLI.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 
 'use strict';

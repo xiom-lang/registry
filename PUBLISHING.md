@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2026 Eleftherios Notas and XIOM Foundation -->
+<!-- Copyright (c) 2026 Eleftherios Notas and The XIOM Authors -->
 <!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
 
 # Publishing packages to the XIOM Registry
@@ -62,7 +62,8 @@ package my_lib {
 - each segment starts with a letter and does not end with a hyphen
 - no `..`, no leading or trailing dot, no reserved system names (`con`,
   `com1`, `lpt1`, ...)
-- **`xiom.*` and `xiom-*` are reserved for XIOM Foundation packages.** Both
+- **`xiom.*` and `xiom-*` are reserved for first-party packages published by
+  the XIOM Authors.** Both
   forms are enforced by the registry: community tokens receive
   `403 reserved_namespace`. Choose a name that describes your project
   (`my-http-client`), not a namespace.

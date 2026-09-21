@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // XIOM Package Registry -- yank helper.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Marks a published version yanked through the registry HTTP API (the same

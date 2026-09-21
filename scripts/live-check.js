@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // XIOM Package Registry -- live staging smoke check.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Read-only verification of a deployed registry, used by the scheduled

@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2026 Eleftherios Notas and XIOM Foundation -->
+<!-- Copyright (c) 2026 Eleftherios Notas and The XIOM Authors -->
 <!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
 
 # XIOM Package Registry
@@ -100,7 +100,7 @@ Dual-licensed under your choice of:
 - MIT License - see `LICENSE-MIT`
 - Apache License, Version 2.0 - see `LICENSE-APACHE`
 
-Copyright (c) 2026 Eleftherios Notas (Lefteris Notas) and XIOM Foundation.
+Copyright (c) 2026 Eleftherios Notas and The XIOM Authors.
 See `NOTICE` for attributions.
 
 Terms of Use: https://xiom-lang.org/terms.html (section 4 covers publishing) -

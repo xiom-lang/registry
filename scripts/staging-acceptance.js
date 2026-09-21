@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // XIOM Package Registry -- live staging acceptance check.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // Proves staging is a real, isolated registry using the REAL xiom-pkg

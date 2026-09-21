@@ -1,5 +1,5 @@
 // XIOM Package Registry -- package name and namespace policy.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 'use strict';
@@ -9,8 +9,9 @@ const { BadRequestError, ForbiddenError } = require('./errors');
 /**
  * Package names are DNS-ish: lowercase, dot-separated segments, each starting
  * with a letter and ending with a letter or digit (no trailing hyphen, no
- * double hyphen). The first-party `xiom.*` namespace is reserved for XIOM
- * Foundation tokens (SESSION.md section 2.4, T6).
+ * double hyphen). The first-party `xiom.*` namespace is reserved for
+ * first-party tokens published by the XIOM Authors (SESSION.md section 2.4,
+ * T6).
  *
  * Deliberately stricter than the legacy server regex: uppercase, `_`, and
  * leading/trailing separators are refused. Client-published packages are

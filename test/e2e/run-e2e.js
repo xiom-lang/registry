@@ -1,5 +1,5 @@
 // XIOM Package Registry -- end-to-end gate (SESSION.md section 5, T8).
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // This test drives the REAL `xiom-pkg` client binary against a locally

@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2026 Eleftherios Notas and XIOM Foundation -->
+<!-- Copyright (c) 2026 Eleftherios Notas and The XIOM Authors -->
 <!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
 
 # UI brand assets
@@ -17,5 +17,5 @@ do not edit these binaries in this repo.
 Refresh all four after any website brand change (the website's `9190bf8`
 optimization pass shrank the icon from 370 KB to 6.6 KB and the logo from
 107 KB to 15 KB; hash-compare the copies after refreshing). All four are
-XIOM Foundation brand assets under the repository's dual MIT OR
+XIOM project brand assets under the repository's dual MIT OR
 Apache-2.0 license.

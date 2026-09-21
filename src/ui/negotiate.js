@@ -1,5 +1,5 @@
 // XIOM Package Registry -- HTML negotiation.
-// Copyright (c) 2026 Eleftherios Notas and XIOM Foundation
+// Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
 // The registry serves both an HTTP API (JSON) and a read-only web UI (HTML)
