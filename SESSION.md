@@ -413,7 +413,11 @@ item.
       and `/categories` page; publish warnings for unknown categories. The
       72 first-party manifests are annotated (packages 2d2513b); the client
       (`xiom pkg search --category`, `xiom pkg info`, MCP `search_packages` /
-      `package_info`) consumes the same fields.
+      `package_info`) consumes the same fields. **Canary verified live**
+      (2026-09-21): `xiom.math@0.1.0` published to staging shows
+      `categories: ["core"]`, all six keywords, license, and repository;
+      `/categories` counts it; `?category=core` finds it; the package page
+      renders the chips; production never listed it.
 
 ### Compiler lane
 
