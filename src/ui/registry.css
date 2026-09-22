@@ -356,6 +356,107 @@ table.versions tr:hover td { background: var(--panel); }
   fill: currentColor;
 }
 
+/* ============================================================
+   Page banners
+   Full-width artwork with the wordmark and section title overlaid on the
+   left negative space. Lifted from xiom-website/style.css ("Page banners")
+   so the registry matches xiom-lang.org; keep the treatment in sync when it
+   changes there. The banner is decorative in this UI (aria-hidden), so every
+   page keeps its own semantic heading.
+   ============================================================ */
+
+.page-banner {
+  position: relative;
+  overflow: hidden;
+  background: #05080f;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-banner img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.xiom-banner-text {
+  position: absolute;
+  left: 7%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: nowrap;
+}
+
+.xiom-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0;
+}
+
+.xiom-brand {
+  font-family: var(--font-display, var(--font-body));
+  font-size: clamp(28px, 2.8vw, 52px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #f3f7ff;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.08),
+    0 0 24px rgba(70, 120, 255, 0.08);
+}
+
+.xiom-section {
+  margin-top: 13px;
+  font-size: clamp(9px, 0.72vw, 14px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: #69b8ff;
+  text-shadow:
+    0 0 8px rgba(80, 150, 255, 0.3),
+    0 0 18px rgba(50, 110, 255, 0.15);
+}
+
+.xiom-section.long-title {
+  letter-spacing: 0.24em;
+  font-size: clamp(8px, 0.65vw, 13px);
+}
+
+.xiom-accent {
+  width: 42px;
+  height: 2px;
+  margin-top: 17px;
+  background: linear-gradient(90deg, #66fff1 0%, #4cc8ff 70%, rgba(76, 200, 255, 0) 100%);
+  box-shadow:
+    0 0 7px rgba(76, 220, 255, 0.55),
+    0 0 16px rgba(76, 180, 255, 0.2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xiom-banner-text {
+    animation: xiomFadeIn 900ms ease-out both;
+  }
+
+  @keyframes xiomFadeIn {
+    from { opacity: 0; transform: translate(-12px, -50%); }
+    to { opacity: 1; transform: translate(0, -50%); }
+  }
+}
+
+@media (max-width: 860px) {
+  .xiom-banner-text { left: 6%; }
+  .xiom-brand { font-size: clamp(22px, 4.6vw, 34px); letter-spacing: 0.22em; }
+  .xiom-section { margin-top: 9px; font-size: clamp(8px, 1.9vw, 12px); letter-spacing: 0.26em; }
+  .xiom-section.long-title { font-size: clamp(7px, 1.6vw, 11px); letter-spacing: 0.18em; }
+  .xiom-accent { width: 32px; margin-top: 11px; }
+}
+
 @media (max-width: 640px) {
   h1 { font-size: 26px; }
   .site-header nav { gap: var(--space-md); font-size: 13px; }

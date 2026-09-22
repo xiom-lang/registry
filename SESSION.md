@@ -429,6 +429,13 @@ item.
       CSS. `registry@xiom-lang.org` (mailto) sits beside the row as the
       registry-specific contact; the legal line keeps support@xiom-lang.org.
       Covered by the UI test asserting the exact anchors and their order.
+- [x] Page banner (2026-09-22): the website's `registry.webp` (1539x510) is
+      served at `/ui/registry.webp` and rendered once per UI page with the
+      shared `page-banner` treatment (XIOM wordmark + REGISTRY section, text
+      at left 7%), CSS lifted from `xiom-website/style.css`. The banner is
+      `aria-hidden` decoration, so every page keeps exactly one semantic
+      heading; source and refresh notes live in `src/ui/assets/SOURCES.md`,
+      and the UI test pins the markup and the served bytes.
 - [x] Token lifecycle and issuance (2026-09-21): static tokens can be pinned to
       a signing key (`tokens.js add/rotate --key`, `--key` implies `--trusted`;
       a different key gets `422 public_key_mismatch`) and now carry `issuedAt`;

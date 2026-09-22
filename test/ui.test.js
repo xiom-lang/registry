@@ -341,6 +341,22 @@ test('brand assets are served for the UI', async () => {
   }
 });
 
+test('page banner artwork is served and rendered once per page', async () => {
+  const banner = await fetch(`${baseUrl}/ui/registry.webp`, { headers: BROWSER });
+  assert.equal(banner.status, 200);
+  assert.match(banner.headers.get('content-type'), /image\/webp/);
+  assert.ok((await banner.arrayBuffer()).byteLength > 100_000, 'ships the full-resolution artwork');
+
+  for (const path of ['/', '/packages']) {
+    const html = await (await fetch(`${baseUrl}${path}`, { headers: BROWSER })).text();
+    assert.equal((html.match(/class="page-banner"/g) || []).length, 1, path);
+    assert.match(html, /src="\/ui\/registry\.webp"/, path);
+    assert.match(html, /width="1539" height="510"/, path);
+    assert.match(html, /class="xiom-section">REGISTRY</, path);
+    assert.match(html, /class="xiom-brand">XIOM</, path);
+  }
+});
+
 test('unknown routes render the HTML 404 for browsers only', async () => {
   const html = await fetch(`${baseUrl}/no/such/page`, { headers: BROWSER });
   assert.equal(html.status, 404);

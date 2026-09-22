@@ -104,6 +104,13 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
     </nav>
   </div>
 </header>
+<header class="page-banner" aria-hidden="true">
+  <img src="/ui/registry.webp" alt="" width="1539" height="510">
+  <div class="xiom-banner-text">
+    <div class="xiom-heading"><span class="xiom-brand">XIOM</span><span class="xiom-section">REGISTRY</span></div>
+    <span class="xiom-accent"></span>
+  </div>
+</header>
 <main>
   <div class="container">
 ${body}

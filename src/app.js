@@ -64,6 +64,7 @@ const UI_ASSETS = {
   faviconPng: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.png')),
   icon: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'icon.png')),
   logo: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'logo.png')),
+  bannerRegistry: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'registry.webp')),
 };
 
 /**
@@ -261,6 +262,11 @@ function createApp(config = loadConfig()) {
   app.get('/ui/logo.png', generalLimit, (req, res) => {
     res.type('image/png').set('Cache-Control', 'public, max-age=604800')
       .send(UI_ASSETS.logo);
+  });
+  // Page banner artwork (same file the website serves on its banner pages).
+  app.get('/ui/registry.webp', generalLimit, (req, res) => {
+    res.type('image/webp').set('Cache-Control', 'public, max-age=604800')
+      .send(UI_ASSETS.bannerRegistry);
   });
 
   // Package listing: JSON for API consumers, the same list the UI shows.
