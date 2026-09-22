@@ -444,10 +444,12 @@ table.versions tr:hover td { background: var(--panel); }
   .xiom-accent { width: 32px; margin-top: 11px; }
 }
 
-/* ---------- Registry search row ----------
-   Per the website's banner guidance, the artwork stays wordmark + section +
-   accent; the global search lives in page flow, centred under the banner
-   (wider than the old hero form), so the banner never crowds. */
+/* ---------- Registry banner search ----------
+   Owner's call for the registry, within the website's banner rules: the
+   search is centred horizontally and wide, anchored to the lower third of
+   the artwork so it never stacks into the left wordmark area. The banner
+   stays wordmark + section + accent above it; the sticky bar keeps
+   navigation only, so "XIOM Registry" is never repeated. */
 
 .xiom-heading:focus-visible {
   outline: 2px solid #69b8ff;
@@ -455,16 +457,65 @@ table.versions tr:hover td { background: var(--panel); }
   border-radius: 2px;
 }
 
-.site-search {
-  margin: 0 auto var(--space-xl);
-  max-width: 760px;
+.banner-search {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: var(--space-sm);
+  width: min(760px, 84%);
+}
+
+.banner-search input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(5, 8, 15, 0.72);
+  border: 1px solid rgba(105, 184, 255, 0.35);
+  border-radius: var(--radius);
+  color: var(--paper);
+  font: inherit;
+  padding: 12px 16px;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.banner-search input::placeholder {
+  color: rgba(242, 243, 246, 0.55);
+}
+
+.banner-search input:focus {
+  outline: none;
+  border-color: #69b8ff;
+  box-shadow: 0 0 0 3px rgba(105, 184, 255, 0.22);
+}
+
+.banner-search button {
+  background: rgba(105, 184, 255, 0.16);
+  border: 1px solid rgba(105, 184, 255, 0.45);
+  border-radius: var(--radius);
+  color: #eaf4ff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 22px;
+}
+
+.banner-search button:hover,
+.banner-search button:focus-visible {
+  background: rgba(105, 184, 255, 0.28);
 }
 
 @media (max-width: 860px) {
-  .site-search { max-width: min(560px, 100%); }
+  .banner-search { bottom: 10%; width: min(560px, 90%); }
 }
 
 @media (max-width: 640px) {
+  .page-banner { min-height: 240px; }
+  .page-banner img { height: 240px; object-fit: cover; object-position: 78% center; }
+  .banner-search { bottom: 8%; width: 92%; }
+  .banner-search button { padding: 10px 14px; }
   .site-header .container {
     height: auto;
     min-height: var(--nav-height);

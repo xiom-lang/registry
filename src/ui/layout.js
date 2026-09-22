@@ -108,14 +108,14 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '' 
     </a>
     <span class="xiom-accent" aria-hidden="true"></span>
   </div>
+  <form class="banner-search" action="/search" method="get" role="search">
+    <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
+           placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
 </header>
 <main>
   <div class="container">
-    <form class="search-form site-search" action="/search" method="get" role="search">
-      <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
-             placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
-      <button type="submit">Search</button>
-    </form>
 ${body}
   </div>
 </main>

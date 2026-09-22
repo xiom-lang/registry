@@ -430,11 +430,12 @@ item.
       registry-specific contact; the legal line keeps support@xiom-lang.org.
       Covered by the UI test asserting the exact anchors and their order.
 - [x] Page banner and masthead (2026-09-22): the website's `registry.webp`
-      (1539x510) is served at `/ui/registry.webp`; the banner carries only the
-      wordmark (a home link) + REGISTRY section + accent, per the website's
-      banner guidance, and the sticky bar is navigation only, so the brand
-      never repeats. The global search is a centred row (760px) under the
-      banner in page flow, with the query preserved on `/search`; the home
+      (1539x510) is served at `/ui/registry.webp`; the banner carries the
+      wordmark (a home link) + REGISTRY section + accent, and the sticky bar
+      is navigation only, so the brand never repeats. Per the owner's call the
+      global search sits centred and wide inside the banner, anchored to the
+      lower third so it never stacks into the left wordmark area (the website
+      lane's crowding concern); the query is preserved on `/search`. The home
       hero keeps one visible `h1` (Packages). CSS lifted from
       `xiom-website/style.css`; `aria-hidden` sits on the decorative wordmark
       spans because the banner holds a focusable home link. `logo.png` was
