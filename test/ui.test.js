@@ -341,7 +341,7 @@ test('brand assets are served for the UI', async () => {
   }
 });
 
-test('page banner is the masthead: wordmark link, global search, once per page', async () => {
+test('banner is the masthead and the search row sits centred under it', async () => {
   const banner = await fetch(`${baseUrl}/ui/registry.webp`, { headers: BROWSER });
   assert.equal(banner.status, 200);
   assert.match(banner.headers.get('content-type'), /image\/webp/);
@@ -356,6 +356,8 @@ test('page banner is the masthead: wordmark link, global search, once per page',
     assert.match(html, /class="xiom-section" aria-hidden="true">REGISTRY</, path);
     assert.match(html, /<a class="xiom-heading" href="\/" aria-label="XIOM Registry home">/, path);
     assert.equal((html.match(/role="search"/g) || []).length, 1, `exactly one search form on ${path}`);
+    assert.match(html, /<form class="search-form site-search"/, path);
+    assert.doesNotMatch(html, /banner-search/, `no form inside the banner on ${path}`);
     assert.doesNotMatch(html, /class="brand"/, `no duplicate header brand on ${path}`);
   }
 
@@ -363,7 +365,7 @@ test('page banner is the masthead: wordmark link, global search, once per page',
   assert.match(home, /<h1>Packages<\/h1>/, 'home keeps exactly one visible page heading');
 
   const search = await (await fetch(`${baseUrl}/search?q=demo`, { headers: BROWSER })).text();
-  assert.match(search, /name="q" type="search" value="demo"/, 'the banner keeps the query on the search page');
+  assert.match(search, /name="q" type="search" value="demo"/, 'the search row keeps the query on the search page');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

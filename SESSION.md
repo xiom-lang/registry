@@ -430,19 +430,17 @@ item.
       registry-specific contact; the legal line keeps support@xiom-lang.org.
       Covered by the UI test asserting the exact anchors and their order.
 - [x] Page banner and masthead (2026-09-22): the website's `registry.webp`
-      (1539x510) is served at `/ui/registry.webp` and the banner is the
-      registry masthead -- the wordmark is the home link at the left and the
-      global package search sits centred and wide beneath it (query preserved
-      on `/search`), so the
-      sticky bar is navigation only and "XIOM Registry" never repeats; the
-      home hero keeps one visible `h1` (Packages). CSS lifted from
-      `xiom-website/style.css` plus banner-search additions and a 640px
-      cover-crop so the artwork keeps its negative space; `aria-hidden` moved
-      from the banner to the decorative wordmark spans since the banner now
-      contains the search form. Source/refresh notes in
-      `src/ui/assets/SOURCES.md` (`logo.png` retired with the old header
-      brand); the UI test pins the markup, the single search form and the
-      served bytes.
+      (1539x510) is served at `/ui/registry.webp`; the banner carries only the
+      wordmark (a home link) + REGISTRY section + accent, per the website's
+      banner guidance, and the sticky bar is navigation only, so the brand
+      never repeats. The global search is a centred row (760px) under the
+      banner in page flow, with the query preserved on `/search`; the home
+      hero keeps one visible `h1` (Packages). CSS lifted from
+      `xiom-website/style.css`; `aria-hidden` sits on the decorative wordmark
+      spans because the banner holds a focusable home link. `logo.png` was
+      retired with the old header brand; `src/ui/assets/SOURCES.md` records
+      the sources. The UI test pins the single search form, the wordmark link,
+      the absent duplicate brand and the query prefill.
 - [x] Token lifecycle and issuance (2026-09-21): static tokens can be pinned to
       a signing key (`tokens.js add/rotate --key`, `--key` implies `--trusted`;
       a different key gets `422 public_key_mismatch`) and now carry `issuedAt`;
