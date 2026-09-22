@@ -72,7 +72,7 @@ function fingerprint(publicKeyHex) {
  * Full HTML document. `body` is trusted markup built by the page builders;
  * every value interpolated into it must pass through escapeHtml first.
  */
-function layout({ title, description = SITE_DESCRIPTION, body }) {
+function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '' }) {
   const pageTitle = title ? `${escapeHtml(title)} -- ${SITE_NAME}` : SITE_NAME;
   return `<!doctype html>
 <html lang="en">
@@ -89,11 +89,7 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
 <body>
 <header class="site-header">
   <div class="container">
-    <a class="brand" href="/">
-      <img class="brand-logo" src="/ui/logo.png" alt="" width="24" height="24">
-      XIOM <span>Registry</span>
-    </a>
-    <nav>
+    <nav aria-label="Primary">
       <a href="/packages">Packages</a>
       <a href="/categories">Categories</a>
       <a href="/search">Search</a>
@@ -104,11 +100,18 @@ function layout({ title, description = SITE_DESCRIPTION, body }) {
     </nav>
   </div>
 </header>
-<header class="page-banner" aria-hidden="true">
+<header class="page-banner">
   <img src="/ui/registry.webp" alt="" width="1539" height="510">
   <div class="xiom-banner-text">
-    <div class="xiom-heading"><span class="xiom-brand">XIOM</span><span class="xiom-section">REGISTRY</span></div>
-    <span class="xiom-accent"></span>
+    <a class="xiom-heading" href="/" aria-label="XIOM Registry home">
+      <span class="xiom-brand" aria-hidden="true">XIOM</span><span class="xiom-section" aria-hidden="true">REGISTRY</span>
+    </a>
+    <span class="xiom-accent" aria-hidden="true"></span>
+    <form class="banner-search" action="/search" method="get" role="search">
+      <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
+             placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
   </div>
 </header>
 <main>

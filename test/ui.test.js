@@ -134,7 +134,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /PUBLISHING\.md/);   // community guides are linked
   assert.match(body, /USING\.md/);
   assert.match(body, /rel="icon"/);       // brand marks
-  assert.match(body, /\/ui\/logo\.png/);
+  assert.match(body, /\/ui\/registry\.webp/);
   assert.match(body, /https:\/\/xiom-lang\.org/);
   assert.match(body, /terms\.html/);      // legal links in the footer
   assert.match(body, /privacy\.html/);
@@ -333,7 +333,7 @@ test('brand assets are served for the UI', async () => {
   assert.match(ico.headers.get('content-type'), /image\/x-icon/);
   assert.ok((await ico.arrayBuffer()).byteLength > 0);
 
-  for (const path of ['/ui/favicon.png', '/ui/icon.png', '/ui/logo.png']) {
+  for (const path of ['/ui/favicon.png', '/ui/icon.png']) {
     const asset = await fetch(`${baseUrl}${path}`, { headers: BROWSER });
     assert.equal(asset.status, 200, path);
     assert.match(asset.headers.get('content-type'), /image\/png/, path);
@@ -341,20 +341,29 @@ test('brand assets are served for the UI', async () => {
   }
 });
 
-test('page banner artwork is served and rendered once per page', async () => {
+test('page banner is the masthead: wordmark link, global search, once per page', async () => {
   const banner = await fetch(`${baseUrl}/ui/registry.webp`, { headers: BROWSER });
   assert.equal(banner.status, 200);
   assert.match(banner.headers.get('content-type'), /image\/webp/);
   assert.ok((await banner.arrayBuffer()).byteLength > 100_000, 'ships the full-resolution artwork');
 
-  for (const path of ['/', '/packages']) {
+  for (const path of ['/', '/packages', '/search?q=demo']) {
     const html = await (await fetch(`${baseUrl}${path}`, { headers: BROWSER })).text();
     assert.equal((html.match(/class="page-banner"/g) || []).length, 1, path);
     assert.match(html, /src="\/ui\/registry\.webp"/, path);
     assert.match(html, /width="1539" height="510"/, path);
-    assert.match(html, /class="xiom-section">REGISTRY</, path);
-    assert.match(html, /class="xiom-brand">XIOM</, path);
+    assert.match(html, /class="xiom-brand" aria-hidden="true">XIOM</, path);
+    assert.match(html, /class="xiom-section" aria-hidden="true">REGISTRY</, path);
+    assert.match(html, /<a class="xiom-heading" href="\/" aria-label="XIOM Registry home">/, path);
+    assert.equal((html.match(/role="search"/g) || []).length, 1, `exactly one search form on ${path}`);
+    assert.doesNotMatch(html, /class="brand"/, `no duplicate header brand on ${path}`);
   }
+
+  const home = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();
+  assert.match(home, /<h1>Packages<\/h1>/, 'home keeps exactly one visible page heading');
+
+  const search = await (await fetch(`${baseUrl}/search?q=demo`, { headers: BROWSER })).text();
+  assert.match(search, /name="q" type="search" value="demo"/, 'the banner keeps the query on the search page');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

@@ -79,14 +79,6 @@ function packageList(index) {
   return `<ul class="package-list">\n${cards}\n</ul>`;
 }
 
-function searchForm(query = '') {
-  return `<form class="search-form" action="/search" method="get" role="search">
-  <input id="q" name="q" type="search" value="${escapeHtml(query)}"
-         placeholder="Search packages by name or description" aria-label="Search packages">
-  <button type="submit">Search</button>
-</form>`;
-}
-
 /** Home: registry overview plus the full package list. */
 function homePage(index) {
   const names = Object.keys(index.packages);
@@ -94,10 +86,8 @@ function homePage(index) {
   return layout({
     title: '',
     body: `<section class="hero">
-  <h1>XIOM Registry</h1>
   <p>The package registry for XIOM. Browse packages, versions, and ed25519 signatures,
      or install directly: <code>xiom pkg install &lt;package&gt;</code>.</p>
-  ${searchForm()}
   <div class="meta-row">
     <span>${names.length} package${names.length === 1 ? '' : 's'}</span>
     <span>Protocol ${escapeHtml(index.version)}</span>
@@ -105,7 +95,7 @@ function homePage(index) {
   </div>
   ${categoryStrip(index)}
 </section>
-<h2>Packages</h2>
+<h1>Packages</h1>
 ${packageList(index)}`,
   });
 }
@@ -142,9 +132,9 @@ ${matches.map(([name, pkg]) => packageCard(name, pkg)).join('\n')}
 
   return layout({
     title: active ? `Category: ${active}` : 'Search',
+    searchQuery: query,
     body: `<section class="hero">
   <h1>${active ? `Category: ${escapeHtml(active)}` : 'Search'}</h1>
-  ${searchForm(query)}
   <div class="meta-row"><span>${escapeHtml(summary)}</span></div>
   ${categoryStrip(index, active)}
 </section>
