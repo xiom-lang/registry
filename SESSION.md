@@ -24,10 +24,13 @@ trusted publishing is implemented** (`src/oidc.js`, `src/publishers.js`,
 `authenticate()`, provenance in `/index.json`, `/packages/:name` and the
 package page; 20 new tests). **Staging canary verified** (2026-09-21, ops):
 the registry-owned workflow published through a real OIDC token and the
-stored version carries provenance (run 35654475479); production remains `[]`.
-Remaining: the stdlib and packages canaries wait on the v0.61.0 compiler
-release, then production entries with the owner's OK. Section 11 is the spec,
-section 12 the lane handoffs.
+stored version carries provenance (run 35654475479). **First real first-party
+publish verified** (2026-09-22): `xiom-std@0.61.3` from `xiom-lang/stdlib`
+carried full provenance (run 35734153403, ref refs/heads/main) and a valid
+ed25519 signature; the served tarball's sha256 and signature were re-verified
+independently from the staging URL. Production remains `[]`. Remaining: the
+packages canary, then production entries with the owner's OK. Section 11 is
+the spec, section 12 the lane handoffs.
 
 **Remaining:**
 
@@ -664,6 +667,16 @@ archives and the VSIX, not registry packages, so it needs no entry.
   carries `publisher {repository xiom-lang/registry, workflow oidc-canary.yml,
   ref refs/heads/main, commit 5079f57, runUrl}`, signature included.
   Production stayed `[]` and was not recreated.
+- First real package through OIDC (2026-09-22): `xiom-std@0.61.3` from
+  `xiom-lang/stdlib` with `publisher {workflow publish-registry.yml, ref
+  refs/heads/main, event workflow_dispatch, commit 3c1850ac, run
+  35734153403}`, 1,064,002 bytes, sha256 e488e803... and an ephemeral
+  ed25519 key (fp d5:e6:92:95:a4:52:75:67); both were re-verified
+  independently against the served tarball. The ephemeral per-run key means
+  consumers must not pin the publisher key -- `xiom pkg trust` pins the
+  registry key (compiler lane has the hint-wording item). The
+  `STDLIB_VERSION pin PR (xiom)` job failed in that release run and is not
+  registry-related.
 
 **Open owner decisions (2026-09-21):**
 
