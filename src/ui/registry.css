@@ -446,18 +446,10 @@ table.versions tr:hover td { background: var(--panel); }
 
 /* ---------- Registry banner search ----------
    Registry addition to the copied block: the banner is the masthead, so it
-   carries the global package search. The wordmark is the home link; the
-   sticky bar keeps navigation only, so "XIOM Registry" is never repeated. */
-
-.xiom-banner-text {
-  white-space: normal;
-  max-width: min(560px, 58%);
-}
-
-.xiom-brand,
-.xiom-section {
-  white-space: nowrap;
-}
+   carries the global package search. The wordmark links home at the left;
+   the search is centred horizontally and wider, below the wordmark, over the
+   artwork's lower negative space. The sticky bar keeps navigation only, so
+   "XIOM Registry" is never repeated. */
 
 .xiom-heading:focus-visible {
   outline: 2px solid #69b8ff;
@@ -466,10 +458,14 @@ table.versions tr:hover td { background: var(--panel); }
 }
 
 .banner-search {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  z-index: 6;
   display: flex;
   gap: var(--space-sm);
-  margin-top: 22px;
-  width: min(460px, 100%);
+  width: min(760px, 84%);
 }
 
 .banner-search input {
@@ -480,7 +476,7 @@ table.versions tr:hover td { background: var(--panel); }
   border-radius: var(--radius);
   color: var(--paper);
   font: inherit;
-  padding: 10px 14px;
+  padding: 12px 16px;
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
@@ -503,7 +499,7 @@ table.versions tr:hover td { background: var(--panel); }
   cursor: pointer;
   font: inherit;
   font-weight: 600;
-  padding: 10px 18px;
+  padding: 12px 22px;
 }
 
 .banner-search button:hover,
@@ -512,14 +508,14 @@ table.versions tr:hover td { background: var(--panel); }
 }
 
 @media (max-width: 860px) {
-  .xiom-banner-text { max-width: 86%; }
-  .banner-search { margin-top: 16px; width: 100%; }
+  .banner-search { bottom: 10%; width: min(560px, 90%); }
 }
 
 @media (max-width: 640px) {
-  .page-banner { min-height: 220px; }
-  .page-banner img { height: 220px; object-fit: cover; object-position: 78% center; }
-  .banner-search button { padding: 9px 14px; }
+  .page-banner { min-height: 240px; }
+  .page-banner img { height: 240px; object-fit: cover; object-position: 78% center; }
+  .banner-search { bottom: 8%; width: 92%; }
+  .banner-search button { padding: 10px 14px; }
   .site-header .container {
     height: auto;
     min-height: var(--nav-height);

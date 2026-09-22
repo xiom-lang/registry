@@ -431,8 +431,9 @@ item.
       Covered by the UI test asserting the exact anchors and their order.
 - [x] Page banner and masthead (2026-09-22): the website's `registry.webp`
       (1539x510) is served at `/ui/registry.webp` and the banner is the
-      registry masthead -- the wordmark is the home link and the global
-      package search lives inside it (query preserved on `/search`), so the
+      registry masthead -- the wordmark is the home link at the left and the
+      global package search sits centred and wide beneath it (query preserved
+      on `/search`), so the
       sticky bar is navigation only and "XIOM Registry" never repeats; the
       home hero keeps one visible `h1` (Packages). CSS lifted from
       `xiom-website/style.css` plus banner-search additions and a 640px

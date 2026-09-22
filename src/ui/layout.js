@@ -107,12 +107,12 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '' 
       <span class="xiom-brand" aria-hidden="true">XIOM</span><span class="xiom-section" aria-hidden="true">REGISTRY</span>
     </a>
     <span class="xiom-accent" aria-hidden="true"></span>
-    <form class="banner-search" action="/search" method="get" role="search">
-      <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
-             placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
-      <button type="submit">Search</button>
-    </form>
   </div>
+  <form class="banner-search" action="/search" method="get" role="search">
+    <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
+           placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
 </header>
 <main>
   <div class="container">
