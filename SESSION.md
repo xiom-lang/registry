@@ -759,6 +759,13 @@ archives and the VSIX, not registry packages, so it needs no entry.
   tests pass) inside the publish loop for the batch and per-package paths
   alike, skipping with a warning; then the batch publishes exactly the
   remaining ready set (34).
+- Owner decision (2026-09-23): **port-first, then batch**. The packages lane
+  drains the 52 grandfathered baseline entries (conformance on the pinned
+  compiler + `status.ps1 -Action update -Stage stable` with run_by/commit),
+  and keeps the readiness filter in the publish loop as the enforcement
+  backstop. When `.github/allowlist-baseline.txt` is empty (or every allowed
+  name is stable+pass), the registry lane pushes `eco-v0.1.0`; the batch then
+  publishes exactly the verified set. The batch tag is on hold until then.
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
