@@ -731,9 +731,13 @@ archives and the VSIX, not registry packages, so it needs no entry.
   `xiom.msgpack` (c992d517..., 12,622 B) were additionally re-hashed and
   signature-verified byte-for-byte. Finding confirmed: 35 distinct keys --
   `XIOM_SIGNING_KEY` is unset, so every artifact used an ephemeral per-run
-  key. Production blockers: set that secret, and settle the packages repo
-  protection question (private on Free = no tag rulesets and no environment
-  reviewers, so the production tag path currently has no GitHub-side gate).
+  key. Production blockers resolved (2026-09-23): `XIOM_SIGNING_KEY` is set,
+  the repo is public, tag rulesets are active (`version` covers
+  `refs/tags/xiom-*/v*` and `refs/tags/eco-v*`; `protect-main` blocks
+  force-pushes on main only), and `registry-publish` requires the owner's
+  review. Remaining: ops installs `eco-release` after the owner OK, then the
+  first per-package tag (`xiom-flags/v0.1.0`) publishes behind the reviewer
+  gate.
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
