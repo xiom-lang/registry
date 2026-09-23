@@ -32,9 +32,17 @@ independently from the staging URL. **Production go-live verified**
 (2026-09-23): the deployment gained the `stdlib-release` entry
 (`refs/tags/stdlib-v*`) and run 35726136811 published `xiom-std@0.61.3` with
 tag provenance; the production tarball's sha256 and signature were re-verified
-independently. Both instances serve the banner/masthead UI. Remaining: the
-packages canary and its production entry. Section 11 is the spec, section 12
-the lane handoffs.
+independently. Both instances serve the banner/masthead UI. **Packages canary
+campaign complete** (2026-09-23): all 35 stable packages published to staging
+and independently re-verified by this session (35/35 provenance + signature
+present; two tarballs re-hashed and signature-checked byte-for-byte).
+Production enablement is blocked on two owner decisions: set the
+`XIOM_SIGNING_KEY` secret (staging used 35 distinct ephemeral keys, confirmed)
+and settle the packages repo protection question (its `registry-publish`
+environment has no required reviewers because the repo is private on a Free
+org, so there is no GitHub-side gate on the production publish path).
+Remaining after that: ops installs `eco-release` next to `stdlib-release`.
+Section 11 is the spec, section 12 the lane handoffs.
 
 **Remaining:**
 
@@ -715,6 +723,17 @@ archives and the VSIX, not registry packages, so it needs no entry.
   published packages; versions are immutable, so removing a name from the
   allowlist/scope only stops future publishing -- only yank withdraws a
   version, and pinned installs keep working.
+- Packages canary campaign (2026-09-23): 35 stable packages published to
+  staging (runs 35912452506 ... 35915440890), all independently re-verified
+  here: 35/35 entries carry `publisher {repository xiom-packages/packages,
+  workflow publish-registry.yml, ref refs/heads/main, runUrl}` plus a
+  signature and public key; `xiom.flags` (sha256 17791aa1..., 9,284 B) and
+  `xiom.msgpack` (c992d517..., 12,622 B) were additionally re-hashed and
+  signature-verified byte-for-byte. Finding confirmed: 35 distinct keys --
+  `XIOM_SIGNING_KEY` is unset, so every artifact used an ephemeral per-run
+  key. Production blockers: set that secret, and settle the packages repo
+  protection question (private on Free = no tag rulesets and no environment
+  reviewers, so the production tag path currently has no GitHub-side gate).
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
