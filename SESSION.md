@@ -28,9 +28,13 @@ stored version carries provenance (run 35654475479). **First real first-party
 publish verified** (2026-09-22): `xiom-std@0.61.3` from `xiom-lang/stdlib`
 carried full provenance (run 35734153403, ref refs/heads/main) and a valid
 ed25519 signature; the served tarball's sha256 and signature were re-verified
-independently from the staging URL. Production remains `[]`. Remaining: the
-packages canary, then production entries with the owner's OK. Section 11 is
-the spec, section 12 the lane handoffs.
+independently from the staging URL. **Production go-live verified**
+(2026-09-23): the deployment gained the `stdlib-release` entry
+(`refs/tags/stdlib-v*`) and run 35726136811 published `xiom-std@0.61.3` with
+tag provenance; the production tarball's sha256 and signature were re-verified
+independently. Both instances serve the banner/masthead UI. Remaining: the
+packages canary and its production entry. Section 11 is the spec, section 12
+the lane handoffs.
 
 **Remaining:**
 
@@ -690,6 +694,20 @@ archives and the VSIX, not registry packages, so it needs no entry.
   registry key (compiler lane has the hint-wording item). The
   `STDLIB_VERSION pin PR (xiom)` job failed in that release run and is not
   registry-related.
+- Production go-live (2026-09-23): `stdlib-release` entry
+  (`refs/tags/stdlib-v*`, scopes `["xiom.std","xiom-std"]`, firstParty) went
+  live and run 35726136811 published `xiom-std@0.61.3` to production with
+  `publisher.ref refs/tags/stdlib-v0.61.3`, `event push`, commit c7b4027f;
+  sha256 `1ad1b33a...` and the signature were re-verified against the served
+  tarball. Both instances now serve the banner/masthead UI.
+- Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
+  package, so the published tarball is not byte-identical to the release
+  asset nor across runs (staging 1,064,002 B / e488e803 vs production
+  1,063,776 B / 1ad1b33a from the same 1,063,898 B asset; gzip/tar
+  non-determinism). Canaries prove the auth/mapping/provenance path, not byte
+  promotion; each publish is still independently digest-verified and signed.
+  Future options: deterministic packing (SOURCE_DATE_EPOCH) or a
+  publish-existing-tarball mode.
 
 **Open owner decisions (2026-09-21):**
 
