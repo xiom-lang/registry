@@ -700,6 +700,21 @@ archives and the VSIX, not registry packages, so it needs no entry.
   `publisher.ref refs/tags/stdlib-v0.61.3`, `event push`, commit c7b4027f;
   sha256 `1ad1b33a...` and the signature were re-verified against the served
   tarball. Both instances now serve the banner/masthead UI.
+- Staging trusted publishers (2026-09-23, ops 4bb8b77): 3 entries / 91 scopes
+  -- stdlib-main-staging (`refs/heads/main`, 2 scopes), registry-canary
+  (1 scope), eco-canary (`refs/heads/main`, 88 scopes); VPS clone at
+  `3da13ca`. Production keeps `stdlib-release` only; `eco-release`
+  (`["refs/tags/eco-v*","refs/tags/xiom-*/v*"]`) is prepared and installs
+  after the ecosystem canaries pass plus the owner OK.
+- Staging test artifacts (deliberate, not the deprecated packages):
+  `xiom.hello@0.1.0` (signed fixture, also on production),
+  `xiom.math@0.1.0` (2026-09-21 metadata canary),
+  `xiom.canary-oidc@0.0.0-canary.*` (OIDC canary of record),
+  `xiom.staging-isolation-probe@0.1.0` (yanked). Production also carries the
+  yanked `xiom.staging-e2e-probe` pair. Publisher entries are permissions, not
+  published packages; versions are immutable, so removing a name from the
+  allowlist/scope only stops future publishing -- only yank withdraws a
+  version, and pinned installs keep working.
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
