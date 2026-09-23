@@ -738,6 +738,17 @@ archives and the VSIX, not registry packages, so it needs no entry.
   review. Remaining: ops installs `eco-release` after the owner OK, then the
   first per-package tag (`xiom-flags/v0.1.0`) publishes behind the reviewer
   gate.
+- First ecosystem production publish verified (2026-09-23): production now
+  holds `eco-release`, and tag `xiom-flags/v0.1.0` (commit a6b71894) published
+  through run 35920050801 with `publisher.ref refs/tags/xiom-flags/v0.1.0`,
+  `event push`. SHA256/ed25519 of the served production tarball (9,280 B,
+  b99f82e7...) were re-verified independently, and the install-back from
+  production passed with `checksum verified` and `artifact is signed
+  (fp 4f:3b:47:f3:ae:17:b1:3c)`. The stable `XIOM_SIGNING_KEY` is in use (run
+  log: "using stable XIOM_SIGNING_KEY"; same fingerprint in both places).
+  Remaining: the other 34 stable packages (one `eco-v0.1.0` batch tag would
+  publish them all in a single approval), and `xiom.durable` when its port is
+  green.
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
