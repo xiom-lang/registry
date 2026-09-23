@@ -812,12 +812,17 @@ The 58 names:
  "xiom.websocket", "xiom.zeromq", "xiom.zstd"]
 ```
 
-Open decision for incremental first-party publishing: the deployed production
-plan uses the batch tag `refs/tags/eco-v*`, which publishes every allowlisted
-package that is not yet published. For a small ready set (the six stable
-ones), either wait for the curated `eco-v0.1.0` batch or add per-package tags
-(`refs/tags/xiom-*/v*`, e.g. `xiom-flags/v0.1.0`) to the workflow trigger and
-the entry refs; the matcher already supports a list of globs.
+Tag scheme (confirmed 2026-09-23): the packages workflow already supports
+`eco-v*` (full allowlisted batch) and `xiom-<folder>/v<ver>` (exactly one
+package; the tag version must equal the manifest version), plus a `guard` job
+(`scripts/allowlist-guard.ps1`) that stops the allowlist from drifting ahead
+of `STATUS.json` readiness (stage stable + recorded green suite). The packages
+production entry refs are therefore
+`["refs/tags/eco-v*", "refs/tags/xiom-*/v*"]`; the staging entry stays
+`refs/heads/main` for the dispatch canaries. Readiness per package is set with
+`scripts/status.ps1 -Action update` (`-Stage stable`, `-Publish`) and the name
+must also be added to `.github/publish-allowlist.txt`; publishing itself is
+never automatic (dispatch for staging, tag for production).
 
 **Compiler/stdlib session:**
 
