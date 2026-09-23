@@ -786,6 +786,39 @@ archives and the VSIX, not registry packages, so it needs no entry.
 `xiom.ecosystem` is intentionally excluded (umbrella manifest). `xiom-hello`
 at 0.1.0 is skipped by the workflow's version check until bumped.
 
+**Packages scope list v2 (2026-09-23, follows the allowlist):** the packages
+repo's `.github/publish-allowlist.txt` is the readiness gate (52 names), and
+the first six `stable` packages from `docs/PACKAGE_STATUS.md` (green
+conformance suites) are not allowlisted yet: `xiom.flags`, `xiom.lru`,
+`xiom.option`, `xiom.plural`, `xiom.retry`, `xiom.ttl`. Deploy the capability
+as allowlist + those six (58 names) and keep it aligned with the allowlist:
+`xiom.core` is blocked pending the rename to `xiom.durable` (add the new name
+after the rename), and the namespace audit removed `xiom.math`, `xiom.log`,
+`xiom.net`, `xiom.test` (superseded by stdlib; pending owner confirmation).
+The 58 names:
+
+```json
+["xiom.algo", "xiom.arrow", "xiom.assimp", "xiom.blas", "xiom.box2d",
+ "xiom.control", "xiom.cuda", "xiom.directx11", "xiom.directx12", "xiom.dxc",
+ "xiom.eigen", "xiom.ffmpeg", "xiom.flags", "xiom.gazebo", "xiom.glfw",
+ "xiom.graphql", "xiom.grpc", "xiom.hello", "xiom.http", "xiom.imgui",
+ "xiom.jolt", "xiom.json", "xiom.kafka", "xiom.libpq", "xiom.lru",
+ "xiom.lzfse", "xiom.meshopt", "xiom.micro", "xiom.miniaudio", "xiom.moveit",
+ "xiom.onnx", "xiom.openblas", "xiom.opencv", "xiom.opengl", "xiom.openssl",
+ "xiom.option", "xiom.ozz", "xiom.pandas", "xiom.phonon", "xiom.portaudio",
+ "xiom.plural", "xiom.protobuf", "xiom.raylib", "xiom.realtime", "xiom.rest",
+ "xiom.retry", "xiom.scipy", "xiom.sdl3", "xiom.sensor", "xiom.tensorflow",
+ "xiom.torch", "xiom.ttl", "xiom.ui", "xiom.vma", "xiom.vulkan",
+ "xiom.websocket", "xiom.zeromq", "xiom.zstd"]
+```
+
+Open decision for incremental first-party publishing: the deployed production
+plan uses the batch tag `refs/tags/eco-v*`, which publishes every allowlisted
+package that is not yet published. For a small ready set (the six stable
+ones), either wait for the curated `eco-v0.1.0` batch or add per-package tags
+(`refs/tags/xiom-*/v*`, e.g. `xiom-flags/v0.1.0`) to the workflow trigger and
+the entry refs; the matcher already supports a list of globs.
+
 **Compiler/stdlib session:**
 
 ```
