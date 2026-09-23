@@ -749,6 +749,16 @@ archives and the VSIX, not registry packages, so it needs no entry.
   Remaining: the other 34 stable packages (one `eco-v0.1.0` batch tag would
   publish them all in a single approval), and `xiom.durable` when its port is
   green.
+- Batch-tag safety gap (found 2026-09-23, before use): the allowlist is 87
+  names = 35 ready + 52 grandfathered in `.github/allowlist-baseline.txt`
+  (incubating, tests unknown; the guard logs them as GRANDFATHERED). The
+  workflow's publish loop filters only by allowlist membership, so
+  `eco-v0.1.0` would publish all 87 -- including the 52 unverified -- with
+  immutable versions. The registry lane did NOT push the batch tag. Fix
+  (packages lane): apply the readiness check (STATUS.json stage stable +
+  tests pass) inside the publish loop for the batch and per-package paths
+  alike, skipping with a warning; then the batch publishes exactly the
+  remaining ready set (34).
 - Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
   package, so the published tarball is not byte-identical to the release
   asset nor across runs (staging 1,064,002 B / e488e803 vs production
