@@ -749,6 +749,17 @@ archives and the VSIX, not registry packages, so it needs no entry.
   Remaining: the other 34 stable packages (one `eco-v0.1.0` batch tag would
   publish them all in a single approval), and `xiom.durable` when its port is
   green.
+- Ecosystem batch live (2026-09-23): `eco-v0.1.0` published **34 ready
+  packages** to production (run 35921278403, ref `refs/tags/eco-v0.1.0`,
+  event push, one reviewer approval). Production now serves 38 packages
+  (34 batch + `xiom.flags` + `xiom.hello` + `xiom-std` + the yanked
+  `xiom.staging-e2e-probe`). The readiness filter skipped the 52 grandfathered
+  names plus `xiom.hello`/`xiom.sensor` with `::warning`s -- `xiom.algo` is
+  absent from production. Sample entries (`xiom.msgpack`, `xiom.csv`,
+  `xiom.toml`) carry `publisher.ref refs/tags/eco-v0.1.0`; one tarball was
+  re-hashed and signature-verified byte-for-byte; the stable fingerprint
+  `4f:3b:47:...` covers the whole batch. Ports of the remaining 52 can ship
+  later in waves (next batch or per-package tags).
 - Batch-tag safety gap (found 2026-09-23, before use): the allowlist is 87
   names = 35 ready + 52 grandfathered in `.github/allowlist-baseline.txt`
   (incubating, tests unknown; the guard logs them as GRANDFATHERED). The
