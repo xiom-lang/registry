@@ -27,6 +27,9 @@ install from it.
   shows the fingerprint.
 - The registry is a delivery channel, not a git host: it never needs access to
   your repository. Link your repo in the package metadata.
+- Include a **`README.md`** in your package. The registry extracts it from the
+  published tarball (never fetched from GitHub) and shows it on your package
+  page; publishing without one succeeds but adds a warning.
 
 ## 1. Prerequisites
 

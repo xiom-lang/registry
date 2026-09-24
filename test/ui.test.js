@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const tar = require('tar');
 
 const { wantsHtml } = require('../src/ui/negotiate');
 
@@ -19,6 +20,7 @@ let app;
 let server;
 let baseUrl;
 let sandbox;
+let noReadmeWarnings = [];
 
 const BROWSER = { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' };
 const API = { Accept: '*/*' };
@@ -113,6 +115,31 @@ test.before(async () => {
     body: JSON.stringify({ reason: 'ui test' }),
   });
   assert.equal(yank.status, 200);
+
+  // Readme fixtures: real (tiny) tarballs so extraction actually runs.
+  const readmeDir = path.join(sandbox, 'readme-fixture');
+  fs.mkdirSync(readmeDir, { recursive: true });
+  fs.writeFileSync(path.join(readmeDir, 'package.xi'),
+    'name: "readme-pkg";\nversion: "1.0.0";\ndescription: "Has a readme";');
+  fs.writeFileSync(path.join(readmeDir, 'README.md'),
+    '# Readme fixture\n\n<script>alert(1)</script>\n');
+  const readmeTarball = path.join(sandbox, 'readme-pkg.tar.gz');
+  await tar.c({ gzip: true, file: readmeTarball, cwd: readmeDir }, ['package.xi', 'README.md']);
+  assert.equal((await publish({
+    name: 'readme-pkg', version: '1.0.0', bytes: fs.readFileSync(readmeTarball),
+  })).status, 201);
+
+  const noReadmeDir = path.join(sandbox, 'no-readme-fixture');
+  fs.mkdirSync(noReadmeDir, { recursive: true });
+  fs.writeFileSync(path.join(noReadmeDir, 'package.xi'),
+    'name: "no-readme-pkg";\nversion: "1.0.0";\ndescription: "No readme";');
+  const noReadmeTarball = path.join(sandbox, 'no-readme-pkg.tar.gz');
+  await tar.c({ gzip: true, file: noReadmeTarball, cwd: noReadmeDir }, ['package.xi']);
+  const noReadmePublish = await publish({
+    name: 'no-readme-pkg', version: '1.0.0', bytes: fs.readFileSync(noReadmeTarball),
+  });
+  assert.equal(noReadmePublish.status, 201);
+  noReadmeWarnings = (await noReadmePublish.json()).warnings || [];
 });
 
 test.after(() => {
@@ -152,7 +179,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(json.headers.get('content-type'), /application\/json/);
   const data = await json.json();
   assert.equal(data.status, 'operational');
-  assert.equal(data.packages, 4);
+  assert.equal(data.packages, 6);
   assert.equal(data.web, 'https://registry.ui.test', 'raw readers get pointed at the UI');
 });
 
@@ -192,7 +219,7 @@ test('GET /packages lists packages in both formats', async () => {
 
   const json = await fetch(`${baseUrl}/packages`, { headers: API });
   const data = await json.json();
-  assert.equal(data.packages.length, 4);
+  assert.equal(data.packages.length, 6);
   const demo = data.packages.find((p) => p.name === 'demo-pkg');
   assert.equal(demo.latest, '1.0.0');
   assert.equal(demo.versions, 2);
@@ -470,6 +497,39 @@ test('packageBadgeState precedence and track selection', () => {
 
   // A package with no versions at all still gets an unsigned badge.
   assert.equal(stateOf(packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} })), 'unsigned');
+});
+
+test('readme is served from the stored tarball and rendered escaped', async () => {
+  const raw = await fetch(`${baseUrl}/packages/readme-pkg/1.0.0/readme`, { headers: API });
+  assert.equal(raw.status, 200);
+  assert.match(raw.headers.get('content-type'), /text\/markdown/);
+  assert.match(raw.headers.get('cache-control'), /immutable/);
+  const body = await raw.text();
+  assert.match(body, /# Readme fixture/);
+  assert.match(body, /<script>alert\(1\)<\/script>/, 'raw markdown keeps its source text');
+
+  // Both package-page forms embed the escaped readme inside <details>.
+  for (const target of ['/packages/readme-pkg', '/packages/readme-pkg/1.0.0']) {
+    const page = await (await fetch(`${baseUrl}${target}`, { headers: BROWSER })).text();
+    assert.match(page, /<details class="readme">/, target);
+    assert.match(page, /<pre class="readme-body"># Readme fixture/, target);
+    assert.match(page, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, `readme markup escaped on ${target}`);
+    assert.doesNotMatch(page, /<script>alert\(1\)<\/script>/, `no live script from a readme on ${target}`);
+    assert.match(page, /href="\/packages\/readme-pkg\/1\.0\.0\/readme"/, target);
+  }
+
+  // A package without a readme hides the block and 404s the endpoint.
+  const missing = await fetch(`${baseUrl}/packages/no-readme-pkg/1.0.0/readme`, { headers: API });
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, 'readme_not_found');
+  const noReadmePage = await (await fetch(`${baseUrl}/packages/no-readme-pkg`, { headers: BROWSER })).text();
+  assert.doesNotMatch(noReadmePage, /<details class="readme">/);
+
+  // Publish warns at the source when the tarball has no README.md.
+  assert.ok(
+    noReadmeWarnings.some((warning) => /no README\.md/.test(warning)),
+    `expected a missing-readme warning, got: ${JSON.stringify(noReadmeWarnings)}`,
+  );
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

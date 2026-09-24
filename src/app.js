@@ -46,6 +46,7 @@ const {
   isValidPublicKeyHex,
 } = require('./signatures');
 const { extractManifest } = require('./manifest');
+const { extractReadme } = require('./readme');
 const { normalizePackageMetadata, categoryCounts, CATEGORIES, STAGES } = require('./categories');
 const { wantsHtml } = require('./ui/negotiate');
 const { escapeHtml } = require('./ui/layout');
@@ -341,6 +342,34 @@ function createApp(config = loadConfig()) {
   // Every read route carries the general limiter explicitly; the download
   // route adds the stricter download limiter on top.
 
+  // Readmes are extracted from immutable stored artifacts; a small bounded
+  // cache keeps repeated page views from re-inflating the same tarball. A
+  // null result (no README.md) is cached too, so misses stay cheap.
+  const README_CACHE_MAX = 128;
+  const readmeCache = new Map();
+  function cachedReadme(name, version, filePath) {
+    const key = `${name}@${version}`;
+    if (readmeCache.has(key)) return readmeCache.get(key);
+    const value = extractReadme(filePath, { maxDecompressedBytes: config.maxDecompressedBytes });
+    if (readmeCache.size >= README_CACHE_MAX) {
+      readmeCache.delete(readmeCache.keys().next().value);
+    }
+    readmeCache.set(key, value);
+    return value;
+  }
+
+  /** Lazy readme accessor for a package page (null when absent). */
+  function readmeFor(pkg) {
+    return (version) => {
+      if (!pkg.versions[version]) return null;
+      try {
+        return cachedReadme(pkg.name, version, artifacts.require(pkg.name, version));
+      } catch {
+        return null;
+      }
+    };
+  }
+
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
@@ -446,7 +475,10 @@ function createApp(config = loadConfig()) {
     }
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry, '', { nav: accountNav(req) }));
+        .send(packagePage(pkg, indexStore.snapshot().registry, '', {
+          nav: accountNav(req),
+          readme: readmeFor(pkg),
+        }));
     }
     res.json(pkg);
   });
@@ -461,7 +493,10 @@ function createApp(config = loadConfig()) {
           .send(notFoundPage(`Version "${version}" of "${name}" was not found.`));
       }
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry, version, { nav: accountNav(req) }));
+        .send(packagePage(pkg, indexStore.snapshot().registry, version, {
+          nav: accountNav(req),
+          readme: readmeFor(pkg),
+        }));
     }
     res.json(indexStore.requireVersion(name, version));
   });
@@ -496,6 +531,25 @@ function createApp(config = loadConfig()) {
       stream.pipe(res);
     },
   );
+
+  // Readme for one immutable version, extracted from the stored tarball
+  // (SESSION.md section 13 phase 1). Bounded at 64 KB; a missing or
+  // unreadable README.md is a 404, not an empty document.
+  app.get('/packages/:name/:version/readme', generalLimit, (req, res) => {
+    const { name, version } = req.params;
+    indexStore.requireVersion(name, version);
+    const file = artifacts.require(name, version);
+    const readme = cachedReadme(name, version, file);
+    if (readme === null) {
+      throw new NotFoundError(
+        `version ${version} of ${name} has no README.md`,
+        'readme_not_found',
+      );
+    }
+    res.type('text/markdown')
+      .set('Cache-Control', 'public, max-age=604800, immutable')
+      .send(readme);
+  });
 
   app.get('/search', generalLimit, (req, res) => {
     const rawQuery = String(req.query.q || '');
@@ -1066,6 +1120,13 @@ function publish(req, { config, indexStore, artifacts, token }) {
     warnings.push(
       `no categories declared; add 1-3 from the registry vocabulary in package.xi: ${CATEGORIES.join(', ')}`,
     );
+  }
+  // SESSION.md section 13 phase 4: the package page shows README.md from the
+  // stored tarball; warn at publish time when it is missing. This walks the
+  // archive a second time (the manifest pass just ran), but uploads are
+  // bounded and publishes are rare, so the cost is acceptable.
+  if (!extractReadme(staged, config)) {
+    warnings.push('no README.md in the tarball; the package page will not show one');
   }
   if (packageMeta.unknownStage) {
     warnings.push(

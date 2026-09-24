@@ -743,6 +743,28 @@ textarea:focus-visible {
 .count { color: var(--muted); font-size: 14px; font-weight: 400; }
 .request-table td { vertical-align: top; }
 
+/* README block on the package page (section 13). */
+.readme {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: var(--space-lg) 0;
+}
+.readme summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: var(--space-md) var(--space-lg);
+}
+.readme-body {
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 480px;
+  overflow: auto;
+  padding: var(--space-md) var(--space-lg);
+  white-space: pre-wrap;
+}
+
 @media (max-width: 860px) {
   .account-grid { grid-template-columns: 1fr; }
 }

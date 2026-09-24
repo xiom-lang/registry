@@ -325,6 +325,19 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 <code>xiom pkg trust --registry ${escapeHtml(registryUrl)} --key ${escapeHtml(detail.publicKey)}</code></p>`
     : '';
 
+  // README from the stored tarball (SESSION.md section 13 phase 2): escaped
+  // text in a collapsed block; the raw markdown stays one link away.
+  const readmeText = typeof options.readme === 'function'
+    ? options.readme(detailVersion)
+    : options.readme;
+  const readmeBlock = typeof readmeText === 'string' && readmeText.trim() !== ''
+    ? `<details class="readme">
+  <summary>README</summary>
+  <pre class="readme-body">${escapeHtml(readmeText)}</pre>
+  <p class="pkg-meta"><a href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(detailVersion)}/readme">raw markdown</a></p>
+</details>`
+    : '';
+
   return layout({
     title: name,
     description: pkg.description || `Versions of ${name}`,
@@ -341,6 +354,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   <div class="install">${installNode}</div>
   ${detailGrid}
   ${trustNote}
+  ${readmeBlock}
 </section>
 <h2>Versions</h2>
 <table class="versions">

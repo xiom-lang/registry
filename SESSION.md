@@ -1066,30 +1066,25 @@ package pages; no action yet.
 
 ## 13. UI roadmap (discuss later, owner idea 2026-09-23)
 
-Not scheduled; recorded so the discussion has a starting point.
+**Readme on the package page -- phases 1, 2, 4 DONE (2026-09-25).**
+`GET /packages/:name/:version/readme` extracts `README.md` from the stored
+tarball (existing tar reader generalized to `readTarMember`, any depth,
+case-insensitive basename, 64 KB cap, `text/markdown`, immutable cache
+header); the package page embeds it escaped inside `<details>` with a
+raw-markdown link; publish warns when the tarball has no README.md. A small
+bounded in-process cache keyed by `name@version` avoids re-inflating on
+every page view (versions are immutable). Phase 3 (dependency-free
+CommonMark subset) remains open; escaped text ships first, as recorded here.
 
-**Readme on the package page.** The published tarball already contains
-`README.md` (and `SPEC.md`), verified on `xiom.flags@0.1.0`: 3,197 B README
-plus package.xi, src, tests, STATUS.json. So readmes should come from the
-stored artifact, never from a GitHub fetch at page-view time (publisher-
-controlled URL = SSRF surface, rate limits, link rot, non-immutable).
-Phases: (1) `GET /packages/:name/:version/readme` extracts `README.md` from
-the stored tarball with the existing tar reader, bounded at 64 KB, served as
-`text/markdown`; (2) render it on the package page as escaped text inside
-`<details>`; (3) a dependency-free CommonMark subset renderer (escape first,
-then headings/lists/code/links/emphasis) with hostile-input tests, or one
-vetted dependency if the owner prefers; (4) publish-time warning when a
-readme is missing.
-
-**Listing at thousands of packages.** Cards do not scale beyond a few dozen.
-Phases: (1) server-side pagination on `/packages` (`?page=&per_page=`, capped,
-default ~50, plus totals) while `/index.json` stays whole for the client;
-(2) compact rows (name, latest, one-line description, badges, updated, size)
-with a small featured/updated strip on home; (3) sorting (updated default,
-name A-Z) and shareable server-side facets (category counts, first-party,
-signed); (4) search tolerates `xiom-` vs `xiom.` and gains prefix matching;
-(5) index growth: a compact/gzipped form eventually, not urgent at 35
-packages.
+**Listing at thousands of packages.** Not started. Cards do not scale beyond
+a few dozen. Phases: (1) server-side pagination on `/packages`
+(`?page=&per_page=`, capped, default ~50, plus totals) while `/index.json`
+stays whole for the client; (2) compact rows (name, latest, one-line
+description, badges, updated, size) with a small featured/updated strip on
+home; (3) sorting (updated default, name A-Z) and shareable server-side
+facets (category counts, first-party, signed); (4) search tolerates `xiom-`
+vs `xiom.` and gains prefix matching; (5) index growth: a compact/gzipped
+form eventually, not urgent at 35 packages.
 
 ---
 

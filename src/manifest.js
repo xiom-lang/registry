@@ -61,6 +61,24 @@ function extractManifest(tarballPath, limits) {
  * @returns {Buffer|null}
  */
 function readManifestMember(tarballPath, { maxManifestBytes, maxDecompressedBytes }) {
+  return readTarMember(tarballPath, {
+    basenames: [MANIFEST_BASENAME],
+    maxBytes: maxManifestBytes,
+    maxDecompressedBytes,
+  });
+}
+
+/**
+ * Return the first tar member whose basename matches (case-insensitively),
+ * bounded per call, or null. Shared by manifest (`package.xi`) and readme
+ * (`README.md`) extraction so both walk the archive the same way.
+ *
+ * @param {string} tarballPath
+ * @param {{ basenames: string[], maxBytes: number, maxDecompressedBytes: number }} options
+ * @returns {Buffer|null}
+ */
+function readTarMember(tarballPath, { basenames, maxBytes, maxDecompressedBytes }) {
+  const wanted = new Set(basenames.map((name) => name.toLowerCase()));
   const compressed = fs.readFileSync(tarballPath);
   const tar = zlib.gunzipSync(compressed, { maxOutputLength: maxDecompressedBytes });
 
@@ -72,10 +90,10 @@ function readManifestMember(tarballPath, { maxManifestBytes, maxDecompressedByte
 
     const dataLength = header.size;
     const paddedLength = Math.ceil(dataLength / TAR_BLOCK_SIZE) * TAR_BLOCK_SIZE;
-    const isManifest = header.type === 'file'
-      && header.name.split('/').pop() === MANIFEST_BASENAME;
-    if (isManifest) {
-      const take = Math.min(dataLength, maxManifestBytes);
+    const isTarget = header.type === 'file'
+      && wanted.has(header.name.split('/').pop().toLowerCase());
+    if (isTarget) {
+      const take = Math.min(dataLength, maxBytes);
       return Buffer.from(tar.subarray(offset, offset + take));
     }
     offset += paddedLength;
@@ -290,6 +308,7 @@ module.exports = {
   extractManifest,
   parseManifest,
   parseTarHeader,
+  readTarMember,
   stripOuterBlock,
   MANIFEST_BASENAME,
 };
