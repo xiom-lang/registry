@@ -935,6 +935,27 @@ the repo entirely, matching the exclusion. The 88 names (87 + xiom.durable):
  "xiom.zeromq", "xiom.zstd"]
 ```
 
+**Packages scope list v4 (2026-09-24):** the allowlist is now 130 names
+(waves 10-15); v3 (88) plus these 43 additions is v4 (131 with `xiom.durable`
+kept pre-provisioned). Ops must apply the delta to both trusted-publishers
+files before the new names can publish (403 `publisher_not_authorized`
+otherwise): staging first for the canary, then production with the
+`eco-v0.1.1` batch. Wave 16 (tar, id3, cookie, rate, jwt, midi, properties,
+fixed, pagination, ppm) is still running and will need another delta when
+allowlisted.
+
+```json
+["xiom.alerting", "xiom.astronomy", "xiom.audit", "xiom.bmp", "xiom.chemistry",
+ "xiom.dotenv", "xiom.electronics", "xiom.finance", "xiom.html", "xiom.humanize",
+ "xiom.ini", "xiom.l10n.number", "xiom.lexing", "xiom.ngram", "xiom.optimizer",
+ "xiom.password", "xiom.physics", "xiom.preprocess", "xiom.profiling", "xiom.query",
+ "xiom.rbac", "xiom.refactor", "xiom.relativity", "xiom.report", "xiom.robotics",
+ "xiom.secret", "xiom.selection", "xiom.semver", "xiom.signal", "xiom.snapshot",
+ "xiom.spectroscopy", "xiom.subtitle", "xiom.tftp", "xiom.thermo", "xiom.tracing",
+ "xiom.transaction", "xiom.translation", "xiom.transliteration", "xiom.tsv",
+ "xiom.uuid", "xiom.validation", "xiom.wasm", "xiom.yaml"]
+```
+
 Tag scheme (confirmed 2026-09-23): the packages workflow already supports
 `eco-v*` (full allowlisted batch) and `xiom-<folder>/v<ver>` (exactly one
 package; the tag version must equal the manifest version), plus a `guard` job
