@@ -787,6 +787,16 @@ archives and the VSIX, not registry packages, so it needs no entry.
   1ad1b33a/1,063,776 B from the same 1,063,898 B input), so byte-identical
   staging-to-production promotion still needs deterministic client packing or
   a publish-existing-tarball mode (compiler lane, optional).
+- Byte-identical promotion test (scheduled, pending release): the client half
+  shipped in compiler m126 (`68b3be9f`: deterministic in-repo tar.gz writer +
+  `publish --tarball <PATH>` promote mode, prints the promoted SHA256), but
+  m126 is **not in v0.61.3** (`merge-base` check) and no newer release exists
+  yet. Once a compiler release contains it: bump the packages
+  `COMPILER_VERSION`, bump one package to a new version (versions are
+  immutable, so a fresh version is required), publish it to staging, then
+  publish it to production via its per-package tag, and compare sha256 +
+  signature across the two instances -- they should be identical now, or use
+  the promote mode to ship the exact staging bytes.
 
 **Open owner decisions (2026-09-21):**
 
