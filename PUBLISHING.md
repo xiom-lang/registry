@@ -243,6 +243,35 @@ Bump `version` in `package.xi` and publish again. Republishing an existing
 version is refused with `409 version_exists` - versions are immutable, and
 that is what makes lockfiles trustworthy.
 
+### Pre-release versions (alpha, beta, rc)
+
+Any valid [semver](https://semver.org) version is accepted, including
+pre-release identifiers: `1.0.0-alpha.1`, `1.0.0-beta.2`, `2.0.0-rc.1`.
+They behave as you expect:
+
+- `xiom pkg install my-lib` resolves the **highest non-yanked stable**
+  version; a pre-release only becomes `latest` when no stable version exists
+  (or every stable one is yanked).
+- `xiom pkg install my-lib@1.0.0-beta.2` installs that exact pre-release.
+- While the resolved latest is a pre-release, the package row and page show
+  the **pre-release** badge, so nobody mistakes it for a finished release.
+
+Three rules to plan around:
+
+- **Immutable forever**: once `1.0.0-rc.1` is published, the final `1.0.0` is
+  a *new* version - you cannot promote or replace the rc.
+- **Maturity is separate from versioning**: the package's declared `stage`
+  (`incubating` / `stable` / `deprecated` in `package.xi`, written from
+  STATUS.json in CI) describes the project, not the version. An incubating
+  package can ship plain `0.x.y` versions, and a stable package can ship a
+  beta; the registry shows both signals independently.
+- Tag-based CI publishes can use pre-release tags too (e.g. a
+  `xiom-foo/v0.2.0-rc.1` package tag); the workflow only requires the tag
+  version to equal the manifest version.
+
+If no pre-release is ever published, nothing changes: the badge is simply
+never shown, and the state costs nothing.
+
 ## 8. Withdrawing a version (yank)
 
 Yanking keeps the artifact downloadable for existing lockfiles but removes the
