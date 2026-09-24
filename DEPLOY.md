@@ -154,6 +154,43 @@ Operational rules:
 The full claim contract, staging/production entries and lane handoffs live in
 `SESSION.md` sections 11-12.
 
+## GitHub sign-in and request queue (registry 2.0)
+
+Sign-in links a GitHub identity to self-service requests and the approval
+queue; it is display/audit data only and can never publish. Configuration
+lives in the env files (`docker-compose.yml` passes it through on both
+services):
+
+- `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`: one OAuth App per
+  environment, callback `<REGISTRY_URL>/auth/github/callback`, scope
+  `read:user` (no repo access). Set both or neither: an id with an empty
+  secret refuses to start, so a half-passed pair cannot silently break the
+  login.
+- `REGISTRY_ADMIN_LOGINS`: comma-separated GitHub logins (case-insensitive)
+  that may decide and fulfil requests. Empty means nobody can approve.
+
+Data: `accounts.json` (identities) and `requests.json` (queue + per-request
+audit history) live in the `registry_data` / `staging_data` volume and are in
+the restic source list. Sessions are in-memory: a restart signs everyone out.
+The first deploy must exercise a real login round-trip (phase-2 prerequisite
+from the incident review).
+
+Mint loop after approving a request in `/admin/requests` (the app never
+mints, never reads the token store, and holds no mail credentials):
+
+1. Mint on the host, one line at a time:
+   `docker run --rm -v "$PWD:/w" -w /w node:22-alpine node scripts/tokens.js add --file tokens.json --label <login>-<request-id> --scopes "<scopes>"`
+   (or `rotate`/`remove`; sign-off and delivery rules unchanged), or add the
+   approved entry to `/etc/xiom-registry/trusted-publishers.json` for a
+   trusted-publisher request.
+2. Deliver the token privately from `registry@xiom-lang.org`.
+3. Mark the request fulfilled in the UI with a reference (label + date).
+   Approved-but-unfulfilled requests stay visible until then, and every
+   transition is appended to the request's audit history.
+4. Recreate the service after token/publisher file edits:
+   `docker compose up -d --no-deps registry` (staging equivalent with
+   `--env-file .env.staging --profile staging`).
+
 ## Hestia reverse proxy
 
 This host runs nginx-only (`PROXY_SYSTEM` is not enabled), so custom web

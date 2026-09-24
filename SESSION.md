@@ -43,6 +43,10 @@ environment has no required reviewers because the repo is private on a Free
 org, so there is no GitHub-side gate on the production publish path).
 Remaining after that: ops installs `eco-release` next to `stdlib-release`.
 Section 11 is the spec, section 12 the lane handoffs.
+**Registry 2.0 phase 1-2 is implemented in `main`** (2026-09-25: GitHub
+sign-in + self-service request queue with admin approval; publishing path
+untouched) and the package status badge art is 36px; both ship with the same
+pending staging/production recreate. See section 17.
 
 **Remaining:**
 
@@ -1338,3 +1342,72 @@ Constraints: DCO-signed conventional commits, push to main; run npm test (139) a
 npm run test:e2e (20) before claiming anything done; verify live instances with
 Accept: text/html (JSON is the default negotiation).
 ```
+
+---
+
+## 17. Registry 2.0 phase 1-2 implemented (2026-09-25, registry lane)
+
+**What shipped in `main`** (verified with `npm test` = 166 unit tests and
+`npm run test:e2e` = 20 checks; publishing path untouched):
+
+- **GitHub OAuth sign-in** (`src/oauth.js`, `src/sessions.js`,
+  `src/accounts.js`): `read:user`, identity only. Single-use state,
+  HMAC-signed HttpOnly session cookie whose key is derived from the OAuth
+  client secret, per-session CSRF token, idle expiry. A browser session can
+  never publish; sites/routes for publish are unchanged.
+- **Self-service request queue** (`src/requests.js`): publish-token and
+  trusted-publisher requests, GitHub-OAuth identified, validated with the
+  same rules the loader uses (`*` never granted, at most 8 scopes, per-
+  requester pending cap). Admin approval/denial/fulfilment in
+  `/admin/requests`; every transition is appended to the request's audit
+  history. The app never mints, never reads the token store, and holds no
+  mail credentials: minting stays host-side (`issue-token.sh` wrapping
+  `scripts/tokens.js`), and the admin records a fulfilment reference.
+- **Fail-fast OAuth config** (the phase-2 incident guard): client id and
+  secret must be set together; an id with an empty secret refuses to start.
+  Admin role = `REGISTRY_ADMIN_LOGINS` (comma-separated logins,
+  case-insensitive), recomputed per request; no role is persisted.
+- **UI**: nav sign-in/account links, `/login`, `/account`, `/admin/requests`,
+  CSRF on every POST, rate-limited; `accounts.json` and `requests.json` live
+  in the registry data volume (restic scope); sessions are in-memory, so a
+  restart signs everyone out.
+- **Compose/env**: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`,
+  `REGISTRY_ADMIN_LOGINS` pass through on both services; endpoint overrides
+  (`GITHUB_OAUTH_*_URL`) exist for tests/mirrors only.
+- **Badge art**: package status icons render at 36px (owner feedback;
+  test updated).
+
+**Deploy**: the pending staging/production recreate now also activates
+sign-in. No new secrets are needed if the env files still carry the stored
+client id/secret pairs; after `git pull`, force-recreate both services and
+exercise a real login round-trip (phase-2 prerequisite).
+
+**Packages lane state (relay from packages/ops, 2026-09-25)**:
+
+- Waves 10-15 canaries are complete: all 43 names verified on staging (a
+  superset of the small-sample request); nothing left for v4.
+- Wave 16/17 sample dispatches as soon as v5 is live: `xiom.tar`,
+  `xiom.id3`, `xiom.jwt` (stable) plus `xiom.algo` as the incubating badge
+  canary (`stage: incubating` written from STATUS.json; workflow support
+  `bb7d18b`: dispatch-only, `allow_unready=true` + explicit target + staging
+  URL, environment approval, tags/batches refused).
+- Wave 18 (base58, cidr, crc, macaddr, obj, querystring, roman, stl, uri,
+  varint) landed after v5: allowlist is now **160 names**; v6 will be
+  prepared separately after wave 16/17 (expected 151 -> 161).
+- `eco-v0.1.1` = the combined 63-name delta (v4 43 + v5 20), one tag, one
+  approval; production 88 -> 151.
+
+**Ordered next actions**:
+
+1. Owner: staging rebuild + recreate (badges + v5 + OAuth) and confirm
+   `/packages` HTML has `pkg-badge-group` with 36px art and `/login`
+   completes a real GitHub round trip.
+2. Registry lane: verify the wave 16/17 canary entries (publisher
+   `xiom-packages/packages`, workflow `publish-registry.yml`, ref
+   `refs/heads/main`, signature/publicKey, incubator art for `xiom.algo`).
+3. After canaries + owner greenlight: ops deploys the combined production
+   delta (88 -> 151), the owner cuts `eco-v0.1.1`, and the batch is verified
+   as `eco-v0.1.0`.
+4. Then pick the next feature: section 13 listing/readme roadmap
+   (pagination, compact rows, facets, readme from the tarball) or phase 3
+   review/report flows (flagged state, reviewer role).

@@ -109,8 +109,17 @@ the same version with a different key is impossible (versions are immutable).
 
 ## 4. Request a publish token
 
-Open a token request in the registry repository:
-**https://github.com/xiom-lang/registry/issues/new/choose** ("Token request").
+Two front doors, same review:
+
+- **Web request (registry 2.0):** sign in with GitHub at
+  **https://registry.xiom-lang.org/login** and submit the request form. The
+  request is queued for a maintainer with an audit trail. Nothing is minted
+  in the browser: approved tokens are issued on the registry host and mailed
+  from **registry@xiom-lang.org**. If your package publishes from GitHub
+  Actions, choose **trusted publisher** instead - it ships no secret at all.
+- **Issue template (fallback):** open a token request in the registry
+  repository:
+  **https://github.com/xiom-lang/registry/issues/new/choose** ("Token request").
 
 Include:
 
@@ -326,5 +335,7 @@ GitHub OIDC **trusted publishing** is live for the first-party repositories
 (see "Publishing from GitHub Actions (OIDC)" in section 5): CI publishes
 without a long-lived token, tied to the GitHub identity that ran the
 workflow, with provenance recorded per version. Community trusted publishing
-(open self-service) is not available yet; community packages still use
-tokens issued manually as described above.
+requests can be submitted through the web front door (section 4) and are
+configured by a maintainer after approval; automatic self-service activation
+is not available yet, and community packages can keep using tokens issued
+manually as described above.
