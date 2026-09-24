@@ -1369,8 +1369,8 @@ Accept: text/html (JSON is the default negotiation).
 - **Compose/env**: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`,
   `REGISTRY_ADMIN_LOGINS` pass through on both services; endpoint overrides
   (`GITHUB_OAUTH_*_URL`) exist for tests/mirrors only.
-- **Badge art**: package status icons render at 36px (owner feedback;
-  test updated).
+- **Badge art**: package status icons render at 48px (owner feedback;
+  28 -> 36 -> 48, test updated).
 
 **Deploy**: the pending staging/production recreate now also activates
 sign-in. No new secrets are needed if the env files still carry the stored
@@ -1394,9 +1394,16 @@ exercise a real login round-trip (phase-2 prerequisite).
 
 **Live status (2026-09-25, after the ops report and an external check)**:
 staging is v5 live (3 OIDC entries, 154 scopes, eco-canary 151) and the
-recreate carries the badge matrix + 36px art (verified externally: 83
-`pkg-badge-group` and 83 `width="36"` in the `Accept: text/html`
-`/packages` response). Server-side sign-in is verified from outside:
+recreate carries the badge matrix with 36px art at check time (83
+`pkg-badge-group`; the art is now 48px in `main`, pending the next
+recreate). **Wave 16/17 canaries verified (2026-09-25)**: `xiom.tar`,
+`xiom.id3`, `xiom.jwt`, `xiom.algo` are on staging with publisher
+`xiom-packages/packages`, workflow `publish-registry.yml`, ref
+`refs/heads/main`, `workflow_dispatch` events and run URLs; independently
+re-hashed tarballs match their index sha256 and the ed25519 signatures
+verify over the exact bytes; `xiom.algo` carries `stage: incubating` and
+serves `pgk_incubator_official.webp`, the others `pgk_verified_official`
+with the signed pill. Server-side sign-in is verified from outside:
 `/login` renders the button, `/auth/github/start` 302s to GitHub with the
 staging client id and callback (GitHub accepts the app and shows its normal
 sign-in), and the callback refuses a bad state with 403. **The owner
@@ -1416,15 +1423,14 @@ sign-in: OIDC publishing never uses browser sessions.
 **Ordered next actions**:
 
 1. ~~Owner: staging rebuild + recreate (badges + v5 + OAuth)~~ DONE
-   2026-09-25 (badges at 36px verified; owner logged in on staging).
-2. Packages: dispatch the wave 16/17 sample now (v5 is live; sign-in is not
-   a dependency). Registry lane verifies each staging entry when the run IDs
-   arrive (publisher `xiom-packages/packages`, workflow
-   `publish-registry.yml`, ref `refs/heads/main`, signature/publicKey,
-   incubator art for `xiom.algo`).
-3. After canaries + owner greenlight: ops deploys the combined production
-   delta (88 -> 151), the owner cuts `eco-v0.1.1`, and the batch is verified
-   as `eco-v0.1.0`.
-4. Then pick the next feature: section 13 listing/readme roadmap
-   (pagination, compact rows, facets, readme from the tarball) or phase 3
-   review/report flows (flagged state, reviewer role).
+   2026-09-25 (badges verified; owner logged in on staging).
+2. ~~Packages: dispatch the wave 16/17 sample~~ DONE; all four canary
+   entries verified 2026-09-25 (see live status). Readme phases 1/2/4 also
+   shipped (`ea8cd85`); the badge art is 48px in `main` pending the next
+   recreate.
+3. Production delta waits only on the owner greenlight: ops deploys the
+   combined delta (88 -> 151) + `eco-v0.1.1`, then the batch is verified as
+   `eco-v0.1.0`.
+4. Next registry work: section 13 listing phases (pagination, compact rows,
+   facets, search tolerance) then phase 3 CommonMark rendering, or phase 3
+   review/report flows (flagged state, reviewer role) if the owner prefers.
