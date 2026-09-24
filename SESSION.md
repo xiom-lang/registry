@@ -1054,7 +1054,6 @@ user-facing releases, publish `release.json` at
 tell the website lane; they render it wherever registry releases are linked.
 Not scheduled -- the registry has no tagged release process or notes today.
 Serving options when it happens: static files via nginx or a registry route.
-
 Website optional ask (correlation): keep the published `xiom.std` metadata
 carrying the toolchain tag it is pinned to. The registry already accepts and
 preserves a `compiler` field on version entries (`src/app.js` publish
@@ -1066,3 +1065,42 @@ can set it. `xiom-std@0.61.3` has no `compiler` value today. Package-level
 metadata (description, license, categories, keywords, repository) is intact
 on both instances; the version endpoint intentionally keeps only
 version-scoped fields.
+
+---
+
+## 15. Accounts, review and sponsorship (direction, discuss later)
+
+Ownership today: the registry has no accounts. A package is keyed by name;
+who may publish a version is decided by the scopes on static tokens, and
+first-party repos publish through OIDC trusted-publisher entries. For OIDC
+publishes the repository/workflow/ref are verified claims; for static tokens
+the manifest `repository` field is self-asserted. Co-maintainers share a
+package by sharing scope coverage (operator-issued tokens); the durable
+"ownership" model is graduation to a repo plus a per-repo OIDC entry, where
+GitHub repo permissions define the team. Takeover is an operator token action
+today, a repo move later.
+
+Accounts phase (after the section 13/14 work), if we build it:
+1. GitHub OAuth login, read-only: link an identity to maintainership for
+   display (maintainer lists, claimed packages) -- no publishing powers.
+2. Self-service requests with admin approval: request a token (replacing the
+   issue-template + e-mail flow) or a trusted-publisher entry for a repo; an
+   admin approves; every action is recorded. The trusted-publishers file
+   becomes a store with an audit log.
+3. Reviewer role and community moderation: report/abuse flow, a `verified`
+   flag set by reviewers (pairs with the four status badges), and a public
+   review history per package.
+4. Sponsorship and contributors: GitHub Sponsors status and publish-history
+   contributors on package pages, opt-in; leaderboards only over reviewed
+   packages so volume is not rewarded blindly.
+
+Guardrails if we build it:
+- A browser session is never a publish credential. Publishing stays OIDC
+  (CI) or a scoped token; the UI only requests/rotates/revokes.
+- Avoid platform-held signing keys for community packages: "signed by the
+  platform" is a different trust claim. Platform keys only for clearly
+  labeled bots/canaries, if ever.
+- Roles: admin (token/publisher approval, yank), reviewer (verify/report),
+  maintainer (claimed packages); every action audited.
+- This is a real subsystem (auth service, persistence, RBAC, UI) -- schedule
+  after the listing/readme roadmap, not before.
