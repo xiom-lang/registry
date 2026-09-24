@@ -800,7 +800,12 @@ archives and the VSIX, not registry packages, so it needs no entry.
 - Promotion test plan (2026-09-24, per m126 detail): the deterministic writer
   (sorted entries, mtime=SOURCE_DATE_EPOCH default 0, uid/gid 0, fixed modes,
   gzip MTIME 0/OS 255) and `publish --tarball <PATH>` (no re-pack, prints the
-  promoted SHA256) land with **v0.61.4** or a local build from main.
+  promoted SHA256) land with the **single combined compiler release** (no
+  intermediate tag; the owner is batching releases). Optional rehearsal before
+  then: build `xiom-pkg` from compiler main; it needs an authorization path for
+  production (a packages-workflow promote input, or an ops promote with a
+  static first-party token) -- the registry lane can verify but cannot
+  authorize production publishes.
   Test A (no workflow change): bump one package to a fresh version, dispatch to
   staging, then tag to production, and compare sha256/signature -- they should
   be identical. Test B (exact promotion): needs a promote path in the packages
