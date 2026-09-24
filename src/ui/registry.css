@@ -197,10 +197,10 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 .pkg-badge {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .pkg-title .pkg-badge-group { margin-left: auto; }
