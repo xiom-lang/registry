@@ -18,3 +18,6 @@ seed-index.local.json
 # Runtime registry state lives on the Docker volumes, never in git.
 data/
 packages/
+
+# Agent Manager UI state lives outside git.
+.kilo/
