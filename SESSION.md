@@ -1397,6 +1397,19 @@ exercise a real login round-trip (phase-2 prerequisite).
 - `eco-v0.1.1` = the combined 63-name delta (v4 43 + v5 20), one tag, one
   approval; production 88 -> 151.
 
+**Live status (2026-09-25, after the ops report and an external check)**:
+staging is v5 live (3 OIDC entries, 154 scopes, eco-canary 151) and the
+recreate carries the badge matrix + 36px art (verified externally: 83
+`pkg-badge-group` and 83 `width="36"` in the `Accept: text/html`
+`/packages` response). Server-side sign-in is verified from outside:
+`/login` renders the button, `/auth/github/start` 302s to GitHub with the
+staging client id and callback (GitHub accepts the app and shows its normal
+sign-in), and the callback refuses a bad state with 403. The remaining open
+item is one user-side round trip; production `/login` is still 404 until
+the production recreate is greenlit (test staging only). The wave 16/17
+dispatch is not blocked by sign-in: OIDC publishing never uses browser
+sessions.
+
 **Ordered next actions**:
 
 1. Owner: staging rebuild + recreate (badges + v5 + OAuth) and confirm
