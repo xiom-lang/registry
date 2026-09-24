@@ -1124,22 +1124,34 @@ the fallback for both request types. The GitHub token-request template stays
 as the parallel, dev-signed path; the platform front door is the community
 (social-style) path.
 
-**Status icon set (owner, 2026-09-24).** Four are live (official,
-community trusted, staging, unsigned). The unsigned art reads as a red alert,
-so it becomes `flagged` and a neutral unsigned icon is generated. Art to
-produce (same square webp style, ideally ~64 px):
-1. `pgk_unsigned.webp` -- replacement, neutral/muted "no signature".
-2. `pgk_flagged.webp` -- the red-alert art: moderation flag / abuse report
-   (phase 3).
-3. `pgk_verified.webp` -- checkmark/shield: reviewer-verified (phase 3).
-4. `pgk_deprecated.webp` -- muted: sunset package (needs a metadata source).
-5. `pgk_yanked.webp` -- withdrawn: every version yanked (computable today).
-6. `pgk_prerelease.webp` -- optional: latest is a pre-release (computable
-   today; the version string already shows it).
-Precedence proposal (one badge per package, reorderable in one function):
-flagged > yanked > staging > deprecated > official > verified >
-community-trusted > unsigned. Only deprecated needs new metadata (a manifest
-or operator field); the rest are derivable from the current index.
+**Status icon set v2 (owner, 2026-09-24 evening).** The owner replaced the
+first four with a state x track matrix: 14 files, `pgk_<state>_<track>.webp`
+with states unsigned, verified, deprecated, yanked, prerelease, incubator,
+flagged and tracks official, community. Three names were normalized on
+receipt (`pkg_unsigned_*` -> `pgk_unsigned_*`, `pgk_flagged_comm_community`
+-> `pgk_flagged_community`). Live files: see `src/ui/assets`. Each is ~50-61
+KB; a website-optimizer pass should still shrink them.
+
+Semantics decided here: `verified_*` is the current signature state (publisher
+signed the artifact) and is labelled "Signed by the publisher" in alt/title
+until a reviewer-verified state exists (then it gets its own distinct mark);
+`unsigned_*` is the neutral no-signature state; `flagged_*` is
+operator/reviewer-set only (phase 3, never publisher-declared); `yanked_*` is
+every version yanked; `prerelease_*` is a semver prerelease as the latest
+version; `incubator_*` and `deprecated_*` come from a new manifest field
+`stage: incubating|stable|deprecated` (registry-extracted from package.xi
+like categories, so no client change; the packages workflow can write it from
+STATUS.json so it cannot drift). The `staging` badge concept is dropped with
+this set (the staging instance is test data; `pgk_staging_*` can be added
+later if wanted).
+
+Precedence (one badge per package, reorderable in one function):
+flagged > yanked > deprecated > incubator > prerelease > signed(verified art)
+> unsigned; the track suffix is chosen by first-party namespace for now
+(optionally by recorded publisher firstParty later). Adding `stage` to the
+manifest needs the packages lane; the rest is registry-side. The old
+`official` / `community_trusted` / `staging` / `unsigned` text mapping is
+replaced when this is wired.
 
 **GitHub OAuth app (prep, not built).** Phase 2 needs one OAuth App per
 environment for sign-in only: org-owned preferred (xiom-lang org settings ->
@@ -1149,4 +1161,8 @@ Developer settings -> OAuth Apps). Production: homepage
 `staging.registry.xiom-lang.org`. Scope `read:user` (no repo access); the
 client secret goes into the VPS env stack as `GITHUB_OAUTH_CLIENT_ID` /
 `GITHUB_OAUTH_CLIENT_SECRET` (never in git). Separate staging and production
-apps so secrets do not cross.
+apps so secrets do not cross. Owner created both apps (2026-09-24):
+production client ID `Ov23liu5xt4IZ3F8xLCM`, staging
+`Ov23lifXHt8X3IDgdeZR`; secrets stay on the host, not in GitHub org secrets
+(the registry is not a workflow consumer; the VPS env stack is the home, and
+the secret is unused until phase 2 ships).
