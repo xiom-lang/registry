@@ -20,6 +20,9 @@ function start() {
     console.log(`  packages: ${config.packagesDir}`);
     console.log(`  tokens:   ${config.tokens.size} configured (${config.tokens.size === 0 ? 'publishing disabled' : 'publishing enabled'})`);
     console.log(`  publishers: ${config.publishers.length} OIDC ${config.publishers.length === 1 ? 'entry' : 'entries'} (JWTs are ${config.publishers.length === 0 ? 'refused (403)' : 'mapped by repository/workflow/ref'})`);
+    console.log(`  sign-in:  ${config.oauth.enabled
+      ? `GitHub OAuth enabled (${config.oauth.adminLogins.length} admin ${config.oauth.adminLogins.length === 1 ? 'login' : 'logins'})`
+      : 'GitHub OAuth disabled (sign-in and request queue hidden)'}`);
     console.log(`  packages indexed: ${Object.keys(index.packages).length}`);
     console.log(`  limits:   ${config.maxTarballBytes} byte tarballs, ${config.maxIndexPackages} packages`);
   });

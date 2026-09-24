@@ -29,6 +29,51 @@ function boolFromEnv(name, fallback) {
 }
 
 /**
+ * GitHub OAuth configuration for registry 2.0 sign-in (SESSION.md 15).
+ *
+ * Fail-fast rule: the client id and secret must be set together. A half-set
+ * pair (e.g. compose passing an empty secret while the id is present) is a
+ * misconfiguration that would silently break the login round-trip, so it must
+ * stop startup instead. Both unset = sign-in disabled, which is valid. The
+ * admin role is an operator allowlist of GitHub logins (case-insensitive);
+ * there is no stored role and no publishing power attached to it.
+ */
+function loadOAuthConfig() {
+  const clientId = typeof process.env.GITHUB_OAUTH_CLIENT_ID === 'string'
+    ? process.env.GITHUB_OAUTH_CLIENT_ID.trim()
+    : '';
+  const clientSecret = typeof process.env.GITHUB_OAUTH_CLIENT_SECRET === 'string'
+    ? process.env.GITHUB_OAUTH_CLIENT_SECRET.trim()
+    : '';
+  const adminLogins = (process.env.REGISTRY_ADMIN_LOGINS || '')
+    .split(',')
+    .map((login) => login.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (Boolean(clientId) !== Boolean(clientSecret)) {
+    throw new Error(
+      'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET must be set together '
+      + '(empty secret with a configured client id = broken sign-in); unset both to disable sign-in',
+    );
+  }
+  if (clientId && clientSecret.length < 16) {
+    throw new Error('GITHUB_OAUTH_CLIENT_SECRET is too short to be a GitHub client secret');
+  }
+
+  return {
+    enabled: Boolean(clientId && clientSecret),
+    clientId,
+    clientSecret,
+    adminLogins,
+    scope: 'read:user',
+    // Upstream endpoints; tests point these at a local fake provider.
+    authorizeUrl: process.env.GITHUB_OAUTH_AUTHORIZE_URL || '',
+    tokenUrl: process.env.GITHUB_OAUTH_TOKEN_URL || '',
+    apiUrl: process.env.GITHUB_OAUTH_API_URL || '',
+  };
+}
+
+/**
  * Load publish tokens.
  *
  * Precedence:
@@ -146,6 +191,10 @@ function loadConfig() {
     packagesDir,
     uploadTmpDir,
     indexPath: path.join(dataDir, 'index.json'),
+    // Registry 2.0 identity + request queue (display data only, no secrets).
+    accountsPath: process.env.ACCOUNTS_FILE || path.join(dataDir, 'accounts.json'),
+    requestsPath: process.env.REQUESTS_FILE || path.join(dataDir, 'requests.json'),
+    oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get
     // 403); malformed config throws here so startup fails loudly.
@@ -162,6 +211,8 @@ function loadConfig() {
     maxVersionsPerPackage,
     maxManifestBytes,
     maxDecompressedBytes,
+    maxAccountsBytes: intFromEnv('MAX_ACCOUNTS_BYTES', 2 * MIB),
+    maxRequestsBytes: intFromEnv('MAX_REQUESTS_BYTES', 4 * MIB),
     rateLimit: {
       disabled: rateLimitDisabled,
       general: {
@@ -191,6 +242,19 @@ function validateConfig(config) {
     console.warn(
       'xiom-registry: no TOKENS_FILE and no API_KEY configured; '
       + 'publishing is disabled (all publish requests will get 401)',
+    );
+  }
+  if (config.oauth.adminLogins.length > 0 && !config.oauth.enabled) {
+    console.warn(
+      'xiom-registry: REGISTRY_ADMIN_LOGINS is set but GitHub OAuth is disabled; '
+      + 'the admin approval queue will be unreachable (set GITHUB_OAUTH_CLIENT_ID and '
+      + 'GITHUB_OAUTH_CLIENT_SECRET, or unset REGISTRY_ADMIN_LOGINS)',
+    );
+  }
+  if (config.oauth.enabled && config.oauth.adminLogins.length === 0) {
+    console.warn(
+      'xiom-registry: GitHub OAuth is enabled but REGISTRY_ADMIN_LOGINS is empty; '
+      + 'nobody can approve requests (sign-in still works)',
     );
   }
   if (config.maxTarballBytes <= 0) {

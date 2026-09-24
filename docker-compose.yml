@@ -47,6 +47,13 @@ services:
       # Set TRUST_PROXY=1 when running behind the Hestia nginx vhost so the
       # rate limiter sees client IPs from X-Forwarded-For.
       - TRUST_PROXY=${TRUST_PROXY:-0}
+      # Registry 2.0 sign-in (identity only; never a publish credential).
+      # Set both or neither: an id with an empty secret fails startup on
+      # purpose, so a half-passed pair can never silently break the login.
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET:-}
+      # Comma-separated GitHub logins allowed to decide/fulfil requests.
+      - REGISTRY_ADMIN_LOGINS=${REGISTRY_ADMIN_LOGINS:-}
     security_opt:
       - no-new-privileges:true
     # Drop all capabilities; the service needs none.
@@ -102,6 +109,10 @@ services:
       - TRUSTED_PUBLISHERS_FILE=${XIOM_STAGING_TRUSTED_PUBLISHERS_FILE:-/etc/xiom-registry/staging/trusted-publishers.json}
       - REGISTRY_URL=${XIOM_STAGING_REGISTRY_URL:-https://staging.registry.xiom-lang.org}
       - TRUST_PROXY=${TRUST_PROXY:-0}
+      # Separate OAuth app per environment; both values or neither.
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET:-}
+      - REGISTRY_ADMIN_LOGINS=${REGISTRY_ADMIN_LOGINS:-}
     security_opt:
       - no-new-privileges:true
     cap_drop:

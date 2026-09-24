@@ -117,3 +117,64 @@ test('invalid numeric limits fail fast', () => {
     assert.throws(() => loadConfig(), /MAX_TARBALL_BYTES/);
   });
 });
+
+test('oauth: both unset disables sign-in', () => {
+  withEnv({
+    TOKENS_FILE: undefined,
+    API_KEY: 'k',
+    GITHUB_OAUTH_CLIENT_ID: undefined,
+    GITHUB_OAUTH_CLIENT_SECRET: undefined,
+    REGISTRY_ADMIN_LOGINS: undefined,
+  }, () => {
+    const config = loadConfig();
+    assert.equal(config.oauth.enabled, false);
+    assert.deepEqual(config.oauth.adminLogins, []);
+    assert.equal(config.oauth.scope, 'read:user');
+  });
+});
+
+test('oauth: a half-set pair fails startup (empty secret included)', () => {
+  withEnv({
+    TOKENS_FILE: undefined,
+    API_KEY: 'k',
+    GITHUB_OAUTH_CLIENT_ID: 'Ov23liTEST',
+    GITHUB_OAUTH_CLIENT_SECRET: '',
+  }, () => {
+    assert.throws(() => loadConfig(), /must be set together/);
+  });
+  withEnv({
+    TOKENS_FILE: undefined,
+    API_KEY: 'k',
+    GITHUB_OAUTH_CLIENT_ID: '',
+    GITHUB_OAUTH_CLIENT_SECRET: 'a-valid-looking-secret',
+  }, () => {
+    assert.throws(() => loadConfig(), /must be set together/);
+  });
+});
+
+test('oauth: a full pair enables sign-in and normalizes admins', () => {
+  withEnv({
+    TOKENS_FILE: undefined,
+    API_KEY: 'k',
+    GITHUB_OAUTH_CLIENT_ID: 'Ov23liTEST',
+    GITHUB_OAUTH_CLIENT_SECRET: '0123456789abcdef0123456789abcdef01234567',
+    REGISTRY_ADMIN_LOGINS: 'LefterisNotas, alice ',
+  }, () => {
+    const config = loadConfig();
+    assert.equal(config.oauth.enabled, true);
+    assert.deepEqual(config.oauth.adminLogins, ['lefterisnotas', 'alice']);
+    assert.equal(config.accountsPath.endsWith('accounts.json'), true);
+    assert.equal(config.requestsPath.endsWith('requests.json'), true);
+  });
+});
+
+test('oauth: a too-short secret fails fast', () => {
+  withEnv({
+    TOKENS_FILE: undefined,
+    API_KEY: 'k',
+    GITHUB_OAUTH_CLIENT_ID: 'Ov23liTEST',
+    GITHUB_OAUTH_CLIENT_SECRET: 'short',
+  }, () => {
+    assert.throws(() => loadConfig(), /too short/);
+  });
+});
