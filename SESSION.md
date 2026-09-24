@@ -1112,3 +1112,12 @@ Guardrails if we build it:
   maintainer (claimed packages); every action audited.
 - This is a real subsystem (auth service, persistence, RBAC, UI) -- schedule
   after the listing/readme roadmap, not before.
+
+**Additive guarantee (agreed 2026-09-24):** the proven path stays exactly as
+it is -- publishers sign with their own keys, OIDC/static-token publishing,
+immutability, yank, and the trusted-publishers loader contract are untouched.
+Phase 2 only adds a request/approval front door: requests are GitHub-OAuth
+identified, the host mints and mails tokens, and trusted-publisher approvals
+write entries in the same format (with an audit log). Existing publishers see
+zero difference, and the manual issue-template/ops flow remains available as
+the fallback for both request types.
