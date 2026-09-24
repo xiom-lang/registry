@@ -1165,4 +1165,21 @@ apps so secrets do not cross. Owner created both apps (2026-09-24):
 production client ID `Ov23liu5xt4IZ3F8xLCM`, staging
 `Ov23lifXHt8X3IDgdeZR`; secrets stay on the host, not in GitHub org secrets
 (the registry is not a workflow consumer; the VPS env stack is the home, and
-the secret is unused until phase 2 ships).
+the secret is unused until phase 2 ships). Ops stored one client ID + one
+non-empty secret per environment in `/opt/xiom/registry/.env` and
+`.env.staging` (0600, in the restic source list, values never printed; an
+earlier empty production secret was replaced), no recreate. **Open: the owner
+must verify both apps' callback URLs** --
+`https://registry.xiom-lang.org/auth/github/callback` and
+`https://staging.registry.xiom-lang.org/auth/github/callback`. Phase-2
+implementation note from the incident: the app must fail fast (refuse to
+start or log loudly) when OAuth is configured with an empty secret, and the
+first deploy must exercise a real login round-trip.
+
+Badge matrix status (2026-09-24): wired to the 15-file state x track set,
+including `trusted_community` for OIDC-published community packages (star +
+`trusted`/`signed` pills) and the mirrored shield for publisher-signed
+packages; `pgk_trusted_official` deliberately absent. The server now accepts
+and persists a manifest `stage: incubating|stable|deprecated` (1db298d,
+extracted like categories, unknown values warned), so the incubator and
+deprecated badges light up as soon as the packages lane publishes the field.
