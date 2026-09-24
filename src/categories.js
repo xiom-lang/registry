@@ -64,6 +64,24 @@ const MAX_KEYWORDS = 10;
 const MAX_KEYWORD_LENGTH = 32;
 const KEYWORD_PATTERN = /^[a-z0-9][a-z0-9.+#-]*$/;
 
+/** Package maturity stages a manifest may declare (drives UI badges). */
+const STAGES = Object.freeze(['incubating', 'stable', 'deprecated']);
+
+/**
+ * Normalize the manifest's optional `stage:` value. Unknown values are
+ * ignored and surfaced to the publisher as a warning, like categories.
+ *
+ * @param {unknown} raw
+ * @returns {{ stage: string, unknown: string }}
+ */
+function normalizeStage(raw) {
+  if (typeof raw !== 'string') return { stage: '', unknown: '' };
+  const cleaned = raw.trim().toLowerCase();
+  if (cleaned === '') return { stage: '', unknown: '' };
+  if (STAGES.includes(cleaned)) return { stage: cleaned, unknown: '' };
+  return { stage: '', unknown: cleaned };
+}
+
 /** True when `name` is a canonical category. */
 function isCategory(name) {
   return CATEGORIES.includes(name);
@@ -118,12 +136,15 @@ function normalizeKeywords(raw) {
 /** Package-level metadata extracted from a manifest and normalized. */
 function normalizePackageMetadata(manifest) {
   const { categories, unknown } = normalizeCategories(manifest.categories);
+  const { stage, unknown: unknownStage } = normalizeStage(manifest.stage);
   return {
     categories,
     unknownCategories: unknown,
     keywords: normalizeKeywords(manifest.keywords),
     license: stringOrEmpty(manifest.license).slice(0, 64),
     repository: stringOrEmpty(manifest.repository).slice(0, 512),
+    stage,
+    unknownStage,
   };
 }
 
@@ -153,9 +174,11 @@ function stringOrEmpty(value) {
 module.exports = {
   CATEGORIES,
   ALIASES,
+  STAGES,
   isCategory,
   normalizeCategories,
   normalizeKeywords,
+  normalizeStage,
   normalizePackageMetadata,
   categoryCounts,
   MAX_CATEGORIES,

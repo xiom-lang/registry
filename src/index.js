@@ -169,6 +169,7 @@ class IndexStore {
         license: metadata.license || '',
         categories: Array.isArray(metadata.categories) ? metadata.categories : [],
         keywords: Array.isArray(metadata.keywords) ? metadata.keywords : [],
+        stage: typeof metadata.stage === 'string' ? metadata.stage : '',
         versions: versionsMap,
         latest: metadata.version,
       };
@@ -255,6 +256,9 @@ function mergePackageMetadata(pkg, metadata) {
   if (Array.isArray(metadata.keywords) && metadata.keywords.length > 0) {
     next.keywords = metadata.keywords;
   }
+  if (typeof metadata.stage === 'string' && metadata.stage) {
+    next.stage = metadata.stage;
+  }
   return next;
 }
 
@@ -322,6 +326,7 @@ function normalizeIndex(parsed, registryUrl = '') {
       license: typeof rawPkg.license === 'string' ? rawPkg.license : '',
       categories: stringArray(rawPkg.categories),
       keywords: stringArray(rawPkg.keywords),
+      stage: typeof rawPkg.stage === 'string' ? rawPkg.stage : '',
       versions: {},
       latest: typeof rawPkg.latest === 'string' ? rawPkg.latest : '',
     };

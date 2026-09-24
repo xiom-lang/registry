@@ -12,6 +12,7 @@ const path = require('path');
 const tar = require('tar');
 
 const { parseManifest, extractManifest } = require('../src/manifest');
+const { normalizePackageMetadata, STAGES } = require('../src/categories');
 
 test('parses a plain manifest', () => {
   const parsed = parseManifest([
@@ -65,6 +66,28 @@ test('parses categories, keywords, license, and repository', () => {
   assert.equal(parsed.repository, 'https://github.com/xiom-packages/packages');
 });
 
+test('parses the optional stage and normalizes it', () => {
+  const manifest = `package staged {
+  name: "staged";
+  version: "0.1.0";
+  stage: "incubating";
+}`;
+  const parsed = parseManifest(manifest);
+  assert.equal(parsed.stage, 'incubating');
+
+  const good = normalizePackageMetadata(parsed);
+  assert.equal(good.stage, 'incubating');
+  assert.equal(good.unknownStage, '');
+
+  const unknown = normalizePackageMetadata({ ...parsed, stage: 'beta' });
+  assert.equal(unknown.stage, '', 'unknown stages are ignored');
+  assert.equal(unknown.unknownStage, 'beta', 'and surfaced for a publish warning');
+
+  const empty = normalizePackageMetadata({ name: 'x', stage: undefined });
+  assert.equal(empty.stage, '');
+  assert.deepEqual(STAGES, ['incubating', 'stable', 'deprecated']);
+});
+
 test('parses multiline categories and keywords arrays', () => {
   const parsed = parseManifest([
     'name: "d";',
@@ -110,7 +133,7 @@ test('parses multiline deps with comma-containing specs', () => {
 test('handles an empty or fieldless manifest', () => {
   assert.deepEqual(parseManifest(''), {
     name: '', version: '', description: '', dependencies: {},
-    categories: [], keywords: [], license: '', repository: '',
+    categories: [], keywords: [], license: '', repository: '', stage: '',
   });
   assert.deepEqual(
     parseManifest('// only a comment').dependencies,

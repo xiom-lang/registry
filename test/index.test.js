@@ -125,6 +125,7 @@ test('normalizeIndex upgrades legacy shapes', () => {
       legacy: { name: 'legacy', versions: ['1.0.0', '0.9.0'], latest: '9.9.9' },
       seeded: {
         name: 'seeded',
+        stage: 'incubating',
         versions: {
           '0.1.0': { version: '0.1.0', publickey: 'AB'.repeat(32), dependencies: [] },
         },
@@ -137,6 +138,8 @@ test('normalizeIndex upgrades legacy shapes', () => {
   assert.equal(index.packages.legacy.versions['1.0.0'].sha256, '');
   assert.equal(index.packages.seeded.versions['0.1.0'].publicKey, 'ab'.repeat(32));
   assert.deepEqual(index.packages.seeded.versions['0.1.0'].dependencies, {});
+  assert.equal(index.packages.seeded.stage, 'incubating', 'package stage survives reload');
+  assert.equal(index.packages.legacy.stage, '', 'missing stage normalizes to empty');
 });
 
 test('computeLatest ignores invalid semver', () => {

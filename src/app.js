@@ -40,7 +40,7 @@ const {
   isValidPublicKeyHex,
 } = require('./signatures');
 const { extractManifest } = require('./manifest');
-const { normalizePackageMetadata, categoryCounts, CATEGORIES } = require('./categories');
+const { normalizePackageMetadata, categoryCounts, CATEGORIES, STAGES } = require('./categories');
 const { wantsHtml } = require('./ui/negotiate');
 const {
   homePage,
@@ -705,6 +705,7 @@ function publish(req, { config, indexStore, artifacts, token }) {
     ...(packageMeta.repository ? { repository: packageMeta.repository } : {}),
     ...(packageMeta.categories.length > 0 ? { categories: packageMeta.categories } : {}),
     ...(packageMeta.keywords.length > 0 ? { keywords: packageMeta.keywords } : {}),
+    ...(packageMeta.stage ? { stage: packageMeta.stage } : {}),
   };
   if (typeof req.body?.compiler === 'string' && req.body.compiler) {
     metadata.compiler = req.body.compiler.slice(0, 64);
@@ -721,6 +722,11 @@ function publish(req, { config, indexStore, artifacts, token }) {
   if (packageMeta.categories.length === 0) {
     warnings.push(
       `no categories declared; add 1-3 from the registry vocabulary in package.xi: ${CATEGORIES.join(', ')}`,
+    );
+  }
+  if (packageMeta.unknownStage) {
+    warnings.push(
+      `unknown stage "${packageMeta.unknownStage}" ignored; valid stages: ${STAGES.join(', ')}`,
     );
   }
 

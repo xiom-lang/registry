@@ -139,6 +139,7 @@ function parseManifest(text) {
     keywords: [],
     license: '',
     repository: '',
+    stage: '',
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -155,6 +156,8 @@ function parseManifest(text) {
     if (license !== null) { fields.license = license; continue; }
     const repository = readField(line, 'repository:');
     if (repository !== null) { fields.repository = repository; continue; }
+    const stage = readField(line, 'stage:');
+    if (stage !== null) { fields.stage = stage; continue; }
 
     // Array-valued metadata: inline (`categories: ["graphics"];`) or
     // multiline blocks. Values are normalized by src/categories.js.
