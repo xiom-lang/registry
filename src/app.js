@@ -708,6 +708,14 @@ function publish(req, { config, indexStore, artifacts, token }) {
   const warnings = packageMeta.unknownCategories.map(
     (category) => `unknown category "${category}" ignored; valid categories: ${CATEGORIES.join(', ')}`,
   );
+  // A package without categories is invisible on /categories and the category
+  // facets. Warn at publish time so the gap is fixed at the source (the
+  // packages lane owns the manifests); nothing blocks the publish.
+  if (packageMeta.categories.length === 0) {
+    warnings.push(
+      `no categories declared; add 1-3 from the registry vocabulary in package.xi: ${CATEGORIES.join(', ')}`,
+    );
+  }
 
   // Move the artifact into place, then index it. If indexing fails (e.g. a
   // race lost to a concurrent publish), remove the artifact again.

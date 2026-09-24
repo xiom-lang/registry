@@ -259,6 +259,17 @@ test('republish is 409 with immutable-version code', async () => {
   assert.equal((await second.json()).code, 'version_exists');
 });
 
+test('publishing without categories warns and still succeeds', async () => {
+  const bare = await publishForm({
+    name: 'no-categories-pkg', version: '0.1.0', bytes: tarballBytes('no-categories'),
+  });
+  assert.equal(bare.status, 201, await bare.clone().text());
+  const body = await bare.json();
+  assert.ok(Array.isArray(body.warnings), 'warnings are returned to the publisher');
+  assert.ok(body.warnings.some((w) => w.includes('no categories declared')), 'the gap is surfaced at publish time');
+  assert.ok(body.warnings.some((w) => w.includes('core, data, database')), 'the warning names the vocabulary');
+});
+
 test('compiler metadata is stored and served per version', async () => {
   const bytes = tarballBytes('compiler-meta');
   const published = await publishForm({
