@@ -777,14 +777,16 @@ archives and the VSIX, not registry packages, so it needs no entry.
   backstop. When `.github/allowlist-baseline.txt` is empty (or every allowed
   name is stable+pass), the registry lane pushes `eco-v0.1.0`; the batch then
   publishes exactly the verified set. The batch tag is on hold until then.
-- Known limitation (open, compiler lane): `xiom pkg publish` re-packs the
-  package, so the published tarball is not byte-identical to the release
-  asset nor across runs (staging 1,064,002 B / e488e803 vs production
-  1,063,776 B / 1ad1b33a from the same 1,063,898 B asset; gzip/tar
-  non-determinism). Canaries prove the auth/mapping/provenance path, not byte
-  promotion; each publish is still independently digest-verified and signed.
-  Future options: deterministic packing (SOURCE_DATE_EPOCH) or a
-  publish-existing-tarball mode.
+- Repack/canary policy (updated 2026-09-23, stdlib relay): `xiom pkg publish`
+  still re-packs, but the stdlib release assets are now **deterministic**, so
+  regenerating an asset is byte-stable and re-runs do not change it. Rule:
+  re-canary after any asset regeneration or change to the release packing;
+  the canary validates the auth/mapping/provenance path and the publish-time
+  signature, not byte promotion from the asset. Published bytes remain a
+  repack (before determinism: staging e488e803/1,064,002 B vs production
+  1ad1b33a/1,063,776 B from the same 1,063,898 B input), so byte-identical
+  staging-to-production promotion still needs deterministic client packing or
+  a publish-existing-tarball mode (compiler lane, optional).
 
 **Open owner decisions (2026-09-21):**
 
