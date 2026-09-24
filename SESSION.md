@@ -1174,6 +1174,14 @@ STATUS.json so it cannot drift). The `staging` badge concept is dropped with
 this set (the staging instance is test data; `pgk_staging_*` can be added
 later if wanted).
 
+`incubator` is **project maturity** (API may change, still being ported),
+declared once per package; `prerelease` is a **version fact** (the resolved
+latest is a semver pre-release like `1.0.0-rc.1`). They are orthogonal: an
+incubating package can ship plain `0.x` versions, and a stable package can
+ship a beta. Precedence puts incubator above prerelease, so an incubating
+package with an rc latest shows the incubator art; the version string still
+shows the rc and the versions table carries the per-version signature state.
+
 Precedence (one badge per package, reorderable in one function):
 flagged > yanked > deprecated > incubator > prerelease > signed(verified art)
 > unsigned; the track suffix is chosen by first-party namespace for now
