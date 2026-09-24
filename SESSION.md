@@ -794,9 +794,33 @@ archives and the VSIX, not registry packages, so it needs no entry.
   yet. Once a compiler release contains it: bump the packages
   `COMPILER_VERSION`, bump one package to a new version (versions are
   immutable, so a fresh version is required), publish it to staging, then
-  publish it to production via its per-package tag, and compare sha256 +
+  publish it to production via its per-package tag,   and compare sha256 +
   signature across the two instances -- they should be identical now, or use
   the promote mode to ship the exact staging bytes.
+- Promotion test plan (2026-09-24, per m126 detail): the deterministic writer
+  (sorted entries, mtime=SOURCE_DATE_EPOCH default 0, uid/gid 0, fixed modes,
+  gzip MTIME 0/OS 255) and `publish --tarball <PATH>` (no re-pack, prints the
+  promoted SHA256) land with **v0.61.4** or a local build from main.
+  Test A (no workflow change): bump one package to a fresh version, dispatch to
+  staging, then tag to production, and compare sha256/signature -- they should
+  be identical. Test B (exact promotion): needs a promote path in the packages
+  workflow (`publish --tarball` on the staged artifact) or a manual ops promote
+  with a static token; then production must serve byte-for-byte the staging
+  tarball. Registry side needs no change for either.
+- Stdlib release jobs should set `SOURCE_DATE_EPOCH` (fixed) when they build
+  the release asset so regeneration is byte-stable; the packages publishes go
+  through the now-deterministic client writer, so no job change is needed
+  there. Registry side has nothing to set.
+- Naming alignment (compiler finds `xiom-std` published vs canonical
+  `xiom.std`): the registry has **no aliasing/rename** -- both names are valid
+  reserves and would be separate packages. Recommended: `xiom.std` becomes the
+  canonical name (matches ecosystem manifest deps and the client's canonical
+  name); the `xiom-std` series is frozen at its last published version and the
+  client maps `xiom-std` to `xiom.std` as a legacy alias; stdlib publishes
+  dotted from the rename onward (scope already allows both). `xiom.std` is
+  expected to stay a platform dependency (excluded from the registry closure
+  by the client); if it should become installable, only the client gating
+  changes -- the registry already accepts it. Owner confirmation pending.
 
 **Open owner decisions (2026-09-21):**
 
