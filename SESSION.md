@@ -818,14 +818,14 @@ archives and the VSIX, not registry packages, so it needs no entry.
   there. Registry side has nothing to set.
 - Naming alignment (compiler finds `xiom-std` published vs canonical
   `xiom.std`): the registry has **no aliasing/rename** -- both names are valid
-  reserves and would be separate packages. Recommended: `xiom.std` becomes the
-  canonical name (matches ecosystem manifest deps and the client's canonical
-  name); the `xiom-std` series is frozen at its last published version and the
-  client maps `xiom-std` to `xiom.std` as a legacy alias; stdlib publishes
-  dotted from the rename onward (scope already allows both). `xiom.std` is
-  expected to stay a platform dependency (excluded from the registry closure
-  by the client); if it should become installable, only the client gating
-  changes -- the registry already accepts it. Owner confirmation pending.
+  reserves and would be separate packages. **Owner confirmed 2026-09-24:**
+  `xiom.std` (dotted) is canonical -- stdlib publishes dotted from the rename
+  onward, the `xiom-std` series stays frozen at its last published version,
+  and the client maps `xiom-std` to `xiom.std` as a legacy alias (scope
+  already allows both; no registry config change). `xiom.std` **remains a
+  platform dependency** (excluded from the registry closure by the client);
+  the registry still accepts its publications for provenance/docs, and making
+  it installable later would be a client-only gating change.
 
 **Open owner decisions (2026-09-21):**
 
