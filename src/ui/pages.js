@@ -87,7 +87,7 @@ function packageBadge(name, pkg) {
     .join('');
   return `<span class="pkg-badge-group"><img class="pkg-badge" src="/ui/${badge.file}"`
     + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
-    + ` width="36" height="36" loading="lazy" decoding="async">${pills}</span>`;
+    + ` width="48" height="48" loading="lazy" decoding="async">${pills}</span>`;
 }
 
 /** Clickable category chips (registry-owned vocabulary, so always safe). */

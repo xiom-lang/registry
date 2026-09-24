@@ -181,7 +181,7 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 .package-card .pkg-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);
 }
@@ -197,10 +197,10 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 .pkg-badge {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .pkg-title .pkg-badge-group { margin-left: auto; }
@@ -211,7 +211,7 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 /* ---------- Package page ---------- */
 
-.pkg-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-md); }
+.pkg-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-md); }
 .pkg-title .version { color: var(--muted); font-family: var(--font-mono); font-size: 15px; }
 
 .badges { display: inline-flex; gap: var(--space-sm); }
