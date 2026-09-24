@@ -382,9 +382,11 @@ test('package status badges pick one art file per package and serve the matrix',
   // First-party fixture is unsigned: official track, unsigned state.
   assert.match(html, /\/packages\/xiom\.official-fixture[\s\S]{0,400}src="\/ui\/pgk_unsigned_official\.webp"/);
   assert.match(html, /src="\/ui\/pgk_unsigned_official\.webp"[^>]*alt="Official package, unsigned"/);
-  // Signed latest version: community track, verified (publisher-signed) state.
+  // Signed latest version: community track, verified (publisher-signed) state,
+  // with the explicit "signed" pill beside the icon.
   assert.match(html, /\/packages\/signed-pkg[\s\S]{0,400}src="\/ui\/pgk_verified_community\.webp"/);
   assert.match(html, /title="Signed by the publisher"/);
+  assert.match(html, /src="\/ui\/pgk_verified_community\.webp"[\s\S]{0,200}class="badge signed">signed</);
   // Unsigned community packages.
   assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
   assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);

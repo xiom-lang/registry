@@ -71,8 +71,15 @@ function packageBadgeState(name, pkg) {
 
 function packageBadge(name, pkg) {
   const badge = packageBadgeState(name, pkg);
-  return `<img class="pkg-badge" src="/ui/${badge.file}" alt="${escapeHtml(badge.label)}"`
-    + ` title="${escapeHtml(badge.label)}" width="28" height="28" loading="lazy" decoding="async">`;
+  // Trust claims stay explicit in words, not only in art: a signed package
+  // gets a visible "signed" pill next to the status icon (reviewed-by-XIOM
+  // gets its own distinct pill when that state exists).
+  const pill = badge.file.includes('_verified_')
+    ? '<span class="badge signed">signed</span>'
+    : '';
+  return `<span class="pkg-badge-group"><img class="pkg-badge" src="/ui/${badge.file}"`
+    + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
+    + ` width="28" height="28" loading="lazy" decoding="async">${pill}</span>`;
 }
 
 /** Clickable category chips (registry-owned vocabulary, so always safe). */

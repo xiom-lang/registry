@@ -186,17 +186,24 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   gap: var(--space-sm) var(--space-md);
 }
 
-/* Package status badge art (owner-supplied webp): one per package, right side. */
+/* Package status badge art (owner-supplied webp matrix): one icon per
+   package on the right, with an explicit trust pill beside it when signed. */
+.pkg-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
 .pkg-badge {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  margin-left: auto;
   object-fit: contain;
   border-radius: 6px;
 }
 
-.pkg-title .pkg-badge { margin-left: auto; align-self: center; }
+.pkg-title .pkg-badge-group { margin-left: auto; }
 .package-card .pkg-name { font-size: 17px; font-weight: 600; color: var(--paper); }
 .package-card .pkg-version { color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
 .package-card .pkg-desc { color: var(--paper-dim); margin-top: 4px; font-size: 14px; }
