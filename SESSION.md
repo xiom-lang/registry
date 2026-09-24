@@ -1058,8 +1058,11 @@ Serving options when it happens: static files via nginx or a registry route.
 Website optional ask (correlation): keep the published `xiom.std` metadata
 carrying the toolchain tag it is pinned to. The registry already accepts and
 preserves a `compiler` field on version entries (`src/app.js` publish
-metadata), so the stdlib lane only needs to pass it at publish time;
-`xiom-std@0.61.3` currently has no `compiler` value. Package-level metadata
-(description, license, categories, keywords, repository) is intact on both
-instances; the version endpoint intentionally keeps only version-scoped
-fields.
+metadata), but the **client does not send it yet**: `xiom pkg publish` uploads
+only `name`, `version`, `signature`, `publicKey` (verified in
+`crates/xiom-pkg/src/main.rs`), so the compiler lane must add the field (e.g.
+a manifest `compiler:` value or a `--compiler` flag) before the stdlib lane
+can set it. `xiom-std@0.61.3` has no `compiler` value today. Package-level
+metadata (description, license, categories, keywords, repository) is intact
+on both instances; the version endpoint intentionally keeps only
+version-scoped fields.
