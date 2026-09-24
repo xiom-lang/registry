@@ -47,8 +47,8 @@ function loginPage({ enabled, error = '', nav = '' }) {
     ? `<section class="hero">
   <h1>Sign in</h1>
   <p>Sign in with GitHub to request a publish token or a trusted-publisher entry.
-     The registry reads your public profile (<code>read:user</code>) and links it to
-     your requests; it never gains access to your repositories, and a browser
+     You will be redirected to GitHub; the registry reads only your public
+     profile (<code>read:user</code>), never your repositories, and a browser
      session can never publish.</p>
 </section>
 ${noticeBox('', error ? 'Sign-in failed or was cancelled. Try again.' : '')}
@@ -57,6 +57,9 @@ ${noticeBox('', error ? 'Sign-in failed or was cancelled. Try again.' : '')}
   <p class="pkg-meta">By signing in you agree to the
      <a href="https://xiom-lang.org/terms.html">Terms of Use</a> and
      <a href="https://xiom-lang.org/privacy.html">Privacy Policy</a>.</p>
+  <p class="pkg-meta">Publishing does not need sign-in:
+     <a href="/packages">browse packages</a> or read
+     <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">PUBLISHING.md</a>.</p>
 </div>`
     : `<section class="hero">
   <h1>Sign in</h1>
@@ -99,24 +102,30 @@ function accountPage({ account, requests, csrf, notice = '', error = '', form = 
       <small>Comma-separated. A namespace like <code>my-ns</code> covers
       <code>my-ns.*</code>; <code>*</code> is never granted from this form.</small>
     </label>
-    <label class="form-field publisher-field">
-      <span>Repository (owner/repo)</span>
-      <input name="repository" value="${escapeHtml(defaults.repository)}"
-        placeholder="alice/my-lib" autocomplete="off">
-      <small>Trusted-publisher requests only.</small>
-    </label>
-    <label class="form-field publisher-field">
-      <span>Workflow file</span>
-      <input name="workflow" value="${escapeHtml(defaults.workflow)}"
-        placeholder="publish.yml" autocomplete="off">
-      <small>Path under <code>.github/workflows/</code>; trusted-publisher requests only.</small>
-    </label>
-    <label class="form-field publisher-field">
-      <span>Refs</span>
-      <input name="refs" value="${escapeHtml(defaults.refs)}"
-        placeholder="refs/heads/main" autocomplete="off">
-      <small>Comma-separated refs that may publish; trusted-publisher requests only.</small>
-    </label>
+  </div>
+  <fieldset class="publisher-fields">
+    <legend>Trusted publisher details (only for a trusted-publisher request)</legend>
+    <div class="form-grid">
+      <label class="form-field">
+        <span>Repository (owner/repo)</span>
+        <input name="repository" value="${escapeHtml(defaults.repository)}"
+          placeholder="alice/my-lib" autocomplete="off">
+      </label>
+      <label class="form-field">
+        <span>Workflow file</span>
+        <input name="workflow" value="${escapeHtml(defaults.workflow)}"
+          placeholder="publish.yml" autocomplete="off">
+        <small>Path under <code>.github/workflows/</code>.</small>
+      </label>
+      <label class="form-field">
+        <span>Refs</span>
+        <input name="refs" value="${escapeHtml(defaults.refs)}"
+          placeholder="refs/heads/main" autocomplete="off">
+        <small>Comma-separated refs that may publish.</small>
+      </label>
+    </div>
+  </fieldset>
+  <div class="form-grid">
     <label class="form-field">
       <span>Note (optional)</span>
       <textarea name="note" rows="3" maxlength="500"
@@ -137,18 +146,25 @@ ${requests.map((record) => {
       <td class="mono">${escapeHtml(record.id)}</td>
       <td>${escapeHtml(kindLabel(record))}</td>
       <td class="mono">${escapeHtml(requestTarget(record))}</td>
-      <td>${statusPill(record.status)}</td>
+      <td>${statusPill(record.status)}${historyLine(record)}</td>
       <td>${escapeHtml(formatDate(updated))}</td>
     </tr>`;
   }).join('\n')}
   </tbody>
 </table>`;
 
-  const body = `<section class="hero">
-  <h1>@${escapeHtml(account.login)}</h1>
-  <div class="meta-row">
-    <span><a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">github.com/${escapeHtml(account.login)}</a></span>
-    <span>Signed in ${escapeHtml(formatDate(account.lastLoginAt))}</span>
+  const avatar = typeof account.avatarUrl === 'string' && account.avatarUrl.startsWith('https://')
+    ? `<img class="account-avatar" src="${escapeHtml(account.avatarUrl)}" alt=""`
+      + ' width="48" height="48" loading="lazy" referrerpolicy="no-referrer">'
+    : '';
+  const body = `<section class="hero account-hero">
+  ${avatar}
+  <div>
+    <h1>@${escapeHtml(account.login)}</h1>
+    <div class="meta-row">
+      <span><a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">github.com/${escapeHtml(account.login)}</a></span>
+      <span>Signed in ${escapeHtml(formatDate(account.lastLoginAt))}</span>
+    </div>
   </div>
 </section>
 ${noticeBox(notice, error)}
@@ -170,6 +186,15 @@ ${noticeBox(notice, error)}
   return layout({ title: `@${account.login}`, body, nav });
 }
 
+function historyLine(record) {
+  if (!Array.isArray(record.history) || record.history.length === 0) return '';
+  const parts = record.history.map((entry) => {
+    const note = entry.note ? ` (${entry.note})` : '';
+    return `${entry.action} by @${entry.actor || '?'}${note}`;
+  });
+  return `<p class="pkg-meta request-history">${escapeHtml(parts.join(' · '))}</p>`;
+}
+
 function pendingRow(record, csrf) {
   return `<li class="request-card">
   <div class="request-head">
@@ -181,9 +206,10 @@ function pendingRow(record, csrf) {
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
   ${record.note ? `<p class="pkg-desc">${escapeHtml(record.note)}</p>` : ''}
+  ${historyLine(record)}
   <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/decision">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-    <input name="note" placeholder="Decision note (optional)" maxlength="500">
+    <input name="note" placeholder="Decision note (required to deny)" maxlength="500" aria-label="Decision note">
     <button class="button primary" type="submit" name="action" value="approve">Approve</button>
     <button class="button danger" type="submit" name="action" value="deny">Deny</button>
   </form>
@@ -200,9 +226,10 @@ function approvedRow(record, csrf) {
       &middot; approved by @${escapeHtml(record.decidedBy || '?')} ${escapeHtml(formatDate(record.decidedAt))}</span>
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
+  ${historyLine(record)}
   <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/fulfil">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-    <input name="reference" placeholder="Fulfilment reference (e.g. label, mail date)" maxlength="500" required>
+    <input name="reference" placeholder="Fulfilment reference (e.g. label, mail date)" maxlength="500" required aria-label="Fulfilment reference">
     <button class="button primary" type="submit">Mark fulfilled</button>
   </form>
 </li>`;
@@ -218,6 +245,7 @@ function closedRow(record) {
     <span class="pkg-meta">@${escapeHtml(record.requester.login)} &middot; ${escapeHtml(formatDate(when))}${detail}</span>
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
+  ${historyLine(record)}
 </li>`;
 }
 

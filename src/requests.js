@@ -205,6 +205,10 @@ class RequestStore {
     const status = action === 'approve' ? 'approved' : 'denied';
     const now = new Date().toISOString();
     const decisionNote = clean(note, MAX_NOTE);
+    if (action === 'deny' && !decisionNote) {
+      // A denial without a reason is not auditable; ask for one.
+      throw new BadRequestError('a reason is required when denying a request', 'deny_reason_required');
+    }
     const updated = {
       ...record,
       status,
@@ -232,6 +236,10 @@ class RequestStore {
     }
     const now = new Date().toISOString();
     const mintReference = clean(reference, MAX_NOTE);
+    if (!mintReference) {
+      // The reference is what makes "fulfilled" auditable later.
+      throw new BadRequestError('a fulfilment reference is required', 'reference_required');
+    }
     const updated = {
       ...record,
       status: 'fulfilled',

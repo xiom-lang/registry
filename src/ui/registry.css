@@ -549,6 +549,9 @@ table.versions tr:hover td { background: var(--panel); }
     overflow-x: auto;
     white-space: nowrap;
   }
+  /* Keep the account area in flow while the nav scrolls; margin-left:auto
+     would push it past the scroll edge on narrow screens. */
+  .site-header nav .nav-right { gap: var(--space-md); margin-left: 0; }
 }
 
 @media (max-width: 640px) {
@@ -568,6 +571,7 @@ table.versions tr:hover td { background: var(--panel); }
 }
 .site-header nav a.nav-account { color: var(--signal); }
 .site-header nav a.nav-account:hover { color: var(--paper); }
+.site-header nav a[aria-current="page"] { color: var(--paper); }
 
 .account-card {
   background: var(--panel);
@@ -576,6 +580,22 @@ table.versions tr:hover td { background: var(--panel); }
   max-width: 560px;
   padding: var(--space-lg);
 }
+.account-card .button { margin-bottom: var(--space-md); }
+
+.account-hero { align-items: center; display: flex; gap: var(--space-md); }
+.account-avatar {
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.publisher-fields {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+}
+.request-history { margin-top: 2px; overflow-wrap: anywhere; }
 
 .account-grid {
   align-items: start;
@@ -632,15 +652,27 @@ table.versions tr:hover td { background: var(--panel); }
   border-radius: var(--radius-sm);
   color: var(--paper);
   cursor: pointer;
+  display: inline-block;
   font: inherit;
   font-weight: 600;
+  line-height: 1.4;
   padding: 9px 18px;
+  text-align: center;
 }
 .button:hover { border-color: var(--signal); }
 .button.primary { background: var(--signal); border-color: var(--signal); color: #fff; }
 .button.primary:hover { background: var(--signal-dim); }
 .button.danger { border-color: rgba(255, 92, 122, 0.6); color: var(--error); }
 .button.danger:hover { background: rgba(255, 92, 122, 0.12); }
+
+/* One visible focus treatment for links, buttons, and form controls. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
 
 .notice,
 .error-box {

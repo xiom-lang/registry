@@ -101,8 +101,23 @@ test('decision and fulfilment transitions append to the audit history', () => {
 test('denied requests cannot be fulfilled', () => {
   const requests = store();
   const created = requests.create({ kind: 'token', requester: REQUESTER, scopes: 'my-lib' });
-  requests.decide(created.id, { action: 'deny', actor: 'root' });
+  requests.decide(created.id, { action: 'deny', actor: 'root', note: 'name is reserved' });
   assert.throws(() => requests.fulfil(created.id, { actor: 'root' }), /only approved/);
+});
+
+test('denials need a reason and fulfilment needs a reference', () => {
+  const requests = store();
+  const created = requests.create({ kind: 'token', requester: REQUESTER, scopes: 'my-lib' });
+  assert.throws(
+    () => requests.decide(created.id, { action: 'deny', actor: 'root' }),
+    /reason is required/,
+  );
+  const approved = requests.decide(created.id, { action: 'approve', actor: 'root' });
+  assert.equal(approved.status, 'approved');
+  assert.throws(
+    () => requests.fulfil(created.id, { actor: 'root' }),
+    /fulfilment reference is required/,
+  );
 });
 
 test('pending requests are capped per requester', () => {

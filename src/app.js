@@ -184,11 +184,18 @@ function createApp(config = loadConfig()) {
   function accountNav(req) {
     if (!config.oauth.enabled) return '';
     const account = accountOf(req);
-    if (!account) return '<a class="nav-account" href="/login">Sign in</a>';
+    if (!account) {
+      // No self-link on the sign-in page: it reloads the same page and reads
+      // as a dead control.
+      if (req.path === '/login') return '';
+      return '<a class="nav-account" href="/login">Sign in</a>';
+    }
     const admin = isAdmin(account)
-      ? '<a class="nav-account" href="/admin/requests">Admin</a>'
+      ? '<a class="nav-account" href="/admin/requests"'
+        + `${req.path.startsWith('/admin/') ? ' aria-current="page"' : ''}>Admin</a>`
       : '';
-    return `${admin}<a class="nav-account" href="/account">@${escapeHtml(account.login)}</a>`;
+    const current = req.path === '/account' ? ' aria-current="page"' : '';
+    return `${admin}<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`;
   }
 
   function setSessionCookie(res, id) {
@@ -688,11 +695,14 @@ function createApp(config = loadConfig()) {
     const updated = typeof req.query.updated === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.updated)
       ? req.query.updated
       : '';
+    const flash = req.session.flash || null;
+    if (flash) delete req.session.flash;
     res.type('html').send(adminPage({
       account,
       requests: requests.list(),
       csrf: req.session.csrf,
       notice: updated ? `Request ${updated} updated.` : '',
+      error: flash && flash.error ? flash.error : '',
       nav: accountNav(req),
     }));
   });
@@ -713,7 +723,12 @@ function createApp(config = loadConfig()) {
         console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
       } catch (err) {
-        next(err);
+        if (err instanceof BadRequestError) {
+          // Keep the admin on the queue with the reason visible.
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/admin/requests');
+        }
+        return next(err);
       }
     },
   );
@@ -733,7 +748,11 @@ function createApp(config = loadConfig()) {
         console.log(`Request ${updated.id} fulfilled by ${updated.fulfilledBy}`);
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
       } catch (err) {
-        next(err);
+        if (err instanceof BadRequestError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/admin/requests');
+        }
+        return next(err);
       }
     },
   );

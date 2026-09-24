@@ -1404,20 +1404,29 @@ recreate carries the badge matrix + 36px art (verified externally: 83
 `/packages` response). Server-side sign-in is verified from outside:
 `/login` renders the button, `/auth/github/start` 302s to GitHub with the
 staging client id and callback (GitHub accepts the app and shows its normal
-sign-in), and the callback refuses a bad state with 403. The remaining open
-item is one user-side round trip; production `/login` is still 404 until
-the production recreate is greenlit (test staging only). The wave 16/17
-dispatch is not blocked by sign-in: OIDC publishing never uses browser
-sessions.
+sign-in), and the callback refuses a bad state with 403. **The owner
+completed a real login round trip on staging (2026-09-25)**; the earlier
+"sign-in does nothing" report was the nav self-link on the login page
+(clicking it re-rendered `/login`), fixed in the UI/UX pass: no account
+self-link on `/login`, `aria-current` on the active account/admin page,
+GitHub avatar on the account page, publisher fields grouped in their own
+fieldset, per-request audit history visible to both the requester and the
+admin, denials require a reason and fulfilment a reference (server-side,
+with the admin kept on the queue), one `:focus-visible` treatment for
+links/buttons/inputs, and the account nav stays in flow on mobile.
+Production `/login` is still 404 until the production recreate is
+greenlit (test staging only). The wave 16/17 dispatch is not blocked by
+sign-in: OIDC publishing never uses browser sessions.
 
 **Ordered next actions**:
 
-1. Owner: staging rebuild + recreate (badges + v5 + OAuth) and confirm
-   `/packages` HTML has `pkg-badge-group` with 36px art and `/login`
-   completes a real GitHub round trip.
-2. Registry lane: verify the wave 16/17 canary entries (publisher
-   `xiom-packages/packages`, workflow `publish-registry.yml`, ref
-   `refs/heads/main`, signature/publicKey, incubator art for `xiom.algo`).
+1. ~~Owner: staging rebuild + recreate (badges + v5 + OAuth)~~ DONE
+   2026-09-25 (badges at 36px verified; owner logged in on staging).
+2. Packages: dispatch the wave 16/17 sample now (v5 is live; sign-in is not
+   a dependency). Registry lane verifies each staging entry when the run IDs
+   arrive (publisher `xiom-packages/packages`, workflow
+   `publish-registry.yml`, ref `refs/heads/main`, signature/publicKey,
+   incubator art for `xiom.algo`).
 3. After canaries + owner greenlight: ops deploys the combined production
    delta (88 -> 151), the owner cuts `eco-v0.1.1`, and the batch is verified
    as `eco-v0.1.0`.

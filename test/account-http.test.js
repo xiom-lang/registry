@@ -156,6 +156,7 @@ test('sign-in round trip, request lifecycle, and admin fulfilment', async () => 
   let html = await response.text();
   assert.match(html, /Sign in with GitHub/);
   assert.match(html, /href="\/auth\/github\/start"/);
+  assert.doesNotMatch(html, /href="\/login"/, 'no self-link on the sign-in page');
 
   await login(jar, 'admin-code');
 
@@ -212,6 +213,42 @@ test('sign-in round trip, request lifecycle, and admin fulfilment', async () => 
   const accounts = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.equal(accounts.accounts['4242'].login, 'admin-user');
   assert.doesNotMatch(JSON.stringify(data), /admin-token|client-secret/);
+});
+
+test('denials require a reason and are recorded in the audit history', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+
+  let response = await requestAs(jar, '/account');
+  let html = await response.text();
+  const csrf = csrfFrom(html);
+  response = await requestAs(jar, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, kind: 'token', scopes: 'deny-me' }),
+  });
+  assert.equal(response.status, 303);
+  const created = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  // A denial without a reason is refused and stays pending.
+  response = await requestAs(jar, `/admin/requests/${created}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'deny' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/admin/requests');
+  html = await response.text();
+  assert.match(html, /a reason is required when denying a request/);
+  assert.match(html, /pending review/);
+
+  // With a reason the denial records the note in the history.
+  response = await requestAs(jar, `/admin/requests/${created}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'deny', note: 'name conflicts with an existing project' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/admin/requests');
+  html = await response.text();
+  assert.match(html, /denied by @admin-user \(name conflicts with an existing project\)/);
 });
 
 test('CSRF is enforced and non-admins cannot reach the queue', async () => {
