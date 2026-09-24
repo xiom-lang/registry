@@ -1086,7 +1086,15 @@ Accounts phase (after the section 13/14 work), if we build it:
 2. Self-service requests with admin approval: request a token (replacing the
    issue-template + e-mail flow) or a trusted-publisher entry for a repo; an
    admin approves; every action is recorded. The trusted-publishers file
-   becomes a store with an audit log.
+   becomes a store with an audit log. **Architecture (recommended):** the app
+   only stores and shows requests (GitHub OAuth identity + requested
+   names/scopes); the **minting stays on the host** via `issue-token.sh`,
+   invoked by the admin against an approved request id. The web app never
+   reads or writes the token store, never holds SMTP credentials, and never
+   displays a token after delivery -- it only records fulfilment. Prefer the
+   trusted-publisher request when the requester has a repo: it ships no
+   secret at all. Artifact signing remains the publisher's own key; the
+   VPS/registry never signs user packages.
 3. Reviewer role and community moderation: report/abuse flow, a `verified`
    flag set by reviewers (pairs with the four status badges), and a public
    review history per package.
