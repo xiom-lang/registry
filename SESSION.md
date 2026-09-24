@@ -1120,4 +1120,33 @@ Phase 2 only adds a request/approval front door: requests are GitHub-OAuth
 identified, the host mints and mails tokens, and trusted-publisher approvals
 write entries in the same format (with an audit log). Existing publishers see
 zero difference, and the manual issue-template/ops flow remains available as
-the fallback for both request types.
+the fallback for both request types. The GitHub token-request template stays
+as the parallel, dev-signed path; the platform front door is the community
+(social-style) path.
+
+**Status icon set (owner, 2026-09-24).** Four are live (official,
+community trusted, staging, unsigned). The unsigned art reads as a red alert,
+so it becomes `flagged` and a neutral unsigned icon is generated. Art to
+produce (same square webp style, ideally ~64 px):
+1. `pgk_unsigned.webp` -- replacement, neutral/muted "no signature".
+2. `pgk_flagged.webp` -- the red-alert art: moderation flag / abuse report
+   (phase 3).
+3. `pgk_verified.webp` -- checkmark/shield: reviewer-verified (phase 3).
+4. `pgk_deprecated.webp` -- muted: sunset package (needs a metadata source).
+5. `pgk_yanked.webp` -- withdrawn: every version yanked (computable today).
+6. `pgk_prerelease.webp` -- optional: latest is a pre-release (computable
+   today; the version string already shows it).
+Precedence proposal (one badge per package, reorderable in one function):
+flagged > yanked > staging > deprecated > official > verified >
+community-trusted > unsigned. Only deprecated needs new metadata (a manifest
+or operator field); the rest are derivable from the current index.
+
+**GitHub OAuth app (prep, not built).** Phase 2 needs one OAuth App per
+environment for sign-in only: org-owned preferred (xiom-lang org settings ->
+Developer settings -> OAuth Apps). Production: homepage
+`https://registry.xiom-lang.org`, callback
+`https://registry.xiom-lang.org/auth/github/callback`. Staging: the same with
+`staging.registry.xiom-lang.org`. Scope `read:user` (no repo access); the
+client secret goes into the VPS env stack as `GITHUB_OAUTH_CLIENT_ID` /
+`GITHUB_OAUTH_CLIENT_SECRET` (never in git). Separate staging and production
+apps so secrets do not cross.
