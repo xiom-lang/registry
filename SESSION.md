@@ -964,6 +964,18 @@ Production stays at 2 entries / eco 88 until the staging canary passes plus
 the owner's greenlight, then ops deploys the same delta together with the
 `eco-v0.1.1` batch. Wave 16 still needs its own delta once allowlisted.
 
+**v5 delta (waves 16-17, 2026-09-24):** the allowlist is now 150 names; v4
+(131) plus these 20 is v5 (151). Ops adds them to staging (eco-canary 131 ->
+151, entries stay 3, total 154 scopes) before the wave 16/17 canaries;
+production gets the same delta with the `eco-v0.1.1` batch.
+
+```json
+["xiom.avi", "xiom.cookie", "xiom.envsubst", "xiom.fixed", "xiom.id3",
+ "xiom.jwt", "xiom.midi", "xiom.mime", "xiom.ogg", "xiom.pagination",
+ "xiom.particle", "xiom.ppm", "xiom.properties", "xiom.quantum", "xiom.rate",
+ "xiom.rpc", "xiom.tar", "xiom.telnet", "xiom.useragent", "xiom.weather"]
+```
+
 Tag scheme (confirmed 2026-09-23): the packages workflow already supports
 `eco-v*` (full allowlisted batch) and `xiom-<folder>/v<ver>` (exactly one
 package; the tag version must equal the manifest version), plus a `guard` job
