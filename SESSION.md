@@ -967,7 +967,10 @@ the owner's greenlight, then ops deploys the same delta together with the
 **v5 delta (waves 16-17, 2026-09-24):** the allowlist is now 150 names; v4
 (131) plus these 20 is v5 (151). Ops adds them to staging (eco-canary 131 ->
 151, entries stay 3, total 154 scopes) before the wave 16/17 canaries;
-production gets the same delta with the `eco-v0.1.1` batch.
+production stays at 2 entries / eco 88 and must receive **both deltas**
+(v4 43 + v5 20) in one go with the `eco-v0.1.1` batch: 88 -> 151, after the
+staging canaries plus the owner's greenlight. (Ops handoff d44caf6 records
+the staging commit; the recreate was pending at the time of writing.)
 
 ```json
 ["xiom.avi", "xiom.cookie", "xiom.envsubst", "xiom.fixed", "xiom.id3",
