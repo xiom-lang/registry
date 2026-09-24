@@ -1255,3 +1255,86 @@ packages; `pgk_trusted_official` deliberately absent. The server now accepts
 and persists a manifest `stage: incubating|stable|deprecated` (1db298d,
 extracted like categories, unknown values warned), so the incubator and
 deprecated badges light up as soon as the packages lane publishes the field.
+
+---
+
+## 16. Session handoff (2026-09-24, registry lane)
+
+**Where things stand**
+
+- OIDC trusted publishing is live and verified end to end: stdlib (production
+  `xiom-std@0.61.3`) and the 34-package ecosystem batch (`eco-v0.1.0`) are on
+  production with provenance, stable signing key `4f:3b:47:...`, and
+  independent sha256/signature checks.
+- Badge matrix v2 is shipped in `main` (15 files, `trusted_community` star,
+  shield = publisher-signed with a `signed` pill, incubator/deprecated from the
+  manifest `stage` field, prerelease from semver) but **not deployed**: both
+  instances still serve the pre-badge image (evidence: `/packages` HTML has
+  `badge official`, no `pkg-badge-group`/`pgk_`).
+- Manifest `stage` support (1db298d) and the missing-categories publish
+  warning (79b2526) are in `main`.
+- Packages: allowlist 150 names. Staging has scope v4 live (eco-canary 131,
+  3 entries / 134 scopes) and v5 (waves 16-17, 20 names) committed at ops
+  `d44caf6` with the recreate pending. Production is 2 entries / **eco 88**
+  and must receive both deltas (v4 43 + v5 20 = 63) with the `eco-v0.1.1`
+  batch.
+- OAuth (phase-2 prep): both apps created, callbacks verified, secrets stored
+  in the VPS env files; ops prerequisites done. Phase 2 code not started.
+
+**Deploy needed for the UI**
+
+```
+# staging (badges + v5 in one recreate)
+cd /opt/xiom/registry && git pull
+docker compose --env-file .env.staging --profile staging build staging
+docker compose --env-file .env.staging --profile staging up -d --no-deps staging
+# production, with the combined delta + batch (rebuild once)
+docker compose build registry && docker compose up -d --no-deps registry
+```
+
+**Next actions, in order**
+
+1. Owner: staging rebuild+recreate (badges + v5); then approve the wave 16/17
+   canaries the packages lane dispatches.
+2. Registry lane: verify the canary entries (provenance `refs/heads/main`,
+   signature, incubator badge for an incubating package).
+3. After canaries + owner greenlight: ops deploys the combined production
+   delta (88 -> 151); owner cuts `eco-v0.1.1`; verify the production batch.
+4. Then pick the next feature: **registry 2.0 phase 1-2** (OAuth login,
+   request queue + admin approval, host-side minting stays in
+   `issue-token.sh`, compose passthrough + fail-fast empty-OAuth check) or the
+   **section 13 listing/readme roadmap** (pagination, compact rows, facets,
+   readme from the tarball) -- the owner decides.
+
+**Paste-ready prompt for the next session**
+
+```
+Registry lane continuation. Read SESSION.md sections 11-16 first; this is the
+xiom-lang/registry repo on main with the OIDC work live and verified.
+
+State in one line: first-party OIDC publishing works (stdlib + 34-package eco batch on
+production); badge matrix + manifest stage support are shipped in main but NOT deployed
+(both instances still serve the pre-badge image); staging has scope v4 live and v5 committed
+at ops d44caf6 pending recreate; production is 2 entries / eco 88 and needs both deltas
+(43+20=63) with the eco-v0.1.1 batch; allowlist is 150 names; OAuth phase-2 prep is done
+(apps + secrets + callbacks) with no phase-2 code yet.
+
+First actions:
+1. Ask the owner to rebuild+recreate staging (gets the badges and v5 in one go) and confirm
+   /packages HTML contains pkg-badge-group and pgk_ art.
+2. When the packages session sends wave 16/17 canary run IDs, verify each staging entry:
+   publisher repository xiom-packages/packages, workflow publish-registry.yml, ref
+   refs/heads/main, run URL; signature/publicKey; and the badge state (incubator art for a
+   stage: incubating package, verified+signed otherwise).
+3. After the canaries and the owner's greenlight: ops deploys the combined production scope
+   delta (eco 88 -> 151), the owner cuts eco-v0.1.1, and you verify the production batch the
+   same way as eco-v0.1.0.
+4. Then start registry 2.0 phase 1-2 (section 15): GitHub OAuth login (read:user), request
+   queue + admin approval UI, host-side minting/mailing stays via issue-token.sh, compose
+   passthrough for GITHUB_OAUTH_CLIENT_ID/SECRET with a fail-fast check on an empty secret.
+   Do not touch the publishing path; it is proven.
+
+Constraints: DCO-signed conventional commits, push to main; run npm test (139) and
+npm run test:e2e (20) before claiming anything done; verify live instances with
+Accept: text/html (JSON is the default negotiation).
+```
