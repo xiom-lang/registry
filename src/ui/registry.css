@@ -185,6 +185,18 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);
 }
+
+/* Package status badge art (owner-supplied webp): one per package, right side. */
+.pkg-badge {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.pkg-title .pkg-badge { margin-left: auto; align-self: center; }
 .package-card .pkg-name { font-size: 17px; font-weight: 600; color: var(--paper); }
 .package-card .pkg-version { color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
 .package-card .pkg-desc { color: var(--paper-dim); margin-top: 4px; font-size: 14px; }

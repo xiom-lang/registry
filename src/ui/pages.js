@@ -26,6 +26,39 @@ function officialBadge(name) {
     : '';
 }
 
+/**
+ * One status badge per package, decided from the latest version:
+ *   staging           -- latest version was published from a branch ref
+ *                        (the canary/dispatch path; production is tags-only),
+ *   official          -- first-party namespace,
+ *   community trusted -- latest version carries a signature,
+ *   unsigned          -- everything else.
+ * Order above is the precedence; reorder here to change the badge priority.
+ */
+const PACKAGE_BADGES = {
+  staging: { file: 'pgk_staging.webp', label: 'Staging canary (published from a branch ref)' },
+  official: { file: 'pgk_official.webp', label: 'Official first-party package' },
+  communityTrusted: { file: 'pgk_community_trusted.webp', label: 'Community package, signed' },
+  unsigned: { file: 'pgk_unsigned.webp', label: 'Community package, unsigned' },
+};
+
+function packageBadgeState(name, pkg) {
+  const latest = pkg && pkg.latest ? pkg.versions[pkg.latest] : null;
+  if (latest && latest.publisher && typeof latest.publisher.ref === 'string'
+    && latest.publisher.ref.startsWith('refs/heads/')) {
+    return PACKAGE_BADGES.staging;
+  }
+  if (isFirstPartyNamespace(name)) return PACKAGE_BADGES.official;
+  if (latest && latest.signature && latest.publicKey) return PACKAGE_BADGES.communityTrusted;
+  return PACKAGE_BADGES.unsigned;
+}
+
+function packageBadge(name, pkg) {
+  const badge = packageBadgeState(name, pkg);
+  return `<img class="pkg-badge" src="/ui/${badge.file}" alt="${escapeHtml(badge.label)}"`
+    + ` title="${escapeHtml(badge.label)}" width="28" height="28" loading="lazy" decoding="async">`;
+}
+
 /** Clickable category chips (registry-owned vocabulary, so always safe). */
 function categoryChips(categories, limit = 3) {
   const list = Array.isArray(categories) ? categories.slice(0, limit) : [];
@@ -62,6 +95,7 @@ function packageCard(name, pkg) {
     <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
     ${officialBadge(name)}
     ${latest}
+    ${packageBadge(name, pkg)}
   </div>
   ${description}
   <p class="pkg-meta">${versions} version${versions === 1 ? '' : 's'} ${chips}</p>
@@ -266,6 +300,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '') {
     ${officialBadge(name)}
     ${latestBadge}
     ${signedBadge}
+    ${packageBadge(name, pkg)}
   </div>
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}
   <div class="install">${installNode}</div>
@@ -300,4 +335,5 @@ module.exports = {
   categoriesPage,
   packagePage,
   notFoundPage,
+  packageBadgeState,
 };

@@ -64,6 +64,10 @@ const UI_ASSETS = {
   faviconPng: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.png')),
   icon: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'icon.png')),
   bannerRegistry: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'registry.webp')),
+  badgeOfficial: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_official.webp')),
+  badgeCommunityTrusted: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_community_trusted.webp')),
+  badgeStaging: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_staging.webp')),
+  badgeUnsigned: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_unsigned.webp')),
 };
 
 /**
@@ -263,6 +267,18 @@ function createApp(config = loadConfig()) {
     res.type('image/webp').set('Cache-Control', 'public, max-age=604800')
       .send(UI_ASSETS.bannerRegistry);
   });
+  // Package status badges (official / community trusted / staging / unsigned).
+  const BADGE_ASSETS = {
+    'pgk_official.webp': UI_ASSETS.badgeOfficial,
+    'pgk_community_trusted.webp': UI_ASSETS.badgeCommunityTrusted,
+    'pgk_staging.webp': UI_ASSETS.badgeStaging,
+    'pgk_unsigned.webp': UI_ASSETS.badgeUnsigned,
+  };
+  for (const [file, bytes] of Object.entries(BADGE_ASSETS)) {
+    app.get(`/ui/${file}`, generalLimit, (req, res) => {
+      res.type('image/webp').set('Cache-Control', 'public, max-age=604800').send(bytes);
+    });
+  }
 
   // Package listing: JSON for API consumers, the same list the UI shows.
   app.get('/packages', generalLimit, (req, res) => {

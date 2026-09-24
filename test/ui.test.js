@@ -90,6 +90,14 @@ test.before(async () => {
     name: 'demo-pkg', version: '1.0.0', bytes: tarballBytes('current'),
   })).status, 201);
 
+  // Community package whose latest version is signed: community-trusted badge.
+  const signedBytes = tarballBytes('signed');
+  const signedSignature = crypto.sign(null, signedBytes, privateKey).toString('hex');
+  assert.equal((await publish({
+    name: 'signed-pkg', version: '1.0.0', bytes: signedBytes,
+    signature: signedSignature, publicKey: publicKeyHex,
+  })).status, 201);
+
   assert.equal((await publish({
     name: 'hostile-pkg', version: '0.1.0', bytes: tarballBytes('hostile'),
   })).status, 201);
@@ -144,7 +152,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(json.headers.get('content-type'), /application\/json/);
   const data = await json.json();
   assert.equal(data.status, 'operational');
-  assert.equal(data.packages, 3);
+  assert.equal(data.packages, 4);
   assert.equal(data.web, 'https://registry.ui.test', 'raw readers get pointed at the UI');
 });
 
@@ -184,7 +192,7 @@ test('GET /packages lists packages in both formats', async () => {
 
   const json = await fetch(`${baseUrl}/packages`, { headers: API });
   const data = await json.json();
-  assert.equal(data.packages.length, 3);
+  assert.equal(data.packages.length, 4);
   const demo = data.packages.find((p) => p.name === 'demo-pkg');
   assert.equal(demo.latest, '1.0.0');
   assert.equal(demo.versions, 2);
@@ -366,6 +374,54 @@ test('banner is the masthead with the centred search inside it', async () => {
 
   const search = await (await fetch(`${baseUrl}/search?q=demo`, { headers: BROWSER })).text();
   assert.match(search, /name="q" type="search" value="demo"/, 'the banner keeps the query on the search page');
+});
+
+test('package status badges pick one art file per package and serve it', async () => {
+  const html = await (await fetch(`${baseUrl}/packages`, { headers: BROWSER })).text();
+
+  // Official: first-party namespace fixture.
+  assert.match(html, /src="\/ui\/pgk_official\.webp"[^>]*alt="Official first-party package"/);
+  assert.match(html, /\/packages\/xiom\.official-fixture[\s\S]{0,400}src="\/ui\/pgk_official\.webp"/);
+  // Community trusted: signed latest version.
+  assert.match(html, /\/packages\/signed-pkg[\s\S]{0,400}src="\/ui\/pgk_community_trusted\.webp"/);
+  // Unsigned: community packages without a signature on their latest version.
+  assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned\.webp"/);
+  assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned\.webp"/);
+  // The icon is decorative-with-a-label: alt/title carry the state.
+  assert.match(html, /title="Community package, signed"/);
+  assert.match(html, /width="28" height="28" loading="lazy"/);
+
+  for (const file of ['pgk_official.webp', 'pgk_community_trusted.webp', 'pgk_staging.webp', 'pgk_unsigned.webp']) {
+    const res = await fetch(`${baseUrl}/ui/${file}`, { headers: BROWSER });
+    assert.equal(res.status, 200, file);
+    assert.match(res.headers.get('content-type'), /image\/webp/, file);
+    assert.ok((await res.arrayBuffer()).byteLength > 1000, file);
+  }
+});
+
+test('packageBadgeState precedence: staging over official over trusted over unsigned', () => {
+  const { packageBadgeState } = require('../src/ui/pages');
+  const signed = { signature: 'aa', publicKey: 'bb' };
+  const make = (name, latest, versions) => ({
+    name, latest, versions: { [latest]: { ...versions } },
+  });
+
+  const staging = packageBadgeState('xiom.official-fixture', make('xiom.official-fixture', '1.0.0', {
+    publisher: { ref: 'refs/heads/main' }, ...signed,
+  }));
+  assert.equal(staging.file, 'pgk_staging.webp', 'a branch-ref publish wins even for official names');
+
+  const official = packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed));
+  assert.equal(official.file, 'pgk_official.webp');
+
+  const trusted = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed));
+  assert.equal(trusted.file, 'pgk_community_trusted.webp');
+
+  const unsigned = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {}));
+  assert.equal(unsigned.file, 'pgk_unsigned.webp');
+
+  const noVersions = packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} });
+  assert.equal(noVersions.file, 'pgk_unsigned.webp', 'a package without a surviving version is unsigned');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {
