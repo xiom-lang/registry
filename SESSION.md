@@ -1197,13 +1197,16 @@ production client ID `Ov23liu5xt4IZ3F8xLCM`, staging
 the secret is unused until phase 2 ships). Ops stored one client ID + one
 non-empty secret per environment in `/opt/xiom/registry/.env` and
 `.env.staging` (0600, in the restic source list, values never printed; an
-earlier empty production secret was replaced), no recreate. **Open: the owner
-must verify both apps' callback URLs** --
-`https://registry.xiom-lang.org/auth/github/callback` and
-`https://staging.registry.xiom-lang.org/auth/github/callback`. Phase-2
-implementation note from the incident: the app must fail fast (refuse to
-start or log loudly) when OAuth is configured with an empty secret, and the
-first deploy must exercise a real login round-trip.
+earlier empty production secret was replaced), no recreate. **Callback check
+complete (2026-09-24, ops): both apps correct** -- production
+`https://registry.xiom-lang.org/auth/github/callback`, staging
+`https://staging.registry.xiom-lang.org/auth/github/callback`; no secret
+regeneration and no recreate were needed. Ops prerequisites for phase 2 are
+done; the remaining ops step is the force-recreate of both services once the
+registry code and compose passthrough land. Phase-2 implementation note from
+the incident: the app must fail fast (refuse to start or log loudly) when
+OAuth is configured with an empty secret, and the first deploy must exercise
+a real login round-trip.
 
 Badge matrix status (2026-09-24): wired to the 15-file state x track set,
 including `trusted_community` for OIDC-published community packages (star +
