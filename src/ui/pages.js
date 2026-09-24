@@ -31,11 +31,14 @@ function officialBadge(name) {
  * One status badge per package, chosen from a state x track matrix:
  *   states (precedence, reorder here): flagged (operator/reviewer only),
  *     yanked (every version withdrawn), deprecated / incubator (manifest
- *     `stage` field), prerelease (latest is a semver pre-release), verified
+ *     `stage` field), prerelease (latest is a semver pre-release), trusted
+ *     (community only: the latest version came through a GitHub OIDC trusted
+ *     publisher, so the registry verified the publishing identity), verified
  *     (latest version signed by the publisher), unsigned;
  *   tracks: official (first-party namespace) or community.
- * The art files are `pgk_<state>_<track>.webp`; `verified_*` means "signed by
- * the publisher" until a separate reviewer-verified mark exists.
+ * The art files are `pgk_<state>_<track>.webp`. Icons carry the state and
+ * track; pills carry the claims in words ("trusted", "signed") so the check
+ * or star art can never be read as something the registry did not prove.
  */
 function packageBadgeState(name, pkg) {
   const track = isFirstPartyNamespace(name) ? 'official' : 'community';
@@ -43,9 +46,14 @@ function packageBadgeState(name, pkg) {
   const versionCount = pkg && pkg.versions ? Object.keys(pkg.versions).length : 0;
   const stage = pkg && typeof pkg.stage === 'string' ? pkg.stage : '';
   const official = track === 'official';
+  const signed = Boolean(latest && latest.signature && latest.publicKey);
+  const oidcTrusted = Boolean(latest && latest.publisher
+    && typeof latest.publisher.repository === 'string');
   const badge = (state, communityLabel, officialLabel = communityLabel) => ({
     file: `pgk_${state}_${track}.webp`,
     label: official ? officialLabel : communityLabel,
+    pills: state === 'trusted' ? (signed ? ['trusted', 'signed'] : ['trusted'])
+      : (state === 'verified' ? ['signed'] : []),
   });
 
   if (pkg && pkg.flagged === true) {
@@ -63,7 +71,10 @@ function packageBadgeState(name, pkg) {
   if (pkg && typeof pkg.latest === 'string' && semver.prerelease(pkg.latest) !== null) {
     return badge('prerelease', 'Pre-release');
   }
-  if (latest && latest.signature && latest.publicKey) {
+  if (track === 'community' && oidcTrusted) {
+    return badge('trusted', 'Trusted publisher: publishing identity verified by the registry');
+  }
+  if (signed) {
     return badge('verified', 'Signed by the publisher', 'Official package, signed by the publisher');
   }
   return badge('unsigned', 'Community package, unsigned', 'Official package, unsigned');
@@ -71,15 +82,12 @@ function packageBadgeState(name, pkg) {
 
 function packageBadge(name, pkg) {
   const badge = packageBadgeState(name, pkg);
-  // Trust claims stay explicit in words, not only in art: a signed package
-  // gets a visible "signed" pill next to the status icon (reviewed-by-XIOM
-  // gets its own distinct pill when that state exists).
-  const pill = badge.file.includes('_verified_')
-    ? '<span class="badge signed">signed</span>'
-    : '';
+  const pills = badge.pills
+    .map((pill) => `<span class="badge ${pill}">${pill}</span>`)
+    .join('');
   return `<span class="pkg-badge-group"><img class="pkg-badge" src="/ui/${badge.file}"`
     + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
-    + ` width="28" height="28" loading="lazy" decoding="async">${pill}</span>`;
+    + ` width="28" height="28" loading="lazy" decoding="async">${pills}</span>`;
 }
 
 /** Clickable category chips (registry-owned vocabulary, so always safe). */

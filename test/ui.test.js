@@ -392,9 +392,12 @@ test('package status badges pick one art file per package and serve the matrix',
   assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
   assert.match(html, /width="28" height="28" loading="lazy"/);
 
-  const states = ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'];
-  for (const state of states) {
-    for (const track of ['official', 'community']) {
+  const matrix = {
+    official: ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'],
+    community: ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'trusted', 'verified', 'unsigned'],
+  };
+  for (const [track, states] of Object.entries(matrix)) {
+    for (const state of states) {
       const file = `pgk_${state}_${track}.webp`;
       const res = await fetch(`${baseUrl}/ui/${file}`, { headers: BROWSER });
       assert.equal(res.status, 200, file);
@@ -402,6 +405,10 @@ test('package status badges pick one art file per package and serve the matrix',
       assert.ok((await res.arrayBuffer()).byteLength > 1000, file);
     }
   }
+  // `trusted` is community-only: official publishes are org-controlled by
+  // definition, so there is deliberately no trusted_official art.
+  const noTrustedOfficial = await fetch(`${baseUrl}/ui/pgk_trusted_official.webp`, { headers: BROWSER });
+  assert.equal(noTrustedOfficial.status, 404);
 });
 
 test('packageBadgeState precedence and track selection', () => {
@@ -432,12 +439,31 @@ test('packageBadgeState precedence and track selection', () => {
   assert.equal(stateOf(incubator), 'incubator');
   assert.equal(trackOf(incubator), 'official');
 
-  // A pre-release latest beats the signature state.
+  // A pre-release latest beats the trust states.
   const prerelease = packageBadgeState('demo-pkg', make('demo-pkg', '0.2.0-rc.1', signed));
   assert.equal(stateOf(prerelease), 'prerelease');
 
+  // Trusted publisher (community only): OIDC provenance on the latest version.
+  const trusted = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {
+    ...signed, publisher: { repository: 'some-org/some-repo' },
+  }));
+  assert.equal(stateOf(trusted), 'trusted');
+  assert.deepEqual(trusted.pills, ['trusted', 'signed'], 'a trusted publisher that also signed shows both pills');
+  const trustedUnsigned = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {
+    publisher: { repository: 'some-org/some-repo' },
+  }));
+  assert.deepEqual(trustedUnsigned.pills, ['trusted']);
+  // Official publishes never get the community trusted state.
+  const officialOidc = packageBadgeState('xiom.core', make('xiom.core', '1.0.0', {
+    ...signed, publisher: { repository: 'xiom-lang/xiom' },
+  }));
+  assert.equal(stateOf(officialOidc), 'verified');
+  assert.equal(trackOf(officialOidc), 'official');
+
   // Signed and unsigned on both tracks.
-  assert.equal(stateOf(packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed))), 'verified');
+  const verifiedCommunity = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed));
+  assert.equal(stateOf(verifiedCommunity), 'verified');
+  assert.deepEqual(verifiedCommunity.pills, ['signed']);
   assert.equal(stateOf(packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed))), 'verified');
   assert.equal(stateOf(packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {}))), 'unsigned');
   assert.equal(stateOf(packageBadgeState('xiom.core', make('xiom.core', '1.0.0', {}))), 'unsigned');

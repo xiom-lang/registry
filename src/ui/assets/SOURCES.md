@@ -13,7 +13,7 @@ do not edit these binaries in this repo.
 | `favicon.png` | `site/assets/images/favicon.png` | 48x48 PNG icon linked in the page head |
 | `icon.png` | `xiom-website/img/xiom-icon.png` | apple-touch-icon |
 | `registry.webp` | `xiom-website/img/registry.webp` | page banner artwork (1539x510, 188 KB) |
-| `pgk_<state>_<track>.webp` | owner-supplied badge art (14 files) | package status badge matrix: states flagged, yanked, deprecated, incubator, prerelease, verified, unsigned; tracks official, community |
+| `pgk_<state>_<track>.webp` | owner-supplied badge art (15 files) | package status badge matrix: states flagged, yanked, deprecated, incubator, prerelease, trusted (community only), verified, unsigned; tracks official, community |
 
 Refresh all after any website brand change (the website's `9190bf8`
 optimization pass shrank the icon from 370 KB to 6.6 KB and the logo from
@@ -22,13 +22,18 @@ heaviest asset; re-encoding it at ~60-70% quality roughly halves it with no
 visible loss if page weight ever matters. The wordmark in the banner is text,
 not an image, so `logo.png` was retired with the old header brand.
 
-**Badge art note (2026-09-24, v2):** the badge set is now a 14-file state x
-track matrix (~50-61 KB each; a website image-optimizer pass at ~64 px would
-still cut the weight by an order of magnitude). `pgk_verified_*` is the
-publisher-signed state and is labelled "Signed by the publisher" in the UI
-until a distinct reviewer-verified mark exists; `pgk_flagged_*` is
-operator/reviewer-set only; `pgk_incubator_*` and `pgk_deprecated_*` read the
-manifest `stage` field. Three filenames were normalized on receipt:
-`pkg_unsigned_*` -> `pgk_unsigned_*` and `pgk_flagged_comm_community` ->
-`pgk_flagged_community`. All assets are XIOM project brand assets under the
-repository's dual MIT OR Apache-2.0 license.
+**Badge art note (2026-09-24, v2):** the badge set is a state x track matrix
+(~46-61 KB each; a website image-optimizer pass at ~64 px would still cut the
+weight by an order of magnitude). `pgk_trusted_community` (star) marks a
+community package whose latest version came through a GitHub OIDC trusted
+publisher (publishing identity verified by the registry); there is
+deliberately no `trusted_official` because first-party publishes are
+org-controlled by definition. `pgk_verified_*` (shield) is the
+publisher-signed state; a visible "signed" pill accompanies it (and a
+"trusted" pill accompanies the trusted state) so the art is never the only
+carrier of a trust claim. `pgk_flagged_*` is operator/reviewer-set only;
+`pgk_incubator_*` and `pgk_deprecated_*` read the manifest `stage` field.
+Filenames normalized on receipt: `pkg_*` -> `pgk_*` and
+`pgk_flagged_comm_community` / `pkg_trusted_community` accordingly. All
+assets are XIOM project brand assets under the repository's dual MIT OR
+Apache-2.0 license.

@@ -59,13 +59,16 @@ const SERVICE_STARTED_AT = new Date().toISOString();
 // Read once: the UI stylesheet is static and small.
 const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
 // Package status badge art: state x track matrix (see src/ui/pages.js).
-// Files are `pgk_<state>_<track>.webp`; keep this list in sync with the
-// states/tracks the UI can select.
-const BADGE_STATES = ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'];
-const BADGE_TRACKS = ['official', 'community'];
+// `trusted` exists only on the community track -- first-party/official
+// publishes are org-controlled by definition. Keep this in sync with the
+// states the UI can select.
+const BADGE_TRACK_STATES = {
+  official: ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'],
+  community: ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'trusted', 'verified', 'unsigned'],
+};
 const BADGE_ASSETS = {};
-for (const state of BADGE_STATES) {
-  for (const track of BADGE_TRACKS) {
+for (const [track, states] of Object.entries(BADGE_TRACK_STATES)) {
+  for (const state of states) {
     const file = `pgk_${state}_${track}.webp`;
     BADGE_ASSETS[file] = fs.readFileSync(path.join(__dirname, 'ui', 'assets', file));
   }

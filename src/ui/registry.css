@@ -226,6 +226,7 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   text-transform: uppercase;
 }
 .badge.signed { border-color: var(--verified-dim); color: var(--verified); }
+.badge.trusted { border-color: rgba(105, 184, 255, 0.55); color: #69b8ff; }
 .badge.official { border-color: var(--signal-dim); color: var(--signal); }
 .badge.yanked { border-color: var(--error); color: var(--error); }
 
