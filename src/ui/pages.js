@@ -18,6 +18,7 @@ const {
 } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
+const semver = require('semver');
 
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
 function officialBadge(name) {
@@ -27,30 +28,45 @@ function officialBadge(name) {
 }
 
 /**
- * One status badge per package, decided from the latest version:
- *   staging           -- latest version was published from a branch ref
- *                        (the canary/dispatch path; production is tags-only),
- *   official          -- first-party namespace,
- *   community trusted -- latest version carries a signature,
- *   unsigned          -- everything else.
- * Order above is the precedence; reorder here to change the badge priority.
+ * One status badge per package, chosen from a state x track matrix:
+ *   states (precedence, reorder here): flagged (operator/reviewer only),
+ *     yanked (every version withdrawn), deprecated / incubator (manifest
+ *     `stage` field), prerelease (latest is a semver pre-release), verified
+ *     (latest version signed by the publisher), unsigned;
+ *   tracks: official (first-party namespace) or community.
+ * The art files are `pgk_<state>_<track>.webp`; `verified_*` means "signed by
+ * the publisher" until a separate reviewer-verified mark exists.
  */
-const PACKAGE_BADGES = {
-  staging: { file: 'pgk_staging.webp', label: 'Staging canary (published from a branch ref)' },
-  official: { file: 'pgk_official.webp', label: 'Official first-party package' },
-  communityTrusted: { file: 'pgk_community_trusted.webp', label: 'Community package, signed' },
-  unsigned: { file: 'pgk_unsigned.webp', label: 'Community package, unsigned' },
-};
-
 function packageBadgeState(name, pkg) {
+  const track = isFirstPartyNamespace(name) ? 'official' : 'community';
   const latest = pkg && pkg.latest ? pkg.versions[pkg.latest] : null;
-  if (latest && latest.publisher && typeof latest.publisher.ref === 'string'
-    && latest.publisher.ref.startsWith('refs/heads/')) {
-    return PACKAGE_BADGES.staging;
+  const versionCount = pkg && pkg.versions ? Object.keys(pkg.versions).length : 0;
+  const stage = pkg && typeof pkg.stage === 'string' ? pkg.stage : '';
+  const official = track === 'official';
+  const badge = (state, communityLabel, officialLabel = communityLabel) => ({
+    file: `pgk_${state}_${track}.webp`,
+    label: official ? officialLabel : communityLabel,
+  });
+
+  if (pkg && pkg.flagged === true) {
+    return badge('flagged', 'Flagged by a registry reviewer');
   }
-  if (isFirstPartyNamespace(name)) return PACKAGE_BADGES.official;
-  if (latest && latest.signature && latest.publicKey) return PACKAGE_BADGES.communityTrusted;
-  return PACKAGE_BADGES.unsigned;
+  if (!latest && versionCount > 0) {
+    return badge('yanked', 'Withdrawn: every version is yanked');
+  }
+  if (stage === 'deprecated') {
+    return badge('deprecated', 'Deprecated package', 'Deprecated first-party package');
+  }
+  if (stage === 'incubating') {
+    return badge('incubator', 'Incubating package', 'Incubating first-party package');
+  }
+  if (pkg && typeof pkg.latest === 'string' && semver.prerelease(pkg.latest) !== null) {
+    return badge('prerelease', 'Pre-release');
+  }
+  if (latest && latest.signature && latest.publicKey) {
+    return badge('verified', 'Signed by the publisher', 'Official package, signed by the publisher');
+  }
+  return badge('unsigned', 'Community package, unsigned', 'Official package, unsigned');
 }
 
 function packageBadge(name, pkg) {

@@ -376,52 +376,72 @@ test('banner is the masthead with the centred search inside it', async () => {
   assert.match(search, /name="q" type="search" value="demo"/, 'the banner keeps the query on the search page');
 });
 
-test('package status badges pick one art file per package and serve it', async () => {
+test('package status badges pick one art file per package and serve the matrix', async () => {
   const html = await (await fetch(`${baseUrl}/packages`, { headers: BROWSER })).text();
 
-  // Official: first-party namespace fixture.
-  assert.match(html, /src="\/ui\/pgk_official\.webp"[^>]*alt="Official first-party package"/);
-  assert.match(html, /\/packages\/xiom\.official-fixture[\s\S]{0,400}src="\/ui\/pgk_official\.webp"/);
-  // Community trusted: signed latest version.
-  assert.match(html, /\/packages\/signed-pkg[\s\S]{0,400}src="\/ui\/pgk_community_trusted\.webp"/);
-  // Unsigned: community packages without a signature on their latest version.
-  assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned\.webp"/);
-  assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned\.webp"/);
-  // The icon is decorative-with-a-label: alt/title carry the state.
-  assert.match(html, /title="Community package, signed"/);
+  // First-party fixture is unsigned: official track, unsigned state.
+  assert.match(html, /\/packages\/xiom\.official-fixture[\s\S]{0,400}src="\/ui\/pgk_unsigned_official\.webp"/);
+  assert.match(html, /src="\/ui\/pgk_unsigned_official\.webp"[^>]*alt="Official package, unsigned"/);
+  // Signed latest version: community track, verified (publisher-signed) state.
+  assert.match(html, /\/packages\/signed-pkg[\s\S]{0,400}src="\/ui\/pgk_verified_community\.webp"/);
+  assert.match(html, /title="Signed by the publisher"/);
+  // Unsigned community packages.
+  assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
+  assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
   assert.match(html, /width="28" height="28" loading="lazy"/);
 
-  for (const file of ['pgk_official.webp', 'pgk_community_trusted.webp', 'pgk_staging.webp', 'pgk_unsigned.webp']) {
-    const res = await fetch(`${baseUrl}/ui/${file}`, { headers: BROWSER });
-    assert.equal(res.status, 200, file);
-    assert.match(res.headers.get('content-type'), /image\/webp/, file);
-    assert.ok((await res.arrayBuffer()).byteLength > 1000, file);
+  const states = ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'];
+  for (const state of states) {
+    for (const track of ['official', 'community']) {
+      const file = `pgk_${state}_${track}.webp`;
+      const res = await fetch(`${baseUrl}/ui/${file}`, { headers: BROWSER });
+      assert.equal(res.status, 200, file);
+      assert.match(res.headers.get('content-type'), /image\/webp/, file);
+      assert.ok((await res.arrayBuffer()).byteLength > 1000, file);
+    }
   }
 });
 
-test('packageBadgeState precedence: staging over official over trusted over unsigned', () => {
+test('packageBadgeState precedence and track selection', () => {
   const { packageBadgeState } = require('../src/ui/pages');
   const signed = { signature: 'aa', publicKey: 'bb' };
-  const make = (name, latest, versions) => ({
-    name, latest, versions: { [latest]: { ...versions } },
+  const make = (name, latest, entry, extra = {}) => ({
+    name,
+    latest,
+    versions: latest ? { [latest]: { ...entry } } : {},
+    ...extra,
   });
+  const stateOf = (badge) => badge.file.replace(/^pgk_/, '').replace(/_(official|community)\.webp$/, '');
+  const trackOf = (badge) => (badge.file.includes('_official') ? 'official' : 'community');
 
-  const staging = packageBadgeState('xiom.official-fixture', make('xiom.official-fixture', '1.0.0', {
-    publisher: { ref: 'refs/heads/main' }, ...signed,
-  }));
-  assert.equal(staging.file, 'pgk_staging.webp', 'a branch-ref publish wins even for official names');
+  // Flagged (operator-set) beats everything, including a signed official package.
+  const flagged = packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed, { flagged: true }));
+  assert.equal(stateOf(flagged), 'flagged');
+  assert.equal(trackOf(flagged), 'official');
 
-  const official = packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed));
-  assert.equal(official.file, 'pgk_official.webp');
+  // Every version yanked (no latest) beats the stage and signature states.
+  const yanked = packageBadgeState('demo-pkg', { name: 'demo-pkg', latest: '', versions: { '0.1.0': { yanked: true, ...signed } } });
+  assert.equal(stateOf(yanked), 'yanked');
 
-  const trusted = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed));
-  assert.equal(trusted.file, 'pgk_community_trusted.webp');
+  // Manifest stage drives deprecated/incubator and beats signed.
+  const deprecated = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { stage: 'deprecated' }));
+  assert.equal(stateOf(deprecated), 'deprecated');
+  const incubator = packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed, { stage: 'incubating' }));
+  assert.equal(stateOf(incubator), 'incubator');
+  assert.equal(trackOf(incubator), 'official');
 
-  const unsigned = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {}));
-  assert.equal(unsigned.file, 'pgk_unsigned.webp');
+  // A pre-release latest beats the signature state.
+  const prerelease = packageBadgeState('demo-pkg', make('demo-pkg', '0.2.0-rc.1', signed));
+  assert.equal(stateOf(prerelease), 'prerelease');
 
-  const noVersions = packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} });
-  assert.equal(noVersions.file, 'pgk_unsigned.webp', 'a package without a surviving version is unsigned');
+  // Signed and unsigned on both tracks.
+  assert.equal(stateOf(packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed))), 'verified');
+  assert.equal(stateOf(packageBadgeState('xiom.core', make('xiom.core', '1.0.0', signed))), 'verified');
+  assert.equal(stateOf(packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', {}))), 'unsigned');
+  assert.equal(stateOf(packageBadgeState('xiom.core', make('xiom.core', '1.0.0', {}))), 'unsigned');
+
+  // A package with no versions at all still gets an unsigned badge.
+  assert.equal(stateOf(packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} })), 'unsigned');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

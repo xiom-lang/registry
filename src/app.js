@@ -58,16 +58,26 @@ const SERVICE_VERSION = require('../package.json').version;
 const SERVICE_STARTED_AT = new Date().toISOString();
 // Read once: the UI stylesheet is static and small.
 const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
+// Package status badge art: state x track matrix (see src/ui/pages.js).
+// Files are `pgk_<state>_<track>.webp`; keep this list in sync with the
+// states/tracks the UI can select.
+const BADGE_STATES = ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'];
+const BADGE_TRACKS = ['official', 'community'];
+const BADGE_ASSETS = {};
+for (const state of BADGE_STATES) {
+  for (const track of BADGE_TRACKS) {
+    const file = `pgk_${state}_${track}.webp`;
+    BADGE_ASSETS[file] = fs.readFileSync(path.join(__dirname, 'ui', 'assets', file));
+  }
+}
+
 // Brand assets shipped with the UI; provenance in src/ui/assets/SOURCES.md.
 const UI_ASSETS = {
   faviconIco: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.ico')),
   faviconPng: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'favicon.png')),
   icon: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'icon.png')),
   bannerRegistry: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'registry.webp')),
-  badgeOfficial: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_official.webp')),
-  badgeCommunityTrusted: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_community_trusted.webp')),
-  badgeStaging: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_staging.webp')),
-  badgeUnsigned: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'pgk_unsigned.webp')),
+  badges: BADGE_ASSETS,
 };
 
 /**
@@ -267,14 +277,8 @@ function createApp(config = loadConfig()) {
     res.type('image/webp').set('Cache-Control', 'public, max-age=604800')
       .send(UI_ASSETS.bannerRegistry);
   });
-  // Package status badges (official / community trusted / staging / unsigned).
-  const BADGE_ASSETS = {
-    'pgk_official.webp': UI_ASSETS.badgeOfficial,
-    'pgk_community_trusted.webp': UI_ASSETS.badgeCommunityTrusted,
-    'pgk_staging.webp': UI_ASSETS.badgeStaging,
-    'pgk_unsigned.webp': UI_ASSETS.badgeUnsigned,
-  };
-  for (const [file, bytes] of Object.entries(BADGE_ASSETS)) {
+  // Package status badges (state x track matrix).
+  for (const [file, bytes] of Object.entries(UI_ASSETS.badges)) {
     app.get(`/ui/${file}`, generalLimit, (req, res) => {
       res.type('image/webp').set('Cache-Control', 'public, max-age=604800').send(bytes);
     });
