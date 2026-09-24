@@ -1190,6 +1190,23 @@ manifest needs the packages lane; the rest is registry-side. The old
 `official` / `community_trusted` / `staging` / `unsigned` text mapping is
 replaced when this is wired.
 
+Who can set which state (as built today):
+
+| State | Set by | Mechanism |
+|---|---|---|
+| unsigned | publisher | publishing without a signature (untrusted token only) |
+| verified + signed pill | publisher | signing the artifact with their ed25519 key |
+| trusted | operator + publisher CI | operator-approved OIDC trusted-publisher entry; the publish comes from that repo/workflow/ref |
+| incubator / deprecated | publisher | self-declared `stage:` in the manifest (first-party writes it from STATUS.json) |
+| prerelease | publisher | choosing a semver pre-release version |
+| yanked | publisher or operator | yank API with a token scoped to the name; the badge shows when every version is yanked |
+| flagged | operator/reviewer only | not implemented until phase 3; users will never set it themselves |
+
+Registry 2.0 (accounts) changes the interface, not the ownership: yank,
+deprecate and trusted-publisher requests get UI buttons with roles and an
+audit log; `flagged` stays reviewer/admin-only (users can report, not flag);
+human review adds its own distinct mark alongside publisher signatures.
+
 **GitHub OAuth app (prep, not built).** Phase 2 needs one OAuth App per
 environment for sign-in only: org-owned preferred (xiom-lang org settings ->
 Developer settings -> OAuth Apps). Production: homepage
