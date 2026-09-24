@@ -557,3 +557,160 @@ table.versions tr:hover td { background: var(--panel); }
   .container { padding: 0 var(--space-md); }
   table.versions th:nth-child(4), table.versions td:nth-child(4) { display: none; }
 }
+
+/* ---------- Accounts and requests (registry 2.0) ----------
+   Sign-in identity, the self-service request form, and the admin queue. */
+
+.site-header nav .nav-right {
+  display: inline-flex;
+  gap: var(--space-lg);
+  margin-left: auto;
+}
+.site-header nav a.nav-account { color: var(--signal); }
+.site-header nav a.nav-account:hover { color: var(--paper); }
+
+.account-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-width: 560px;
+  padding: var(--space-lg);
+}
+
+.account-grid {
+  align-items: start;
+  display: grid;
+  gap: var(--space-xl);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+
+.request-form fieldset {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+}
+.request-form legend {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 0 var(--space-sm);
+  text-transform: uppercase;
+}
+.radio-row {
+  color: var(--paper-dim);
+  display: flex;
+  font-size: 14px;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+.radio-row input { accent-color: var(--signal); margin-top: 5px; }
+
+.form-grid { display: grid; gap: var(--space-md); }
+.form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-field > span { color: var(--paper-dim); font-size: 14px; font-weight: 600; }
+.form-field small { color: var(--muted); font-size: 12px; }
+.form-field input,
+.form-field textarea {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  font: inherit;
+  padding: 10px 12px;
+}
+.form-field input:focus,
+.form-field textarea:focus {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal-glow);
+  outline: none;
+}
+
+.button {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 18px;
+}
+.button:hover { border-color: var(--signal); }
+.button.primary { background: var(--signal); border-color: var(--signal); color: #fff; }
+.button.primary:hover { background: var(--signal-dim); }
+.button.danger { border-color: rgba(255, 92, 122, 0.6); color: var(--error); }
+.button.danger:hover { background: rgba(255, 92, 122, 0.12); }
+
+.notice,
+.error-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+}
+.notice { border-color: var(--verified-dim); color: var(--verified); }
+.error-box { border-color: var(--error); color: var(--error); }
+
+.status-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status-pending { border-color: rgba(105, 184, 255, 0.55); color: #69b8ff; }
+.status-approved { border-color: var(--verified-dim); color: var(--verified); }
+.status-denied { border-color: var(--error); color: var(--error); }
+.status-fulfilled { border-color: var(--signal-dim); color: var(--signal); }
+
+.request-list {
+  display: grid;
+  gap: var(--space-md);
+  list-style: none;
+  margin-bottom: var(--space-xl);
+}
+.request-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg);
+}
+.request-card.closed { opacity: 0.75; }
+.request-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+}
+.request-target {
+  color: var(--paper);
+  font-size: 13px;
+  margin-top: var(--space-sm);
+  overflow-wrap: anywhere;
+}
+.decision-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+.decision-form input {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  flex: 1;
+  font: inherit;
+  min-width: 200px;
+  padding: 8px 10px;
+}
+.count { color: var(--muted); font-size: 14px; font-weight: 400; }
+.request-table td { vertical-align: top; }
+
+@media (max-width: 860px) {
+  .account-grid { grid-template-columns: 1fr; }
+}

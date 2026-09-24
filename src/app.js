@@ -24,15 +24,21 @@ const {
   ConflictError,
   NotFoundError,
   PayloadTooLargeError,
+  UnauthorizedError,
+  ForbiddenError,
   UnprocessableEntityError,
   RateLimitedError,
 } = require('./errors');
 const { loadConfig } = require('./config');
 const { IndexStore, computeLatest, normalizeDependencies } = require('./index');
 const { ArtifactStore } = require('./storage');
-const { authenticate, assertPublishScope } = require('./tokens');
+const { authenticate, assertPublishScope, safeEqual } = require('./tokens');
 const { createJwksCache } = require('./oidc');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
+const oauth = require('./oauth');
+const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
+const { AccountStore } = require('./accounts');
+const { RequestStore } = require('./requests');
 const {
   verify: verifySignature,
   fingerprint,
@@ -42,6 +48,7 @@ const {
 const { extractManifest } = require('./manifest');
 const { normalizePackageMetadata, categoryCounts, CATEGORIES, STAGES } = require('./categories');
 const { wantsHtml } = require('./ui/negotiate');
+const { escapeHtml } = require('./ui/layout');
 const {
   homePage,
   searchPage,
@@ -49,6 +56,7 @@ const {
   packagePage,
   notFoundPage,
 } = require('./ui/pages');
+const { loginPage, accountPage, adminPage } = require('./ui/account');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
@@ -91,6 +99,19 @@ function createApp(config = loadConfig()) {
   const app = express();
   const indexStore = new IndexStore(config);
   const artifacts = new ArtifactStore(config);
+  // Registry 2.0: sign-in sessions, GitHub identities, and the request queue.
+  // Sessions and the queue are display/audit data only; none of it can
+  // publish (see SESSION.md section 15).
+  const sessions = config.oauth.enabled
+    ? new SessionStore({ key: oauth.deriveSessionKey(config.oauth.clientSecret) })
+    : null;
+  const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
+  const requests = new RequestStore({ path: config.requestsPath, maxBytes: config.maxRequestsBytes });
+  const registryBaseUrl = config.registryUrl.replace(/\/+$/, '');
+  const callbackUri = `${registryBaseUrl}${oauth.CALLBACK_PATH}`;
+  const secureCookies = registryBaseUrl.startsWith('https://') || config.env === 'production';
+  const sessionMaxAgeSeconds = Math.floor(DEFAULT_TTL_MS / 1000);
+  const oauthStateMaxAgeMs = 10 * 60 * 1000;
 
   fs.mkdirSync(config.uploadTmpDir, { recursive: true });
 
@@ -134,6 +155,93 @@ function createApp(config = loadConfig()) {
       });
       next();
     });
+  }
+
+  // ─── Registry 2.0 sessions (identity only; never a publish credential) ────
+
+  // Resolve the signed session cookie once per request. A forged or expired
+  // cookie simply leaves req.session null.
+  app.use((req, _res, next) => {
+    req.sessionId = null;
+    req.session = null;
+    if (sessions) {
+      const cookies = parseCookies(req.headers.cookie);
+      const value = cookies.get(SESSION_COOKIE);
+      const found = value ? sessions.fromCookie(value) : null;
+      if (found) {
+        req.sessionId = found.id;
+        req.session = found.session;
+      }
+    }
+    next();
+  });
+
+  const accountOf = (req) => (req.session && req.session.account) || null;
+  const isAdmin = (account) => Boolean(account)
+    && config.oauth.adminLogins.includes(String(account.login).toLowerCase());
+
+  /** Sign-in state for the nav bar; '' when the feature is off. */
+  function accountNav(req) {
+    if (!config.oauth.enabled) return '';
+    const account = accountOf(req);
+    if (!account) return '<a class="nav-account" href="/login">Sign in</a>';
+    const admin = isAdmin(account)
+      ? '<a class="nav-account" href="/admin/requests">Admin</a>'
+      : '';
+    return `${admin}<a class="nav-account" href="/account">@${escapeHtml(account.login)}</a>`;
+  }
+
+  function setSessionCookie(res, id) {
+    res.append('Set-Cookie', serializeCookie(SESSION_COOKIE, sessions.cookieValue(id), {
+      maxAgeSeconds: sessionMaxAgeSeconds,
+      secure: secureCookies,
+    }));
+  }
+
+  function clearSessionCookie(res) {
+    res.append('Set-Cookie', serializeCookie(SESSION_COOKIE, '', {
+      maxAgeSeconds: 0,
+      secure: secureCookies,
+    }));
+  }
+
+  /** Only same-site paths are valid return targets (no open redirects). */
+  function safeReturnTo(value) {
+    if (typeof value !== 'string' || value.length > 300) return '/account';
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/account';
+    if (/[\u0000-\u001f]/.test(value)) return '/account';
+    return value;
+  }
+
+  function requireLogin(req, _res, next) {
+    if (!accountOf(req)) {
+      return next(new UnauthorizedError('sign in to continue', 'login_required'));
+    }
+    next();
+  }
+
+  function requireAdmin(req, _res, next) {
+    const account = accountOf(req);
+    if (!account) {
+      return next(new UnauthorizedError('sign in to continue', 'login_required'));
+    }
+    if (!isAdmin(account)) {
+      return next(new ForbiddenError('registry admin required', 'admin_required'));
+    }
+    next();
+  }
+
+  /** Double-submit CSRF check against the session's per-session token. */
+  function requireCsrf(req, _res, next) {
+    const expected = req.session && req.session.csrf ? req.session.csrf : '';
+    const presented = String((req.body && req.body.csrf) || req.get('x-csrf-token') || '');
+    if (!expected || !presented || !safeEqual(expected, presented)) {
+      return next(new ForbiddenError(
+        'missing or stale CSRF token; reload the page and retry',
+        'csrf_failed',
+      ));
+    }
+    next();
   }
 
   // ─── Multipart upload handling ────────────────────────────────────────────
@@ -229,7 +337,8 @@ function createApp(config = loadConfig()) {
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60').send(homePage(index));
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(homePage(index, { nav: accountNav(req) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -291,7 +400,8 @@ function createApp(config = loadConfig()) {
   app.get('/packages', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60').send(homePage(index));
+      return res.type('html').set('Cache-Control', 'public, max-age=60')
+        .send(homePage(index, { nav: accountNav(req) }));
     }
     res.json({
       packages: Object.entries(index.packages).map(([name, pkg]) => ({
@@ -313,7 +423,7 @@ function createApp(config = loadConfig()) {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(categoriesPage(index));
+        .send(categoriesPage(index, { nav: accountNav(req) }));
     }
     res.json({ categories: categoryCounts(index) });
   });
@@ -329,7 +439,7 @@ function createApp(config = loadConfig()) {
     }
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry));
+        .send(packagePage(pkg, indexStore.snapshot().registry, '', { nav: accountNav(req) }));
     }
     res.json(pkg);
   });
@@ -344,7 +454,7 @@ function createApp(config = loadConfig()) {
           .send(notFoundPage(`Version "${version}" of "${name}" was not found.`));
       }
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry, version));
+        .send(packagePage(pkg, indexStore.snapshot().registry, version, { nav: accountNav(req) }));
     }
     res.json(indexStore.requireVersion(name, version));
   });
@@ -387,7 +497,7 @@ function createApp(config = loadConfig()) {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(searchPage(index, rawQuery, category));
+        .send(searchPage(index, rawQuery, category, { nav: accountNav(req) }));
     }
     const results = [];
     for (const [name, pkg] of Object.entries(index.packages)) {
@@ -414,6 +524,219 @@ function createApp(config = loadConfig()) {
     }
     res.json({ query: rawQuery, category, results });
   });
+
+  // ─── Accounts and requests (registry 2.0; UI-only, HTML responses) ────────
+  // Sign-in links an identity to the request queue. Nothing here mints or
+  // touches publish credentials: approved requests are fulfilled by the
+  // operator on the host, and only the reference is recorded.
+
+  app.get('/login', generalLimit, (req, res) => {
+    if (accountOf(req)) return res.redirect(302, '/account');
+    const error = typeof req.query.error === 'string' ? req.query.error : '';
+    res.type('html').send(loginPage({
+      enabled: config.oauth.enabled,
+      error,
+      nav: accountNav(req),
+    }));
+  });
+
+  app.get('/auth/github/start', writeLimit, (req, res) => {
+    if (!config.oauth.enabled) return res.redirect(302, '/login');
+    // A fresh session per attempt: single-use state, no fixation.
+    if (req.session) sessions.destroy(req.sessionId);
+    const state = oauth.randomState();
+    const id = sessions.create({
+      oauthState: state,
+      oauthStateAt: Date.now(),
+      returnTo: safeReturnTo(req.query.returnTo),
+    });
+    setSessionCookie(res, id);
+    res.redirect(302, oauth.authorizeUrl(config.oauth, { redirectUri: callbackUri, state }));
+  });
+
+  app.get(oauth.CALLBACK_PATH, generalLimit, async (req, res, next) => {
+    try {
+      if (!config.oauth.enabled) {
+        throw new NotFoundError('sign-in is not configured on this registry', 'oauth_not_configured');
+      }
+      const { code, state, error } = req.query;
+      if (typeof error === 'string' && error) {
+        return res.redirect(302, '/login?error=denied');
+      }
+      const session = req.session;
+      const expected = session && typeof session.oauthState === 'string' ? session.oauthState : '';
+      if (!session || typeof state !== 'string' || !state || !expected || !safeEqual(expected, state)) {
+        throw new ForbiddenError('sign-in state check failed; start over', 'oauth_state_mismatch');
+      }
+      const startedAt = Number(session.oauthStateAt) || 0;
+      const returnTo = safeReturnTo(session.returnTo);
+      // Single-use state: the session is gone whether or not the exchange
+      // succeeds, so a leaked callback URL cannot be replayed.
+      sessions.destroy(req.sessionId);
+      if (Date.now() - startedAt > oauthStateMaxAgeMs) {
+        throw new ForbiddenError('sign-in took too long; start over', 'oauth_state_expired');
+      }
+      if (typeof code !== 'string' || code === '') {
+        throw new BadRequestError('GitHub did not return a sign-in code', 'oauth_no_code');
+      }
+      const accessToken = await oauth.exchangeCode(config.oauth, {
+        code,
+        redirectUri: callbackUri,
+        fetchImpl: config.oauth.fetchImpl,
+      });
+      const profile = await oauth.fetchUser(config.oauth, accessToken, config.oauth.fetchImpl);
+      const account = accounts.upsert(profile);
+      const id = sessions.create({
+        account: { githubId: account.githubId, login: account.login },
+      });
+      setSessionCookie(res, id);
+      res.redirect(302, returnTo);
+    } catch (err) {
+      if (err instanceof oauth.OAuthError) {
+        // Upstream failure: retryable, and the detail stays in the log only.
+        console.warn(`OAuth sign-in failed: ${err.code} (${err.message})`);
+        return res.redirect(302, '/login?error=oauth');
+      }
+      next(err);
+    }
+  });
+
+  app.get('/account', generalLimit, (req, res) => {
+    if (!config.oauth.enabled) return res.redirect(302, '/login');
+    const account = accountOf(req);
+    if (!account) {
+      return res.redirect(302, `/login?returnTo=${encodeURIComponent('/account')}`);
+    }
+    const stored = accounts.get(account.githubId) || account;
+    const flash = req.session.flash || null;
+    if (flash) delete req.session.flash;
+    const created = typeof req.query.created === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.created)
+      ? req.query.created
+      : '';
+    res.type('html').send(accountPage({
+      account: stored,
+      requests: requests.list({ requesterId: account.githubId }),
+      csrf: req.session.csrf,
+      notice: created ? `Request ${created} submitted for review.` : '',
+      error: flash && flash.error ? flash.error : '',
+      form: flash && flash.form ? flash.form : {},
+      nav: accountNav(req),
+      admin: isAdmin(account),
+    }));
+  });
+
+  app.post(
+    '/requests',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '64kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const created = requests.create({
+          kind: String(req.body.kind || 'token'),
+          requester: accountOf(req),
+          scopes: String(req.body.scopes || ''),
+          repository: String(req.body.repository || ''),
+          workflow: String(req.body.workflow || ''),
+          refs: String(req.body.refs || ''),
+          note: String(req.body.note || ''),
+        });
+        res.redirect(303, `/account?created=${encodeURIComponent(created.id)}#request`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          // Keep the submission on the round trip so the user can fix it.
+          req.session.flash = {
+            error: err.message,
+            form: {
+              kind: String(req.body.kind || 'token'),
+              scopes: String(req.body.scopes || ''),
+              repository: String(req.body.repository || ''),
+              workflow: String(req.body.workflow || ''),
+              refs: String(req.body.refs || ''),
+              note: String(req.body.note || ''),
+            },
+          };
+          return res.redirect(303, '/account#request');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/logout',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireCsrf,
+    (req, res) => {
+      if (req.session) sessions.destroy(req.sessionId);
+      clearSessionCookie(res);
+      res.redirect(303, '/');
+    },
+  );
+
+  app.get('/admin/requests', generalLimit, (req, res, next) => {
+    if (!config.oauth.enabled) return res.redirect(302, '/login');
+    const account = accountOf(req);
+    if (!account) {
+      return res.redirect(302, `/login?returnTo=${encodeURIComponent('/admin/requests')}`);
+    }
+    if (!isAdmin(account)) {
+      return next(new ForbiddenError('registry admin required', 'admin_required'));
+    }
+    const updated = typeof req.query.updated === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.updated)
+      ? req.query.updated
+      : '';
+    res.type('html').send(adminPage({
+      account,
+      requests: requests.list(),
+      csrf: req.session.csrf,
+      notice: updated ? `Request ${updated} updated.` : '',
+      nav: accountNav(req),
+    }));
+  });
+
+  app.post(
+    '/admin/requests/:id/decision',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '64kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const updated = requests.decide(req.params.id, {
+          action: String(req.body.action || ''),
+          actor: accountOf(req).login,
+          note: String(req.body.note || ''),
+        });
+        console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
+        res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/requests/:id/fulfil',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '64kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const updated = requests.fulfil(req.params.id, {
+          actor: accountOf(req).login,
+          reference: String(req.body.reference || ''),
+        });
+        console.log(`Request ${updated.id} fulfilled by ${updated.fulfilledBy}`);
+        res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 
   // ─── Publish ──────────────────────────────────────────────────────────────
 
@@ -531,7 +854,8 @@ function createApp(config = loadConfig()) {
   // while every CLI/protocol request keeps the JSON contract.
   app.use((req, res) => {
     if (wantsHtml(req)) {
-      return res.status(404).type('html').send(notFoundPage('This page does not exist.'));
+      return res.status(404).type('html')
+        .send(notFoundPage('This page does not exist.', { nav: accountNav(req) }));
     }
     res.status(404).json({ error: `no such endpoint: ${req.method} ${req.path}`, code: 'no_route' });
   });
@@ -570,7 +894,7 @@ function createApp(config = loadConfig()) {
   });
 
   // Expose for tests / graceful shutdown.
-  app.locals.registry = { config, indexStore, artifacts };
+  app.locals.registry = { config, indexStore, artifacts, accounts, requests };
   return app;
 }
 

@@ -72,7 +72,7 @@ function fingerprint(publicKeyHex) {
  * Full HTML document. `body` is trusted markup built by the page builders;
  * every value interpolated into it must pass through escapeHtml first.
  */
-function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '' }) {
+function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '', nav = '' }) {
   const pageTitle = title ? `${escapeHtml(title)} -- ${SITE_NAME}` : SITE_NAME;
   return `<!doctype html>
 <html lang="en">
@@ -97,6 +97,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '' 
       <a href="https://xiom-lang.org/docs/">Docs</a>
       <a href="https://xiom-lang.org">xiom-lang.org</a>
       <a href="https://github.com/xiom-lang/registry">GitHub</a>
+      ${nav ? `<span class="nav-right">${nav}</span>` : ''}
     </nav>
   </div>
 </header>

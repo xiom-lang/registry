@@ -145,11 +145,12 @@ function packageList(index) {
 }
 
 /** Home: registry overview plus the full package list. */
-function homePage(index) {
+function homePage(index, options = {}) {
   const names = Object.keys(index.packages);
   const lastUpdated = index.updated_at ? `Updated ${formatDate(index.updated_at)}` : 'No publishes yet';
   return layout({
     title: '',
+    nav: options.nav,
     body: `<section class="hero">
   <p>The package registry for XIOM. Browse packages, versions, and ed25519 signatures,
      or install directly: <code>xiom pkg install &lt;package&gt;</code>.</p>
@@ -166,7 +167,7 @@ ${packageList(index)}`,
 }
 
 /** Search results (or the full list when the query is empty). */
-function searchPage(index, query = '', category = '') {
+function searchPage(index, query = '', category = '', options = {}) {
   const needle = query.trim().toLowerCase();
   const active = category.trim().toLowerCase();
   const matches = Object.entries(index.packages)
@@ -198,6 +199,7 @@ ${matches.map(([name, pkg]) => packageCard(name, pkg)).join('\n')}
   return layout({
     title: active ? `Category: ${active}` : 'Search',
     searchQuery: query,
+    nav: options.nav,
     body: `<section class="hero">
   <h1>${active ? `Category: ${escapeHtml(active)}` : 'Search'}</h1>
   <div class="meta-row"><span>${escapeHtml(summary)}</span></div>
@@ -208,7 +210,7 @@ ${list}`,
 }
 
 /** Category index: every vocabulary entry with its package count. */
-function categoriesPage(index) {
+function categoriesPage(index, options = {}) {
   const counts = categoryCounts(index);
   const items = counts
     .map(({ name, count }) => `<li class="category-item">
@@ -219,6 +221,7 @@ function categoriesPage(index) {
   return layout({
     title: 'Categories',
     description: 'Browse XIOM registry packages by category',
+    nav: options.nav,
     body: `<section class="hero">
   <h1>Categories</h1>
   <p>The registry vocabulary is fixed so browsing and tooling stay predictable;
@@ -252,7 +255,7 @@ function publisherCell(publisher) {
 }
 
 /** Package detail: metadata, install command, trust instructions, versions. */
-function packagePage(pkg, registryUrl, selectedVersion = '') {
+function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const name = pkg.name;
   const names = Object.keys(pkg.versions);
   const detailVersion = selectedVersion && pkg.versions[selectedVersion]
@@ -325,6 +328,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '') {
   return layout({
     title: name,
     description: pkg.description || `Versions of ${name}`,
+    nav: options.nav,
     body: `<section>
   <div class="pkg-title">
     <h1>${escapeHtml(name)}</h1>
@@ -349,9 +353,10 @@ ${deps}`,
   });
 }
 
-function notFoundPage(message) {
+function notFoundPage(message, options = {}) {
   return layout({
     title: 'Not found',
+    nav: options.nav,
     body: `<section class="hero">
   <h1>Not found</h1>
   <p>${escapeHtml(message)}</p>
