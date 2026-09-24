@@ -956,6 +956,14 @@ allowlisted.
  "xiom.uuid", "xiom.validation", "xiom.wasm", "xiom.yaml"]
 ```
 
+**v4 deployed on staging (2026-09-24, ops 9fd32a3):** 43 names added with no
+removals or duplicates (`xiom.durable` already provisioned), installed config
+reports 3 entries / 134 scopes (`stdlib-main-staging` 2, `registry-canary` 1,
+`eco-canary` 131), recreate shows `publishers: 3 OIDC entries`, `/health` ok.
+Production stays at 2 entries / eco 88 until the staging canary passes plus
+the owner's greenlight, then ops deploys the same delta together with the
+`eco-v0.1.1` batch. Wave 16 still needs its own delta once allowlisted.
+
 Tag scheme (confirmed 2026-09-23): the packages workflow already supports
 `eco-v*` (full allowlisted batch) and `xiom-<folder>/v<ver>` (exactly one
 package; the tag version must equal the manifest version), plus a `guard` job
