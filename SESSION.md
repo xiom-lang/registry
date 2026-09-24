@@ -1042,3 +1042,24 @@ name A-Z) and shareable server-side facets (category counts, first-party,
 signed); (4) search tolerates `xiom-` vs `xiom.` and gains prefix matching;
 (5) index growth: a compact/gzipped form eventually, not urgent at 35
 packages.
+
+---
+
+## 14. Registry release notes (website contract, if we tag releases)
+
+The website owns schema v1 (`xiom-lang/website`
+`docs/release-notes-schema.md`). If the registry ever starts tagged
+user-facing releases, publish `release.json` at
+`https://registry.xiom-lang.org/releases/<tag>/release.json` (stable URL) and
+tell the website lane; they render it wherever registry releases are linked.
+Not scheduled -- the registry has no tagged release process or notes today.
+Serving options when it happens: static files via nginx or a registry route.
+
+Website optional ask (correlation): keep the published `xiom.std` metadata
+carrying the toolchain tag it is pinned to. The registry already accepts and
+preserves a `compiler` field on version entries (`src/app.js` publish
+metadata), so the stdlib lane only needs to pass it at publish time;
+`xiom-std@0.61.3` currently has no `compiler` value. Package-level metadata
+(description, license, categories, keywords, repository) is intact on both
+instances; the version endpoint intentionally keeps only version-scoped
+fields.
