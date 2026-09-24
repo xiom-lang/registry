@@ -47,12 +47,14 @@ async function publishForm({
   publicKey = '',
   token = OPEN_TOKEN,
   url = baseUrl,
+  compiler = '',
 }) {
   const form = new FormData();
   form.set('name', name);
   form.set('version', version);
   if (signature) form.set('signature', signature);
   if (publicKey) form.set('publicKey', publicKey);
+  if (compiler) form.set('compiler', compiler);
   form.set('package', new Blob([bytes], { type: 'application/gzip' }), 'package.tar.gz');
   const headers = {};
   if (token !== null) headers.Authorization = `Bearer ${token}`;
@@ -255,6 +257,24 @@ test('republish is 409 with immutable-version code', async () => {
   const second = await publishForm({ name: 'dup-pkg', version: '1.0.0', bytes, token: OPEN_TOKEN });
   assert.equal(second.status, 409);
   assert.equal((await second.json()).code, 'version_exists');
+});
+
+test('compiler metadata is stored and served per version', async () => {
+  const bytes = tarballBytes('compiler-meta');
+  const published = await publishForm({
+    name: 'compiler-meta-pkg', version: '0.1.0', bytes, compiler: 'v0.61.3',
+  });
+  assert.equal(published.status, 201, await published.clone().text());
+  const entry = await (await fetch(`${baseUrl}/packages/compiler-meta-pkg/0.1.0`)).json();
+  assert.equal(entry.compiler, 'v0.61.3', 'the toolchain pin is served for the version');
+
+  const longBytes = tarballBytes('compiler-long');
+  const long = await publishForm({
+    name: 'compiler-long-pkg', version: '0.1.0', bytes: longBytes, compiler: 'v'.repeat(100),
+  });
+  assert.equal(long.status, 201, await long.clone().text());
+  const longEntry = await (await fetch(`${baseUrl}/packages/compiler-long-pkg/0.1.0`)).json();
+  assert.equal(longEntry.compiler.length, 64, 'oversized pins are capped at 64 chars');
 });
 
 test('a token pinned to a signing key rejects any other key', async () => {
