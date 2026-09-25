@@ -393,6 +393,66 @@ test('reporting needs sign-in and the queue is reviewer-only', async () => {
   assert.doesNotMatch(html, /href="\/review"/, 'plain accounts get no reviewer link');
 });
 
+test('reviewers can flag, review, and clear a package with a public history', async () => {
+  const jar = cookieJar();
+  await login(jar, 'user-code');
+
+  let response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /Mark reviewed/, 'reviewers get decision controls');
+  const csrf = csrfFrom(html);
+
+  // Flagging needs a reason; the error comes back on the package page.
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'flag' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /a reason is required when flagging/);
+  assert.doesNotMatch(html, /flagged by a reviewer/);
+
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'flag', note: 'confirmed unsafe' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /flagged by a reviewer/);
+  assert.match(html, /confirmed unsafe/);
+
+  // The listing overlay shows the flagged community art.
+  response = await requestAs(jar, '/packages', { headers: BROWSER });
+  assert.match(await response.text(), /src="\/ui\/pgk_flagged_community\.webp"/);
+
+  // Clearing restores the state; the history stays public.
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'clear' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.doesNotMatch(html, /flagged by a reviewer/);
+  assert.match(html, /cleared<\/span> by @user-user/);
+
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
+  assert.deepEqual(
+    data.packages['readme-pkg'].history.map((entry) => entry.action),
+    ['flagged', 'cleared'],
+  );
+
+  // A plain account sees the history but no controls.
+  const plain = cookieJar();
+  await login(plain, 'plain-code');
+  response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.doesNotMatch(html, /Mark reviewed/);
+  assert.match(html, /Review history/);
+});
+
 test('OAuth state is verified and single-use', async () => {
   const jar = cookieJar();
   let response = await requestAs(jar, '/auth/github/start');

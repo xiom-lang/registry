@@ -292,14 +292,17 @@ function createApp(config = loadConfig()) {
     const account = accountOf(req);
     const flash = req.session && req.session.flash ? req.session.flash : null;
     if (flash) delete req.session.flash;
+    const decision = reviews.decision(name);
     return {
       canReport: Boolean(account),
       canReview: isReviewer(account),
       openReports: reviews.openReportCount(name),
+      decision,
+      history: decision ? decision.history : [],
       csrf: req.session ? req.session.csrf : '',
       notice: typeof req.query.reported === 'string'
         ? 'Report submitted; a reviewer will take a look.'
-        : '',
+        : (typeof req.query.decided === 'string' ? 'Review decision recorded.' : ''),
       error: flash && flash.error ? flash.error : '',
     };
   }
@@ -435,11 +438,33 @@ function createApp(config = loadConfig()) {
     };
   }
 
+  /**
+   * Index view for HTML rendering with reviewer decisions overlaid
+   * (`flagged` / `reviewed` marks). `/index.json` stays raw: review state is
+   * display/audit data, not part of the publish protocol.
+   */
+  function reviewedIndex() {
+    const index = indexStore.snapshot();
+    const decisions = reviews.listDecisions();
+    if (decisions.length === 0) return index;
+    const packages = { ...index.packages };
+    let changed = false;
+    for (const { name, status } of decisions) {
+      if (!status || !packages[name]) continue;
+      packages[name] = {
+        ...packages[name],
+        ...(status === 'flagged' ? { flagged: true } : { reviewed: true }),
+      };
+      changed = true;
+    }
+    return changed ? { ...index, packages } : index;
+  }
+
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(index, { nav: accountNav(req) }));
+        .send(homePage(reviewedIndex(), { nav: accountNav(req) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -505,7 +530,7 @@ function createApp(config = loadConfig()) {
     const listing = listingFromQuery(req.query);
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagesPage(index, { nav: accountNav(req), ...listing }));
+        .send(packagesPage(reviewedIndex(), { nav: accountNav(req), ...listing }));
     }
     const paged = paginatePackages(index, listing);
     res.json({
@@ -554,8 +579,9 @@ function createApp(config = loadConfig()) {
       throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
     }
     if (wantsHtml(req)) {
+      const view = reviewedIndex();
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry, '', {
+        .send(packagePage(view.packages[name] || pkg, view.registry, '', {
           nav: accountNav(req),
           readme: readmeFor(pkg),
           review: packageReviewContext(req, pkg.name),
@@ -567,14 +593,15 @@ function createApp(config = loadConfig()) {
   app.get('/packages/:name/:version', generalLimit, (req, res) => {
     const { name, version } = req.params;
     if (wantsHtml(req)) {
-      const pkg = indexStore.getPackage(name);
+      const view = reviewedIndex();
+      const pkg = view.packages[name];
       const entry = pkg?.versions?.[version];
       if (!pkg || !entry) {
         return res.status(404).type('html')
           .send(notFoundPage(`Version "${version}" of "${name}" was not found.`));
       }
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagePage(pkg, indexStore.snapshot().registry, version, {
+        .send(packagePage(pkg, view.registry, version, {
           nav: accountNav(req),
           readme: readmeFor(pkg),
           review: packageReviewContext(req, pkg.name),
@@ -639,7 +666,7 @@ function createApp(config = loadConfig()) {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(searchPage(index, rawQuery, category, { nav: accountNav(req) }));
+        .send(searchPage(reviewedIndex(), rawQuery, category, { nav: accountNav(req) }));
     }
     const results = searchPackages(index, rawQuery, category).map(({ name, pkg }) => ({
       name,
@@ -931,12 +958,47 @@ function createApp(config = loadConfig()) {
     res.type('html').send(reviewPage({
       account,
       reports: reviews.listReports(),
+      decisions: reviews.listDecisions(),
       csrf: req.session.csrf,
       notice: updated ? `Report ${updated} updated.` : '',
       error: flash && flash.error ? flash.error : '',
       nav: accountNav(req),
     }));
   });
+
+  app.post(
+    '/review/packages/:name/decision',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireReviewer,
+    requireCsrf,
+    (req, res, next) => {
+      const { name } = req.params;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const action = String(req.body.action || '');
+        const status = action === 'review' ? 'reviewed' : (action === 'flag' ? 'flagged' : (action === 'clear' ? '' : null));
+        if (status === null) {
+          throw new BadRequestError('action must be "review", "flag", or "clear"', 'invalid_action');
+        }
+        const record = reviews.setDecision(name, {
+          status,
+          actor: accountOf(req).login,
+          note: String(req.body.note || ''),
+        });
+        console.log(`Package ${name} review decision: ${record.status || 'cleared'} by ${accountOf(req).login}`);
+        res.redirect(303, `/packages/${encodeURIComponent(name)}?decided=1#review`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/packages/${encodeURIComponent(name)}#review`);
+        }
+        return next(err);
+      }
+    },
+  );
 
   app.post(
     '/review/reports/:id/resolve',

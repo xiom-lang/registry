@@ -19,7 +19,7 @@ const {
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
 const { renderMarkdown } = require('./markdown');
-const { reportForm } = require('./review');
+const { reportForm, decisionPill, reviewHistory, decisionControls } = require('./review');
 const semver = require('semver');
 
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
@@ -57,12 +57,18 @@ function packageBadgeState(name, pkg) {
   const signed = Boolean(latest && latest.signature && latest.publicKey);
   const oidcTrusted = Boolean(latest && latest.publisher
     && typeof latest.publisher.repository === 'string');
-  const badge = (state, communityLabel, officialLabel = communityLabel) => ({
-    file: `pgk_${state}_${track}.webp`,
-    label: official ? officialLabel : communityLabel,
-    pills: state === 'trusted' ? (signed ? ['trusted', 'signed'] : ['trusted'])
-      : (state === 'verified' ? ['signed'] : []),
-  });
+  const badge = (state, communityLabel, officialLabel = communityLabel) => {
+    const pills = state === 'trusted' ? (signed ? ['trusted', 'signed'] : ['trusted'])
+      : (state === 'verified' ? ['signed'] : []);
+    // Human review is a distinct claim alongside publisher claims; a flagged
+    // package shows the flagged art and no claim pills.
+    if (pkg && pkg.reviewed === true && state !== 'flagged') pills.push('reviewed');
+    return {
+      file: `pgk_${state}_${track}.webp`,
+      label: official ? officialLabel : communityLabel,
+      pills,
+    };
+  };
 
   if (pkg && pkg.flagged === true) {
     return badge('flagged', 'Flagged by a registry reviewer');
@@ -573,11 +579,12 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 </details>`
     : '';
 
-  // Reports (section 15 phase 3): signed-in accounts can file one; reviewers
-  // also see the queue link and the open report count for this package.
+  // Reports and reviewer decisions (section 15 phase 3): signed-in accounts
+  // can file a report; reviewers also see the queue link, the decision
+  // controls, and everyone sees the public review history.
   const review = options.review || null;
   const reviewBlock = review
-    ? `<div class="review-box">
+    ? `<div class="review-box" id="review">
   ${review.notice ? `<p class="notice" role="status">${escapeHtml(review.notice)}</p>` : ''}
   ${review.error ? `<p class="error-box" role="alert">${escapeHtml(review.error)}</p>` : ''}
   ${review.canReview
@@ -585,6 +592,8 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
       ? `${review.openReports} open report${review.openReports === 1 ? '' : 's'} on this package \u00b7 `
       : ''}<a href="/review">Open the review queue</a></p>`
     : ''}
+  ${review.canReview ? decisionControls({ name, csrf: review.csrf }) : ''}
+  ${reviewHistory(review.history)}
   ${review.canReport
     ? `<details class="report-form-box"><summary>Report this package</summary>${reportForm({ name, csrf: review.csrf })}</details>`
     : ''}
@@ -601,6 +610,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
     ${officialBadge(name)}
     ${latestBadge}
     ${signedBadge}
+    ${review ? decisionPill(review.decision) : ''}
     ${packageBadge(name, pkg)}
   </div>
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}

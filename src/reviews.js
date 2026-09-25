@@ -21,6 +21,7 @@ const MAX_REVIEWS_BYTES = 4 * 1024 * 1024;
 const MAX_NOTE = 500;
 const REPORT_REASONS = Object.freeze(['malware', 'spam', 'impersonation', 'license', 'abandoned', 'other']);
 const REPORT_STATUSES = new Set(['open', 'resolved', 'dismissed']);
+const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged']);
 const MAX_OPEN_REPORTS_PER_REPORTER = 3;
 const SAFE_PACKAGE_NAME = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
 
@@ -49,33 +50,43 @@ class ReviewStore {
   constructor({ path, maxBytes = MAX_REVIEWS_BYTES }) {
     this.path = path;
     this.maxBytes = maxBytes;
-    this.reports = this.#read();
+    const state = this.#read();
+    this.packages = state.packages;
+    this.reports = state.reports;
   }
 
   #read() {
-    if (!fs.existsSync(this.path)) return {};
+    if (!fs.existsSync(this.path)) return { packages: {}, reports: {} };
     let raw;
     try {
       raw = fs.readFileSync(this.path, 'utf-8');
     } catch (err) {
       throw new Error(`cannot read reviews ${this.path}: ${err.message}`);
     }
-    if (raw.trim() === '') return {};
+    if (raw.trim() === '') return { packages: {}, reports: {} };
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (err) {
       throw new Error(`reviews ${this.path} is corrupt JSON: ${err.message}`);
     }
-    const source = parsed && typeof parsed === 'object' && parsed.reports && typeof parsed.reports === 'object'
+    const packageSource = parsed && typeof parsed === 'object' && parsed.packages && typeof parsed.packages === 'object'
+      ? parsed.packages
+      : {};
+    const reportSource = parsed && typeof parsed === 'object' && parsed.reports && typeof parsed.reports === 'object'
       ? parsed.reports
       : {};
+    const packages = {};
+    for (const [name, entry] of Object.entries(packageSource)) {
+      const record = normalizeDecision(name, entry);
+      if (record) packages[name] = record;
+    }
     const reports = {};
-    for (const [id, entry] of Object.entries(source)) {
+    for (const [id, entry] of Object.entries(reportSource)) {
       const report = normalizeReport(id, entry);
       if (report) reports[id] = report;
     }
-    return reports;
+    return { packages, reports };
   }
 
   /**
@@ -119,7 +130,7 @@ class ReviewStore {
       status: 'open',
       createdAt: now,
     };
-    this.#commit({ ...this.reports, [id]: report });
+    this.#commit(this.packages, { ...this.reports, [id]: report });
     return report;
   }
 
@@ -143,6 +154,46 @@ class ReviewStore {
       .filter((report) => report.status === 'open' && report.package === name).length;
   }
 
+  /** Current reviewer decision for a package, or null. */
+  decision(packageName) {
+    return this.packages[String(packageName)] || null;
+  }
+
+  listDecisions() {
+    return Object.entries(this.packages).map(([name, record]) => ({ name, ...record }));
+  }
+
+  /**
+   * Record a reviewer decision: mark reviewed, flag, or clear. Flagging
+   * requires a reason; clearing keeps the history (the record is the audit).
+   *
+   * @param {string} packageName
+   * @param {{ status: 'reviewed'|'flagged'|'', actor: string, note?: string }} input
+   */
+  setDecision(packageName, { status, actor, note = '' }) {
+    const name = clean(packageName, 128).toLowerCase();
+    if (!SAFE_PACKAGE_NAME.test(name)) {
+      throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
+    }
+    if (!DECISION_STATUSES.has(status)) {
+      throw new BadRequestError('decision must be "reviewed", "flagged", or empty', 'invalid_decision');
+    }
+    const decisionNote = clean(note, MAX_NOTE);
+    if (status === 'flagged' && !decisionNote) {
+      throw new BadRequestError('a reason is required when flagging a package', 'flag_reason_required');
+    }
+    const prior = this.packages[name];
+    const history = [...(prior ? prior.history : []), {
+      at: new Date().toISOString(),
+      actor: clean(actor, 64),
+      action: status || 'cleared',
+      ...(decisionNote ? { note: decisionNote } : {}),
+    }];
+    const record = { status, history };
+    this.#commit({ ...this.packages, [name]: record }, this.reports);
+    return record;
+  }
+
   /** Resolve or dismiss an open report with the reviewer's note. */
   resolveReport(id, { actor, status = 'resolved', resolution = '' }) {
     const report = this.getReport(id);
@@ -163,7 +214,7 @@ class ReviewStore {
       resolvedAt: new Date().toISOString(),
       resolvedBy: clean(actor, 64),
     };
-    this.#commit({ ...this.reports, [report.id]: updated });
+    this.#commit(this.packages, { ...this.reports, [report.id]: updated });
     return updated;
   }
 
@@ -175,17 +226,19 @@ class ReviewStore {
     throw new Error('could not allocate a report id');
   }
 
-  #commit(next) {
+  #commit(nextPackages, nextReports) {
     const serialized = JSON.stringify({
       version: REVIEWS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
-      reports: next,
+      packages: nextPackages,
+      reports: nextReports,
     }, null, 2);
     if (Buffer.byteLength(serialized, 'utf-8') > this.maxBytes) {
       throw new Error(`reviews file would exceed ${this.maxBytes} bytes`);
     }
     atomicWriteFile(this.path, serialized);
-    this.reports = next;
+    this.packages = nextPackages;
+    this.reports = nextReports;
   }
 }
 
@@ -216,10 +269,29 @@ function normalizeReport(id, entry) {
   return report;
 }
 
+/** Allowlist-normalize one on-disk decision record; malformed entries drop. */
+function normalizeDecision(name, entry) {
+  if (!SAFE_PACKAGE_NAME.test(name) || !entry || typeof entry !== 'object') return null;
+  if (!DECISION_STATUSES.has(entry.status)) return null;
+  const history = Array.isArray(entry.history)
+    ? entry.history
+      .filter((item) => item && typeof item === 'object' && typeof item.action === 'string')
+      .map((item) => ({
+        at: clean(item.at, 40),
+        actor: clean(item.actor, 64),
+        action: clean(item.action, 32),
+        ...(clean(item.note, MAX_NOTE) ? { note: clean(item.note, MAX_NOTE) } : {}),
+      }))
+    : [];
+  if (history.length === 0) return null;
+  return { status: entry.status, history };
+}
+
 module.exports = {
   ReviewStore,
   REVIEWS_SCHEMA_VERSION,
   MAX_REVIEWS_BYTES,
   MAX_NOTE,
   REPORT_REASONS,
+  DECISION_STATUSES,
 };

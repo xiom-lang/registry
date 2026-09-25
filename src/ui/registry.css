@@ -858,6 +858,13 @@ textarea:focus-visible {
   padding: 10px 12px;
 }
 
+/* Human review: a distinct claim pill, the public history, and decisions. */
+.badge.reviewed { border-color: var(--verified-dim); color: var(--verified); }
+.review-history { margin-top: var(--space-md); }
+.review-history summary { color: var(--paper-dim); cursor: pointer; font-weight: 600; }
+.review-history-list { color: var(--muted); font-size: 13px; margin: var(--space-sm) 0 0 20px; }
+.review-decision-row { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); }
+
 /* README block on the package page (section 13). */
 .readme {
   border: 1px solid var(--line);

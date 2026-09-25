@@ -528,6 +528,14 @@ test('packageBadgeState precedence and track selection', () => {
 
   // A package with no versions at all still gets an unsigned badge.
   assert.equal(stateOf(packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} })), 'unsigned');
+
+  // Human review is a distinct pill alongside publisher claims; flagged art wins.
+  const reviewed = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { reviewed: true }));
+  assert.equal(stateOf(reviewed), 'verified');
+  assert.deepEqual(reviewed.pills, ['signed', 'reviewed']);
+  const reviewedFlagged = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { reviewed: true, flagged: true }));
+  assert.equal(stateOf(reviewedFlagged), 'flagged');
+  assert.deepEqual(reviewedFlagged.pills, []);
 });
 
 test('readme is served from the stored tarball and rendered safely', async () => {

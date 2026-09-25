@@ -97,11 +97,63 @@ test('resolve and dismiss require a note and are one-way', () => {
   assert.throws(() => reviews.resolveReport('rep_000000000000', { actor: 'root', resolution: 'x' }), /not found/);
 });
 
+test('reviewer decisions are audited and flagging needs a reason', () => {
+  const reviews = store();
+  assert.throws(
+    () => reviews.setDecision('demo-pkg', { status: 'flagged', actor: 'root' }),
+    /reason is required/,
+  );
+  assert.throws(
+    () => reviews.setDecision('Bad Name', { status: 'reviewed', actor: 'root' }),
+    /not a package name/,
+  );
+  assert.throws(
+    () => reviews.setDecision('demo-pkg', { status: 'nope', actor: 'root' }),
+    /decision must be/,
+  );
+
+  const reviewed = reviews.setDecision('demo-pkg', { status: 'reviewed', actor: 'root', note: 'looks clean' });
+  assert.equal(reviewed.status, 'reviewed');
+  const flagged = reviews.setDecision('demo-pkg', { status: 'flagged', actor: 'root', note: 'malware report confirmed' });
+  assert.equal(flagged.status, 'flagged');
+  assert.deepEqual(flagged.history.map((entry) => entry.action), ['reviewed', 'flagged']);
+
+  const cleared = reviews.setDecision('demo-pkg', { status: '', actor: 'root' });
+  assert.equal(cleared.status, '');
+  assert.deepEqual(cleared.history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
+  assert.deepEqual(reviews.listDecisions().map((entry) => entry.name), ['demo-pkg']);
+  assert.equal(reviews.decision('other-pkg'), null);
+
+  const reloaded = new ReviewStore({ path: reviews.path });
+  assert.equal(reloaded.decision('demo-pkg').status, '');
+  assert.deepEqual(reloaded.decision('demo-pkg').history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
+});
+
+test('reports and decisions coexist in one file', () => {
+  const reviews = store();
+  const report = reviews.createReport({
+    packageName: 'demo-pkg', reporter: REPORTER, reason: 'other', note: 'x',
+  });
+  reviews.setDecision('demo-pkg', { status: 'reviewed', actor: 'root' });
+  const reloaded = new ReviewStore({ path: reviews.path });
+  assert.equal(reloaded.getReport(report.id).status, 'open');
+  assert.equal(reloaded.decision('demo-pkg').status, 'reviewed');
+  assert.equal(reloaded.openReportCount('demo-pkg'), 1);
+});
+
 test('malformed persisted reports are dropped on load', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-reviews-'));
   const file = path.join(dir, 'reviews.json');
   fs.writeFileSync(file, JSON.stringify({
     version: '1.0.0',
+    packages: {
+      'demo-pkg': {
+        status: 'reviewed',
+        history: [{ at: '2026-09-25T00:00:00.000Z', actor: 'root', action: 'reviewed' }],
+      },
+      'Bad Name': { status: 'reviewed', history: [{ action: 'reviewed' }] },
+      'other-pkg': { status: 'nope', history: [{ action: 'x' }] },
+    },
     reports: {
       rep_aaaaaaaaaaaa: {
         id: 'rep_aaaaaaaaaaaa',
@@ -119,4 +171,5 @@ test('malformed persisted reports are dropped on load', () => {
   }));
   const reviews = new ReviewStore({ path: file });
   assert.deepEqual(reviews.listReports().map((report) => report.id), ['rep_aaaaaaaaaaaa']);
+  assert.deepEqual(reviews.listDecisions().map((entry) => entry.name), ['demo-pkg']);
 });
