@@ -141,6 +141,26 @@ test('reports and decisions coexist in one file', () => {
   assert.equal(reloaded.openReportCount('demo-pkg'), 1);
 });
 
+test('ratings upsert per account and aggregate', () => {
+  const reviews = store();
+  assert.throws(() => reviews.rate('demo-pkg', { user: REPORTER, stars: 0 }), /1 to 5/);
+  assert.throws(() => reviews.rate('demo-pkg', { user: REPORTER, stars: 4.5 }), /whole number/);
+
+  reviews.rate('demo-pkg', { user: REPORTER, stars: 5, review: 'great' });
+  reviews.rate('demo-pkg', { user: { githubId: '7', login: 'bob' }, stars: 3 });
+  assert.deepEqual(reviews.ratingSummary('demo-pkg'), { count: 2, average: 4 });
+
+  reviews.rate('demo-pkg', { user: REPORTER, stars: 1, review: 'changed my mind' });
+  assert.deepEqual(reviews.ratingSummary('demo-pkg'), { count: 2, average: 2 });
+
+  const reloaded = new ReviewStore({ path: reviews.path });
+  assert.equal(reloaded.ratingSummary('demo-pkg').count, 2);
+  assert.equal(reloaded.ratingSummary('other-pkg').count, 0);
+  const mine = reloaded.ratingsFor('demo-pkg').find((entry) => entry.githubId === '4242');
+  assert.equal(mine.stars, 1);
+  assert.equal(mine.review, 'changed my mind');
+});
+
 test('malformed persisted reports are dropped on load', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-reviews-'));
   const file = path.join(dir, 'reviews.json');

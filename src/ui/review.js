@@ -113,6 +113,49 @@ function decisionControls({ name, csrf }) {
 </form>`;
 }
 
+/** Public ratings and short reviews (the social layer's first slice). */
+function ratingsSection({ name, ratings = [], summary = { count: 0, average: 0 }, myRating = null, canRate = false, csrf = '' }) {
+  const stars = (count) => '\u2605'.repeat(count);
+  const summaryLine = summary.count > 0
+    ? `<span class="rating-average">${summary.average.toFixed(1)}</span>`
+      + ` <span class="rating-stars" aria-hidden="true">${stars(Math.round(summary.average))}</span>`
+      + ` <span class="pkg-meta">${summary.count} rating${summary.count === 1 ? '' : 's'}</span>`
+    : '<span class="pkg-meta">No ratings yet.</span>';
+  const list = ratings.length === 0 ? '' : `<ul class="rating-list">
+${ratings.map((entry) => `  <li class="rating-item">
+    <span class="mono">@${escapeHtml(entry.login)}</span>
+    <span class="rating-stars" title="${entry.stars} of 5">${stars(entry.stars)}</span>
+    <span class="pkg-meta">${escapeHtml(formatDate(entry.at))}</span>
+    ${entry.review ? `<p class="pkg-desc">${escapeHtml(entry.review)}</p>` : ''}
+  </li>`).join('\n')}
+</ul>`;
+  const form = canRate
+    ? `<form class="rating-form" method="post" action="/packages/${encodeURIComponent(name)}/rating">
+  <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+  <div class="form-grid">
+    <label class="form-field">
+      <span>Your rating</span>
+      <select name="stars">
+        ${[5, 4, 3, 2, 1].map((value) => `<option value="${value}"${myRating && myRating.stars === value ? ' selected' : ''}>${stars(value)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="form-field">
+      <span>Short review (optional)</span>
+      <textarea name="review" rows="2" maxlength="280"
+        placeholder="What worked, what did not">${escapeHtml(myRating && myRating.review ? myRating.review : '')}</textarea>
+    </label>
+  </div>
+  <button class="button primary" type="submit">${myRating ? 'Update rating' : 'Rate package'}</button>
+</form>`
+    : '<p class="pkg-meta"><a href="/login">Sign in</a> to rate this package.</p>';
+  return `<section class="ratings-box" id="reviews">
+  <h2>Reviews</h2>
+  <p class="rating-summary">${summaryLine}</p>
+  ${list}
+  ${form}
+</section>`;
+}
+
 /** Reviewer queue: open reports first, then decisions and the closed record. */
 function reviewPage({ account, reports, decisions = [], csrf, notice = '', error = '', nav = '' }) {
   const open = reports.filter((report) => report.status === 'open');
@@ -148,4 +191,12 @@ ${section('Closed', closed, 'No closed reports yet.', closedReportRow)}`;
   return layout({ title: 'Review queue', body, nav });
 }
 
-module.exports = { reviewPage, reportForm, decisionPill, reviewHistory, decisionControls, REASON_LABELS };
+module.exports = {
+  reviewPage,
+  reportForm,
+  decisionPill,
+  reviewHistory,
+  decisionControls,
+  ratingsSection,
+  REASON_LABELS,
+};

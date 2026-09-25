@@ -1163,6 +1163,10 @@ Accounts phase (after the section 13/14 work), if we build it:
    listing/home/search overlays `flagged`/`reviewed` at render time while
    `/index.json` stays raw. Records live in `reviews.json` on the data
    volume; `flagged` is reviewer/admin-only and never publisher-declared.
+   **Ratings (social base) DONE (2026-09-26):** signed-in accounts leave one
+   star rating (1-5) plus an optional 280-char review per package (upsert);
+   the package page shows the average, count, and recent reviews, and
+   ratings live with reports/decisions in `reviews.json`. See section 18.
 4. Sponsorship and contributors: GitHub Sponsors status and publish-history
    contributors on package pages, opt-in; leaderboards only over reviewed
    packages so volume is not rewarded blindly.
@@ -1460,7 +1464,53 @@ sign-in: OIDC publishing never uses browser sessions.
 4. Next registry work: the community smoke-test repo
    (`LefterisNotas/test_registry_smoke`, package `test-registry-smoke`)
    exercises both trust paths once staging is recreated: trusted-publisher
-   request from the website -> OIDC publish (trusted art + signed pill),
-   then a token request -> host-minted token -> dev-signed publish
-   (verified art + signed pill), then yank. Section 13 phase 5
-   (compact/gzipped index form) waits until scale demands it.
+   request from the website (now active on one admin click, no host editing)
+   -> OIDC publish (trusted art + signed pill), then a token request ->
+   host-minted token -> dev-signed publish (verified art + signed pill), then
+   yank. Section 18 is the social-layer base to expand from.
+
+---
+
+## 18. Social layer foundations (owner direction, 2026-09-26)
+
+**Vision:** the registry as a community surface -- developer profiles and
+activity, reviews and ratings, notifications that reach people, top
+contributors with their GitHub Sponsors badges, and engagement loops --
+without weakening the publishing guarantees.
+
+**Built now (first slice):** star ratings and short reviews.
+- One rating per GitHub account per package (upsert), 1-5 stars, optional
+  280-char review; stored in `reviews.json` under `ratings`, allowlist-
+  normalized on load.
+- The package page shows the average, the count, and recent reviews with
+  @logins; signed-in accounts get the form, anonymous readers see it
+  read-only.
+- The same moderation surfaces apply: reports feed the reviewer queue and
+  reviewer decisions override display.
+
+**Recorded decisions for the expansion (implement in this order):**
+
+1. **Notification outbox + email.** Accounts gain an optional `notifyEmail`
+   (profile/request field) and later the `user:email` scope for a verified
+   address. A `notifications` outbox records events (request approved /
+   fulfilled, review decision, ratings, token rotation); the app renders
+   in-app notices immediately and a pluggable sender (`SMTP_URL`,
+   `SMTP_FROM`) delivers email. Token *credentials* still never flow through
+   the app: delivery stays host-side.
+2. **SQLite as the primary store** when profiles/feeds land. Introduce a
+   `src/data/` repository layer behind the existing store interfaces and
+   migrate one store at a time (ratings/reviews first, they grow fastest);
+   `/index.json` and the publish protocol stay untouched. Node base moves to
+   24 LTS for `node:sqlite` (Dockerfile + CI in the same change), unless the
+   image stays on 22 and `better-sqlite3` is chosen.
+3. **Profiles and contributors.** Package pages gain a contributors list
+   (publishers from provenance, reviewers, raters) and a GitHub Sponsors
+   badge from the public API (cached, opt-in). A "top contributors" board
+   ranks over audit events (publishes, reviews, ratings) with anti-abuse
+   caps -- never raw volume.
+4. **Feeds and following** (activity per developer/repo, follow packages)
+   once 1-3 are stable.
+
+**Guardrails:** every UGC surface feeds the report -> reviewer flow;
+`flagged` overrides display; no platform signing keys for community
+packages; browser sessions stay identity-only and never publish.

@@ -172,10 +172,10 @@ services):
   community reports (`/review`); admins are reviewers automatically.
 
 Data: `accounts.json` (identities), `requests.json` (token/publisher queue),
-`reviews.json` (community reports, resolution notes, and reviewer decisions
-with their audit history), and `publishers.json` (approved trusted-publisher
-entries) live in the `registry_data` / `staging_data` volume and are in the
-restic source list.
+`reviews.json` (community reports, resolution notes, reviewer decisions, and
+star ratings with short reviews), and `publishers.json` (approved
+trusted-publisher entries) live in the `registry_data` / `staging_data`
+volume and are in the restic source list.
 Sessions are in-memory: a restart signs everyone out. The first deploy must
 exercise a real login round-trip (phase-2 prerequisite from the incident
 review).

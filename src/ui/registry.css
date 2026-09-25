@@ -875,6 +875,21 @@ textarea:focus-visible {
   white-space: pre-wrap;
 }
 
+/* Ratings and short reviews (the social layer's first slice). */
+.ratings-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+}
+.rating-summary { margin: 0 0 var(--space-sm); }
+.rating-average { color: var(--paper); font-size: 22px; font-weight: 700; }
+.rating-stars { color: #e8b84b; letter-spacing: 2px; }
+.rating-list { list-style: none; margin: var(--space-md) 0; }
+.rating-item { border-top: 1px solid var(--line-soft); padding: var(--space-sm) 0; }
+.rating-item .pkg-desc { margin-top: 4px; }
+.rating-form { border-top: 1px solid var(--line); margin-top: var(--space-md); padding-top: var(--space-md); }
+
 /* README block on the package page (section 13). */
 .readme {
   border: 1px solid var(--line);

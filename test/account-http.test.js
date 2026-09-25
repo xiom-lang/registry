@@ -509,6 +509,45 @@ test('approving a trusted publisher activates it and revoking removes it', async
   assert.equal(data.requests[id].history.at(-1).action, 'revoked');
 });
 
+test('signed-in accounts rate a package, one rating each', async () => {
+  const jar = cookieJar();
+  await login(jar, 'user-code');
+  let response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /Rate package/);
+  const csrf = csrfFrom(html);
+
+  response = await requestAs(jar, '/packages/readme-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, stars: '9', review: 'bad input' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /1 to 5/);
+
+  response = await requestAs(jar, '/packages/readme-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, stars: '5', review: 'clean and small' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg?rated=1', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Rating saved/);
+  assert.match(html, /clean and small/);
+  assert.match(html, /Update rating/);
+
+  // The same account updates rather than duplicates.
+  response = await requestAs(jar, '/packages/readme-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, stars: '3', review: 'revised' }),
+  });
+  assert.equal(response.status, 303);
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
+  assert.equal(Object.keys(data.ratings['readme-pkg']).length, 1);
+  assert.equal(data.ratings['readme-pkg']['777'].stars, 3);
+});
+
 test('OAuth state is verified and single-use', async () => {
   const jar = cookieJar();
   let response = await requestAs(jar, '/auth/github/start');

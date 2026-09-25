@@ -16,9 +16,10 @@ const { BadRequestError, ConflictError, NotFoundError } = require('./errors');
 const { atomicWriteFile } = require('./index');
 const { validatePackageName } = require('./names');
 
-const REVIEWS_SCHEMA_VERSION = '1.0.0';
+const REVIEWS_SCHEMA_VERSION = '1.1.0';
 const MAX_REVIEWS_BYTES = 4 * 1024 * 1024;
 const MAX_NOTE = 500;
+const MAX_RATING_TEXT = 280;
 const REPORT_REASONS = Object.freeze(['malware', 'spam', 'impersonation', 'license', 'abandoned', 'other']);
 const REPORT_STATUSES = new Set(['open', 'resolved', 'dismissed']);
 const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged']);
@@ -53,17 +54,18 @@ class ReviewStore {
     const state = this.#read();
     this.packages = state.packages;
     this.reports = state.reports;
+    this.ratings = state.ratings;
   }
 
   #read() {
-    if (!fs.existsSync(this.path)) return { packages: {}, reports: {} };
+    if (!fs.existsSync(this.path)) return { packages: {}, reports: {}, ratings: {} };
     let raw;
     try {
       raw = fs.readFileSync(this.path, 'utf-8');
     } catch (err) {
       throw new Error(`cannot read reviews ${this.path}: ${err.message}`);
     }
-    if (raw.trim() === '') return { packages: {}, reports: {} };
+    if (raw.trim() === '') return { packages: {}, reports: {}, ratings: {} };
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -76,6 +78,9 @@ class ReviewStore {
     const reportSource = parsed && typeof parsed === 'object' && parsed.reports && typeof parsed.reports === 'object'
       ? parsed.reports
       : {};
+    const ratingSource = parsed && typeof parsed === 'object' && parsed.ratings && typeof parsed.ratings === 'object'
+      ? parsed.ratings
+      : {};
     const packages = {};
     for (const [name, entry] of Object.entries(packageSource)) {
       const record = normalizeDecision(name, entry);
@@ -86,7 +91,17 @@ class ReviewStore {
       const report = normalizeReport(id, entry);
       if (report) reports[id] = report;
     }
-    return { packages, reports };
+    const ratings = {};
+    for (const [name, entries] of Object.entries(ratingSource)) {
+      if (!SAFE_PACKAGE_NAME.test(name) || !entries || typeof entries !== 'object') continue;
+      const byUser = {};
+      for (const [githubId, entry] of Object.entries(entries)) {
+        const rating = normalizeRating(githubId, entry);
+        if (rating) byUser[githubId] = rating;
+      }
+      if (Object.keys(byUser).length > 0) ratings[name] = byUser;
+    }
+    return { packages, reports, ratings };
   }
 
   /**
@@ -130,7 +145,7 @@ class ReviewStore {
       status: 'open',
       createdAt: now,
     };
-    this.#commit(this.packages, { ...this.reports, [id]: report });
+    this.#commit(this.packages, { ...this.reports, [id]: report }, this.ratings);
     return report;
   }
 
@@ -152,6 +167,42 @@ class ReviewStore {
     const name = String(packageName);
     return Object.values(this.reports)
       .filter((report) => report.status === 'open' && report.package === name).length;
+  }
+
+  /** Star ratings (1-5) with an optional short review, one per account. */
+  ratingsFor(packageName) {
+    return Object.values(this.ratings[String(packageName)] || {})
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  }
+
+  ratingSummary(packageName) {
+    const list = this.ratingsFor(packageName);
+    if (list.length === 0) return { count: 0, average: 0 };
+    const total = list.reduce((sum, entry) => sum + entry.stars, 0);
+    return { count: list.length, average: Math.round((total / list.length) * 10) / 10 };
+  }
+
+  /** Create or replace this account's rating for a package. */
+  rate(packageName, { user, stars, review = '' }) {
+    const name = clean(packageName, 128).toLowerCase();
+    if (!SAFE_PACKAGE_NAME.test(name)) {
+      throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
+    }
+    const author = normalizeReporter(user);
+    const value = Number(stars);
+    if (!Number.isInteger(value) || value < 1 || value > 5) {
+      throw new BadRequestError('rating must be a whole number of stars from 1 to 5', 'invalid_rating');
+    }
+    const entry = {
+      githubId: author.githubId,
+      login: author.login,
+      stars: value,
+      review: clean(review, MAX_RATING_TEXT),
+      at: new Date().toISOString(),
+    };
+    const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
+    this.#commit(this.packages, this.reports, { ...this.ratings, [name]: next });
+    return entry;
   }
 
   /** Current reviewer decision for a package, or null. */
@@ -190,7 +241,7 @@ class ReviewStore {
       ...(decisionNote ? { note: decisionNote } : {}),
     }];
     const record = { status, history };
-    this.#commit({ ...this.packages, [name]: record }, this.reports);
+    this.#commit({ ...this.packages, [name]: record }, this.reports, this.ratings);
     return record;
   }
 
@@ -214,7 +265,7 @@ class ReviewStore {
       resolvedAt: new Date().toISOString(),
       resolvedBy: clean(actor, 64),
     };
-    this.#commit(this.packages, { ...this.reports, [report.id]: updated });
+    this.#commit(this.packages, { ...this.reports, [report.id]: updated }, this.ratings);
     return updated;
   }
 
@@ -226,12 +277,13 @@ class ReviewStore {
     throw new Error('could not allocate a report id');
   }
 
-  #commit(nextPackages, nextReports) {
+  #commit(nextPackages, nextReports, nextRatings) {
     const serialized = JSON.stringify({
       version: REVIEWS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
       packages: nextPackages,
       reports: nextReports,
+      ratings: nextRatings,
     }, null, 2);
     if (Buffer.byteLength(serialized, 'utf-8') > this.maxBytes) {
       throw new Error(`reviews file would exceed ${this.maxBytes} bytes`);
@@ -239,6 +291,7 @@ class ReviewStore {
     atomicWriteFile(this.path, serialized);
     this.packages = nextPackages;
     this.reports = nextReports;
+    this.ratings = nextRatings;
   }
 }
 
@@ -287,11 +340,27 @@ function normalizeDecision(name, entry) {
   return { status: entry.status, history };
 }
 
+/** Allowlist-normalize one on-disk rating; malformed entries are dropped. */
+function normalizeRating(githubId, entry) {
+  if (!/^\d{1,32}$/.test(githubId) || !entry || typeof entry !== 'object') return null;
+  const login = clean(entry.login, 64);
+  const stars = Number(entry.stars);
+  if (!login || !Number.isInteger(stars) || stars < 1 || stars > 5) return null;
+  return {
+    githubId,
+    login,
+    stars,
+    review: clean(entry.review, MAX_RATING_TEXT),
+    at: typeof entry.at === 'string' ? entry.at : '',
+  };
+}
+
 module.exports = {
   ReviewStore,
   REVIEWS_SCHEMA_VERSION,
   MAX_REVIEWS_BYTES,
   MAX_NOTE,
+  MAX_RATING_TEXT,
   REPORT_REASONS,
   DECISION_STATUSES,
 };

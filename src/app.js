@@ -314,16 +314,24 @@ function createApp(config = loadConfig()) {
     const flash = req.session && req.session.flash ? req.session.flash : null;
     if (flash) delete req.session.flash;
     const decision = reviews.decision(name);
+    const ratings = reviews.ratingsFor(name);
     return {
       canReport: Boolean(account),
       canReview: isReviewer(account),
       openReports: reviews.openReportCount(name),
       decision,
       history: decision ? decision.history : [],
+      ratings,
+      summary: reviews.ratingSummary(name),
+      myRating: account
+        ? ratings.find((entry) => entry.githubId === account.githubId) || null
+        : null,
       csrf: req.session ? req.session.csrf : '',
       notice: typeof req.query.reported === 'string'
         ? 'Report submitted; a reviewer will take a look.'
-        : (typeof req.query.decided === 'string' ? 'Review decision recorded.' : ''),
+        : (typeof req.query.decided === 'string'
+          ? 'Review decision recorded.'
+          : (typeof req.query.rated === 'string' ? 'Rating saved.' : '')),
       error: flash && flash.error ? flash.error : '',
     };
   }
@@ -979,10 +987,39 @@ function createApp(config = loadConfig()) {
     },
   );
 
-  // ─── Reports and the reviewer queue (registry 2.0 phase 3) ────────────────
-  // Signed-in accounts can report a package; reviewers and admins resolve or
-  // dismiss with a note. Reports are moderation records only -- no artifact,
-  // signature, or index state is touched.
+  // ─── Reports, ratings, and the reviewer queue (registry 2.0 phase 3) ─────
+  // Signed-in accounts can report a package and leave one star rating plus a
+  // short review; reviewers and admins resolve or dismiss with a note.
+  // Moderation data never alters artifacts, signatures, or the index.
+
+  app.post(
+    '/packages/:name/rating',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      const { name } = req.params;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const rating = reviews.rate(name, {
+          user: accountOf(req),
+          stars: req.body.stars,
+          review: String(req.body.review || ''),
+        });
+        console.log(`Rating ${rating.stars}/5 on ${name} by ${rating.login}`);
+        res.redirect(303, `/packages/${encodeURIComponent(name)}?rated=1#reviews`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/packages/${encodeURIComponent(name)}#reviews`);
+        }
+        return next(err);
+      }
+    },
+  );
 
   app.post(
     '/packages/:name/report',

@@ -19,7 +19,7 @@ const {
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
 const { renderMarkdown } = require('./markdown');
-const { reportForm, decisionPill, reviewHistory, decisionControls } = require('./review');
+const { reportForm, decisionPill, reviewHistory, decisionControls, ratingsSection } = require('./review');
 const semver = require('semver');
 
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
@@ -583,6 +583,16 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   // can file a report; reviewers also see the queue link, the decision
   // controls, and everyone sees the public review history.
   const review = options.review || null;
+  const ratingsBlock = review
+    ? ratingsSection({
+      name,
+      ratings: review.ratings,
+      summary: review.summary,
+      myRating: review.myRating,
+      canRate: review.canReport,
+      csrf: review.csrf,
+    })
+    : '';
   const reviewBlock = review
     ? `<div class="review-box" id="review">
   ${review.notice ? `<p class="notice" role="status">${escapeHtml(review.notice)}</p>` : ''}
@@ -618,6 +628,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   ${detailGrid}
   ${trustNote}
   ${readmeBlock}
+  ${ratingsBlock}
   ${reviewBlock}
 </section>
 <h2>Versions</h2>
