@@ -215,10 +215,10 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 .pkg-badge {
   flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .pkg-title .pkg-badge-group { margin-left: auto; }
@@ -237,10 +237,10 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--paper-dim);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 1px 10px;
+  padding: 3px 12px;
   text-transform: uppercase;
 }
 .badge.signed { border-color: var(--verified-dim); color: var(--verified); }

@@ -428,7 +428,7 @@ test('package status badges pick one art file per package and serve the matrix',
   // Unsigned community packages.
   assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
   assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
-  assert.match(html, /width="64" height="64" loading="lazy"/);
+  assert.match(html, /width="80" height="80" loading="lazy"/);
 
   const matrix = {
     official: ['flagged', 'yanked', 'deprecated', 'incubator', 'prerelease', 'verified', 'unsigned'],
