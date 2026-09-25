@@ -169,13 +169,19 @@ services):
 - `REGISTRY_ADMIN_LOGINS`: comma-separated GitHub logins (case-insensitive)
   that may decide and fulfil requests. Empty means nobody can approve.
 - `REGISTRY_REVIEWER_LOGINS`: comma-separated GitHub logins that may action
-  community reports (`/review`); admins are reviewers automatically.
+  community reports and reviewer decisions (`/review`); admins are reviewers
+  automatically.
+- `SMTP_URL` / `SMTP_FROM` (optional): notification email. Unset = in-app
+  notices only; no SMTP connection is made. Token credentials are never
+  emailed by the app.
 
 Data: `accounts.json` (identities), `requests.json` (token/publisher queue),
 `reviews.json` (community reports, resolution notes, reviewer decisions, and
-star ratings with short reviews), and `publishers.json` (approved
-trusted-publisher entries) live in the `registry_data` / `staging_data`
-volume and are in the restic source list.
+star ratings with short reviews), `publishers.json` (approved
+trusted-publisher entries), and `registry.db` (SQLite platform layer:
+notification outbox, growing to the social tables) live in the
+`registry_data` / `staging_data` volume and are in the restic source list.
+The image runs Node 24 LTS (`node:sqlite`).
 Sessions are in-memory: a restart signs everyone out. The first deploy must
 exercise a real login round-trip (phase-2 prerequisite from the incident
 review).

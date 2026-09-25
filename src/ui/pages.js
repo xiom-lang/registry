@@ -450,6 +450,23 @@ ${list}`,
   });
 }
 
+/** Release notes: the deployed version plus the rendered changelog. */
+function whatsNewPage({ version, changelogHtml, nav = '' }) {
+  return layout({
+    title: "What's new",
+    description: 'Release notes and recent features of the XIOM Package Registry',
+    nav,
+    body: `<section class="hero">
+  <h1>What\u2019s new</h1>
+  <div class="meta-row">
+    <span>Registry ${escapeHtml(version)}</span>
+    <span><a href="/health">/health</a></span>
+  </div>
+</section>
+<div class="markdown whats-new">${changelogHtml}</div>`,
+  });
+}
+
 /** Category index: every vocabulary entry with its package count. */
 function categoriesPage(index, options = {}) {
   const counts = categoryCounts(index);
@@ -660,6 +677,7 @@ module.exports = {
   searchPage,
   categoriesPage,
   packagePage,
+  whatsNewPage,
   notFoundPage,
   packageBadgeState,
   paginatePackages,

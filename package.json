@@ -1,6 +1,6 @@
 {
   "name": "xiom-registry",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "XIOM Package Registry - protocol-compliant server for package discovery, publish, download, and integrity verification",
   "main": "src/server.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.1",
     "multer": "^2.0.2",
+    "nodemailer": "^10.0.10",
     "semver": "^7.7.2",
     "tar": "^7.4.3"
   },

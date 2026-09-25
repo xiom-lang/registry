@@ -71,7 +71,18 @@ ${noticeBox('', error ? 'Sign-in failed or was cancelled. Try again.' : '')}
 }
 
 /** Self-service request form + the requester's own request list. */
-function accountPage({ account, requests, csrf, notice = '', error = '', form = {}, nav = '', admin = false }) {
+function accountPage({
+  account,
+  requests,
+  notifications = [],
+  notifyEmail = '',
+  csrf,
+  notice = '',
+  error = '',
+  form = {},
+  nav = '',
+  admin = false,
+}) {
   const defaults = {
     kind: 'token',
     scopes: '',
@@ -159,6 +170,19 @@ ${requests.map((record) => {
     ? `<img class="account-avatar" src="${escapeHtml(account.avatarUrl)}" alt=""`
       + ' width="48" height="48" loading="lazy" referrerpolicy="no-referrer">'
     : '';
+  const notificationRows = notifications.length === 0
+    ? '<p class="pkg-meta">Nothing yet. Approvals, review decisions, and fulfilment notices appear here.</p>'
+    : `<ul class="request-list">
+${notifications.map((entry) => `  <li class="request-card${entry.readAt ? ' closed' : ''}">
+    <div class="request-head">
+      <span class="mono">${escapeHtml(entry.kind)}</span>
+      <span class="pkg-meta">${escapeHtml(formatDate(entry.createdAt))}</span>
+    </div>
+    <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
+    ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
+  </li>`).join('\n')}
+</ul>`;
+
   const body = `<section class="hero account-hero">
   ${avatar}
   <div>
@@ -179,6 +203,20 @@ ${noticeBox(notice, error)}
     <h2>My requests</h2>
     ${rows}
     ${admin ? '<p class="pkg-meta"><a href="/admin/requests">Open the admin approval queue</a></p>' : ''}
+    <h2>Notifications</h2>
+    ${notificationRows}
+    <form method="post" action="/account/email" class="email-form" id="email">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Notification email</span>
+          <input name="email" type="email" value="${escapeHtml(notifyEmail)}"
+            placeholder="you@example.com" autocomplete="email">
+          <small>Used only for approvals, review decisions, and fulfilment notices; clear it to turn emails off.</small>
+        </label>
+      </div>
+      <button class="button" type="submit">Save email</button>
+    </form>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <button class="button" type="submit">Sign out</button>

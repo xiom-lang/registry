@@ -126,8 +126,9 @@ ${body}
     <span class="spacer"></span>
     <a href="https://github.com/xiom-lang/registry/blob/main/USING.md">Using the registry</a>
     <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publishing</a>
-    <a href="/index.json">index.json</a>
-    <a href="/health">health</a>
+      <a href="/index.json">index.json</a>
+      <a href="/health">health</a>
+      <a href="/whats-new">What&rsquo;s new</a>
     <a href="https://xiom-lang.org">xiom-lang.org</a>
   </div>
   <div class="container footer-social-row">

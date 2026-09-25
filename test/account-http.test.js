@@ -168,7 +168,13 @@ test.before(async () => {
 test.after(() => {
   if (server) server.close();
   if (fakeServer) fakeServer.close();
-  if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
+  // Close the SQLite handle before deleting the sandbox (Windows locks).
+  if (app && app.locals.registry && app.locals.registry.db) app.locals.registry.db.close();
+  try {
+    if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
+  } catch {
+    // Windows can hold the SQLite file briefly; leftover temp dirs are fine.
+  }
 });
 
 test('sign-in round trip, request lifecycle, and admin fulfilment', async () => {
@@ -507,6 +513,37 @@ test('approving a trusted publisher activates it and revoking removes it', async
   const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'requests.json'), 'utf-8'));
   assert.equal(data.requests[id].status, 'fulfilled');
   assert.equal(data.requests[id].history.at(-1).action, 'revoked');
+
+  // The requester got in-app notices for the approval and the revoke.
+  const notices = app.locals.registry.notifications.listFor('4242').map((entry) => entry.kind);
+  assert.deepEqual(notices.slice(0, 2), ['publisher-revoked', 'publisher-approved']);
+});
+
+test('accounts set a notification email and see in-app notices', async () => {
+  const jar = cookieJar();
+  await login(jar, 'user-code');
+
+  let response = await requestAs(jar, '/account', { headers: BROWSER });
+  let html = await response.text();
+  const csrf = csrfFrom(html);
+  assert.match(html, /Notification email/);
+
+  response = await requestAs(jar, '/account/email', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, email: 'not-an-email' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/account#email', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /does not look valid/);
+
+  response = await requestAs(jar, '/account/email', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, email: 'dev@example.com' }),
+  });
+  assert.equal(response.status, 303);
+  const accountsData = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
+  assert.equal(accountsData.accounts['777'].notifyEmail, 'dev@example.com');
 });
 
 test('signed-in accounts rate a package, one rating each', async () => {
@@ -590,6 +627,11 @@ test('a registry without OAuth hides sign-in and refuses account routes', async 
     const post = await fetch(`${disabledBase}/requests`, { method: 'POST', redirect: 'manual' });
     assert.equal(post.status, 401);
   } finally {
+    try {
+      disabled.locals.registry.db.close();
+    } catch {
+      // best effort; the sandbox close in after() covers the rest
+    }
     disabledServer.close();
   }
 });

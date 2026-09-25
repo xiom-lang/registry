@@ -203,6 +203,13 @@ function loadConfig() {
     // App-managed trusted-publisher entries (approved requests); the
     // read-only TRUSTED_PUBLISHERS_FILE stays the operator channel.
     storedPublishersPath: process.env.PUBLISHERS_STATE_FILE || path.join(dataDir, 'publishers.json'),
+    // SQLite platform layer (notifications first; see SESSION.md section 18).
+    // Tests run in memory so sandbox cleanup never hits file locks.
+    dbPath: process.env.DB_FILE
+      || (process.env.NODE_ENV === 'test' ? ':memory:' : path.join(dataDir, 'registry.db')),
+    // Notification email; unset = in-app notices only.
+    smtpUrl: process.env.SMTP_URL || '',
+    smtpFrom: process.env.SMTP_FROM || '',
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get

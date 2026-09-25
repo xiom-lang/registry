@@ -10,7 +10,7 @@
 #          -v "$PWD/tokens.json:/run/secrets/xiom-tokens.json:ro" \
 #          -e TOKENS_FILE=/run/secrets/xiom-tokens.json \
 #          xiom-registry
-FROM node:22-alpine
+FROM node:24-alpine
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -27,7 +27,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Application code.
 COPY src ./src
-COPY seed.js NOTICE LICENSE-MIT LICENSE-APACHE ./
+COPY seed.js NOTICE LICENSE-MIT LICENSE-APACHE CHANGELOG.md ./
 
 # Writable volumes (data/index.json, packages/<name>/<version>/package.tar.gz,
 # and the upload staging directory) must be owned by the unprivileged user.

@@ -12,6 +12,7 @@
 const fs = require('fs');
 
 const { atomicWriteFile } = require('./index');
+const { normalizeEmail } = require('./notifications');
 
 const ACCOUNTS_SCHEMA_VERSION = '1.0.0';
 const MAX_ACCOUNTS_BYTES = 2 * 1024 * 1024;
@@ -63,6 +64,7 @@ class AccountStore {
         login,
         name: clean(entry.name, 200),
         avatarUrl: clean(entry.avatarUrl, 512),
+        notifyEmail: clean(entry.notifyEmail, 254),
         createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
         lastLoginAt: typeof entry.lastLoginAt === 'string' ? entry.lastLoginAt : '',
       };
@@ -104,11 +106,23 @@ class AccountStore {
       login,
       name: clean(profile.name, 200),
       avatarUrl: clean(profile.avatarUrl, 512),
+      notifyEmail: existing ? existing.notifyEmail : '',
       createdAt: existing ? existing.createdAt : now,
       lastLoginAt: now,
     };
     this.#commit({ ...this.accounts, [githubId]: entry });
     return entry;
+  }
+
+  /** Store (or clear) the notification email; '' disables emails. */
+  setNotifyEmail(githubId, email) {
+    const id = String(githubId);
+    const existing = this.accounts[id];
+    if (!existing) throw new Error('account not found');
+    const value = normalizeEmail(email);
+    const entry = { ...existing, notifyEmail: value };
+    this.#commit({ ...this.accounts, [id]: entry });
+    return value;
   }
 
   #commit(next) {

@@ -155,7 +155,13 @@ test.before(async () => {
 
 test.after(() => {
   if (server) server.close();
-  if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
+  // Close the SQLite handle before deleting the sandbox (Windows locks).
+  if (app && app.locals.registry && app.locals.registry.db) app.locals.registry.db.close();
+  try {
+    if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
+  } catch {
+    // Windows can hold the SQLite file briefly; leftover temp dirs are fine.
+  }
 });
 
 test('wantsHtml: only a leading text/html accept disables the API', () => {
@@ -657,6 +663,16 @@ test('the community workflow template is served for copy-paste', async () => {
   assert.match(body, /audience=xiom-registry/);
   assert.match(body, /\.github\/workflows\/publish-registry\.yml/);
   assert.match(body, /xiom pkg publish/);
+});
+
+test('whats-new renders the changelog with the deployed version', async () => {
+  const response = await fetch(`${baseUrl}/whats-new`, { headers: BROWSER });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Registry \d+\.\d+\.\d+/);
+  assert.match(html, /<h2>\[2\.0\.0\]/);
+  assert.match(html, /GitHub sign-in/);
+  assert.match(html, /href="\/whats-new"/, 'the footer links to the page');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

@@ -41,6 +41,9 @@ const { AccountStore } = require('./accounts');
 const { RequestStore } = require('./requests');
 const { ReviewStore } = require('./reviews');
 const { PublisherStore } = require('./publisher-store');
+const { Database } = require('./db');
+const { NotificationStore } = require('./notifications');
+const { createMailer, startOutbox } = require('./mailer');
 const {
   verify: verifySignature,
   fingerprint,
@@ -59,6 +62,7 @@ const {
   searchPackages,
   categoriesPage,
   packagePage,
+  whatsNewPage,
   notFoundPage,
   paginatePackages,
   DEFAULT_PER_PAGE,
@@ -66,6 +70,7 @@ const {
 } = require('./ui/pages');
 const { loginPage, accountPage, adminPage } = require('./ui/account');
 const { reviewPage } = require('./ui/review');
+const { renderMarkdown } = require('./ui/markdown');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
@@ -81,6 +86,8 @@ const COMMUNITY_PUBLISH_TEMPLATE = fs.readFileSync(
   path.join(__dirname, 'ui', 'templates', 'community-publish.yml'),
   'utf-8',
 );
+// Release notes rendered at /whats-new (same escape-first markdown pipeline).
+const CHANGELOG_MD = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf-8');
 // Package status badge art: state x track matrix (see src/ui/pages.js).
 // `trusted` exists only on the community track -- first-party/official
 // publishes are org-controlled by definition. Keep this in sync with the
@@ -160,6 +167,12 @@ function createApp(config = loadConfig()) {
   if (storedPublishers.length > 0) {
     config.publishers = [...config.publishers, ...storedPublishers];
   }
+  // SQLite platform layer: notification outbox + optional email sender
+  // (SESSION.md section 18). In-app notices always work; email needs SMTP_URL.
+  const db = new Database({ path: config.dbPath });
+  const notifications = new NotificationStore({ db });
+  const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
+  const outbox = startOutbox({ notifications, mailer });
   const registryBaseUrl = config.registryUrl.replace(/\/+$/, '');
   const callbackUri = `${registryBaseUrl}${oauth.CALLBACK_PATH}`;
   const secureCookies = registryBaseUrl.startsWith('https://') || config.env === 'production';
@@ -306,6 +319,20 @@ function createApp(config = loadConfig()) {
       return next(new ForbiddenError('registry reviewer required', 'reviewer_required'));
     }
     next();
+  }
+
+  /** In-app notice (and optional email) for the requester of an event. */
+  function notifyRequester(request, kind, subject, body, link = '') {
+    const stored = accounts.get(request.requester.githubId);
+    notifications.enqueue({
+      account: request.requester,
+      kind,
+      subject,
+      body,
+      link,
+      email: stored ? stored.notifyEmail : '',
+    });
+    outbox.drain().catch(() => {});
   }
 
   /** View-model for the report controls on a package page. */
@@ -519,6 +546,17 @@ function createApp(config = loadConfig()) {
   app.get('/index.json', generalLimit, (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json(indexStore.snapshot());
+  });
+
+  // Release notes: the changelog rendered with the readme pipeline, with the
+  // deployed version first so "am I on the latest?" is one glance.
+  app.get('/whats-new', generalLimit, (req, res) => {
+    res.type('html').set('Cache-Control', 'public, max-age=300')
+      .send(whatsNewPage({
+        version: SERVICE_VERSION,
+        changelogHtml: renderMarkdown(CHANGELOG_MD),
+        nav: accountNav(req),
+      }));
   });
 
   // Stylesheet for the read-only UI (module-level constant, no fs per request).
@@ -803,17 +841,45 @@ function createApp(config = loadConfig()) {
     const created = typeof req.query.created === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.created)
       ? req.query.created
       : '';
+    const notificationsList = notifications.listFor(account.githubId, { limit: 20 });
+    notifications.markAllRead(account.githubId);
+    const notice = created
+      ? `Request ${created} submitted for review.`
+      : (req.query.email === '1' ? 'Notification email saved.' : '');
     res.type('html').send(accountPage({
       account: stored,
       requests: requests.list({ requesterId: account.githubId }),
+      notifications: notificationsList,
+      notifyEmail: stored.notifyEmail || '',
       csrf: req.session.csrf,
-      notice: created ? `Request ${created} submitted for review.` : '',
+      notice,
       error: flash && flash.error ? flash.error : '',
       form: flash && flash.form ? flash.form : {},
       nav: accountNav(req),
       admin: isAdmin(account),
     }));
   });
+
+  app.post(
+    '/account/email',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const raw = String(req.body.email || '');
+        const saved = accounts.setNotifyEmail(accountOf(req).githubId, raw);
+        if (raw.trim() !== '' && saved === '') {
+          req.session.flash = { error: 'that email address does not look valid' };
+          return res.redirect(303, '/account#email');
+        }
+        return res.redirect(303, '/account?email=1');
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
 
   app.post(
     '/requests',
@@ -921,9 +987,30 @@ function createApp(config = loadConfig()) {
             actor,
             reference: `trusted publisher entry activated (${entry.repository} / ${entry.workflow})`,
           });
+          notifyRequester(
+            request,
+            'publisher-approved',
+            'Trusted publisher approved',
+            `${request.repository} / ${request.workflow} is live. Run your publish workflow.`,
+          );
           console.log(`Trusted publisher ${entry.repository} / ${entry.workflow} activated for ${request.id} by ${actor}`);
         } else {
           updated = requests.decide(request.id, { action, actor, note });
+          if (action === 'approve') {
+            notifyRequester(
+              request,
+              'request-approved',
+              'Token request approved',
+              'The maintainers will mint your token on the host and deliver it privately.',
+            );
+          } else if (action === 'deny') {
+            notifyRequester(
+              request,
+              'request-denied',
+              'Request denied',
+              note ? `Reason: ${note}` : '',
+            );
+          }
           console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
         }
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
@@ -951,6 +1038,12 @@ function createApp(config = loadConfig()) {
         publisherStore.remove(request.id);
         config.publishers = config.publishers.filter((entry) => entry.requestId !== request.id);
         requests.revoke(request.id, { actor, note: String(req.body.note || '') });
+        notifyRequester(
+          request,
+          'publisher-revoked',
+          'Trusted publisher revoked',
+          `${request.repository} / ${request.workflow} is no longer accepted; contact the maintainers if this was unexpected.`,
+        );
         console.log(`Trusted publisher entry for ${request.id} revoked by ${actor}`);
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(request.id)}`);
       } catch (err) {
@@ -975,6 +1068,12 @@ function createApp(config = loadConfig()) {
           actor: accountOf(req).login,
           reference: String(req.body.reference || ''),
         });
+        notifyRequester(
+          updated,
+          'request-fulfilled',
+          'Token request fulfilled',
+          updated.mintReference ? `Reference: ${updated.mintReference}` : 'Your token was delivered.',
+        );
         console.log(`Request ${updated.id} fulfilled by ${updated.fulfilledBy}`);
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
       } catch (err) {
@@ -1291,7 +1390,17 @@ function createApp(config = loadConfig()) {
   });
 
   // Expose for tests / graceful shutdown.
-  app.locals.registry = { config, indexStore, artifacts, accounts, requests, reviews, publisherStore };
+  app.locals.registry = {
+    config,
+    indexStore,
+    artifacts,
+    accounts,
+    requests,
+    reviews,
+    publisherStore,
+    db,
+    notifications,
+  };
   return app;
 }
 

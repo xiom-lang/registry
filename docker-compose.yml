@@ -56,6 +56,9 @@ services:
       - REGISTRY_ADMIN_LOGINS=${REGISTRY_ADMIN_LOGINS:-}
       # Comma-separated GitHub logins allowed to action community reports.
       - REGISTRY_REVIEWER_LOGINS=${REGISTRY_REVIEWER_LOGINS:-}
+      # Notification email (optional). Unset = in-app notices only.
+      - SMTP_URL=${SMTP_URL:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     security_opt:
       - no-new-privileges:true
     # Drop all capabilities; the service needs none.
@@ -116,6 +119,8 @@ services:
       - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET:-}
       - REGISTRY_ADMIN_LOGINS=${REGISTRY_ADMIN_LOGINS:-}
       - REGISTRY_REVIEWER_LOGINS=${REGISTRY_REVIEWER_LOGINS:-}
+      - SMTP_URL=${SMTP_URL:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     security_opt:
       - no-new-privileges:true
     cap_drop:

@@ -1488,6 +1488,18 @@ without weakening the publishing guarantees.
 - The same moderation surfaces apply: reports feed the reviewer queue and
   reviewer decisions override display.
 
+**Built now (groundwork, 2026-09-26):** registered as **registry 2.0.0**.
+- SQLite platform layer (`src/db.js`, `registry.db` on the data volume, WAL,
+  ordered idempotent migrations); notifications is the first table.
+- Notification outbox (`src/notifications.js`): every request decision,
+  fulfilment, revocation, and (later) review/rating event writes a row per
+  account; in-app notices render on `/account`.
+- Email on top of the outbox (`src/mailer.js`, nodemailer): `SMTP_URL` +
+  `SMTP_FROM`, drained on a timer; unset SMTP = in-app only, rows marked
+  `skipped`. Each account can set a notification email.
+- `/whats-new` renders `CHANGELOG.md` with the readme markdown pipeline;
+  the service version (`/health`) is 2.0.0 and the footer links the page.
+
 **Recorded decisions for the expansion (implement in this order):**
 
 1. **Notification outbox + email.** Accounts gain an optional `notifyEmail`
