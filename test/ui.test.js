@@ -546,6 +546,31 @@ test('readme is served from the stored tarball and rendered safely', async () =>
   );
 });
 
+test('listing paginates with totals while index.json stays whole', async () => {
+  const page = await (await fetch(`${baseUrl}/packages?per_page=2&page=3`, { headers: API })).json();
+  assert.equal(page.page, 3);
+  assert.equal(page.per_page, 2);
+  assert.equal(page.total, 6);
+  assert.equal(page.total_pages, 3);
+  assert.deepEqual(page.packages.map((pkg) => pkg.name), ['signed-pkg', 'xiom.official-fixture']);
+
+  // Out-of-range values clamp instead of erroring.
+  const clamped = await (await fetch(`${baseUrl}/packages?page=0&per_page=10000`, { headers: API })).json();
+  assert.equal(clamped.page, 1);
+  assert.equal(clamped.per_page, 200);
+  const beyond = await (await fetch(`${baseUrl}/packages?page=99&per_page=2`, { headers: API })).json();
+  assert.equal(beyond.page, 3, 'a page past the end snaps to the last page');
+
+  const html = await (await fetch(`${baseUrl}/packages?per_page=2`, { headers: BROWSER })).text();
+  assert.match(html, /Page 1 of 3 &middot; 6 packages/);
+  assert.match(html, /href="\/packages\?page=2&amp;per_page=2"/);
+  assert.match(html, /class="page-link disabled">&larr; Previous/);
+
+  // The protocol index keeps every package regardless of listing params.
+  const whole = await (await fetch(`${baseUrl}/index.json`, { headers: API })).json();
+  assert.equal(Object.keys(whole.packages).length, 6);
+});
+
 test('unknown routes render the HTML 404 for browsers only', async () => {
   const html = await fetch(`${baseUrl}/no/such/page`, { headers: BROWSER });
   assert.equal(html.status, 404);

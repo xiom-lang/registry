@@ -21,6 +21,10 @@ const { categoryCounts } = require('../categories');
 const { renderMarkdown } = require('./markdown');
 const semver = require('semver');
 
+/** Listing pagination defaults (SESSION.md section 13 phase 1). */
+const DEFAULT_PER_PAGE = 50;
+const MAX_PER_PAGE = 200;
+
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
 function officialBadge(name) {
   return isFirstPartyNamespace(name)
@@ -134,20 +138,53 @@ function packageCard(name, pkg) {
 </li>`;
 }
 
-function packageList(index) {
+/** Slice the sorted package list for one page (clamping is the caller's job). */
+function paginatePackages(index, { page = 1, perPage = DEFAULT_PER_PAGE } = {}) {
   const names = Object.keys(index.packages).sort();
-  if (names.length === 0) {
-    return '<div class="empty">No packages yet. Publish with <code>xiom pkg publish</code>.</div>';
-  }
-  const cards = names
-    .map((name) => packageCard(name, index.packages[name]))
-    .join('\n');
-  return `<ul class="package-list">\n${cards}\n</ul>`;
+  const total = names.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), totalPages);
+  const start = (current - 1) * perPage;
+  return {
+    names: names.slice(start, start + perPage),
+    total,
+    totalPages,
+    page: current,
+    perPage,
+  };
 }
 
-/** Home: registry overview plus the full package list. */
+/** Previous/next controls for the package list (canonical path: /packages). */
+function paginationNav({ page, totalPages, perPage, total }) {
+  if (totalPages <= 1) return '';
+  const link = (target, label) => `<a class="page-link" href="/packages?page=${target}&amp;per_page=${perPage}">${label}</a>`;
+  const previous = page > 1
+    ? link(page - 1, '&larr; Previous')
+    : '<span class="page-link disabled">&larr; Previous</span>';
+  const next = page < totalPages
+    ? link(page + 1, 'Next &rarr;')
+    : '<span class="page-link disabled">Next &rarr;</span>';
+  return `<nav class="pagination" aria-label="Package pages">
+  ${previous}
+  <span class="page-status">Page ${page} of ${totalPages} &middot; ${total} package${total === 1 ? '' : 's'}</span>
+  ${next}
+</nav>`;
+}
+
+function packageList(index, options = {}) {
+  const paged = paginatePackages(index, options);
+  if (paged.total === 0) {
+    return '<div class="empty">No packages yet. Publish with <code>xiom pkg publish</code>.</div>';
+  }
+  const cards = paged.names
+    .map((name) => packageCard(name, index.packages[name]))
+    .join('\n');
+  return `<ul class="package-list">\n${cards}\n</ul>\n${paginationNav(paged)}`;
+}
+
+/** Home: registry overview plus the paginated package list. */
 function homePage(index, options = {}) {
-  const names = Object.keys(index.packages);
+  const paged = paginatePackages(index, options);
   const lastUpdated = index.updated_at ? `Updated ${formatDate(index.updated_at)}` : 'No publishes yet';
   return layout({
     title: '',
@@ -156,14 +193,14 @@ function homePage(index, options = {}) {
   <p>The package registry for XIOM. Browse packages, versions, and ed25519 signatures,
      or install directly: <code>xiom pkg install &lt;package&gt;</code>.</p>
   <div class="meta-row">
-    <span>${names.length} package${names.length === 1 ? '' : 's'}</span>
+    <span>${paged.total} package${paged.total === 1 ? '' : 's'}</span>
     <span>Protocol ${escapeHtml(index.version)}</span>
     <span>${escapeHtml(lastUpdated)}</span>
   </div>
   ${categoryStrip(index)}
 </section>
 <h1>Packages</h1>
-${packageList(index)}`,
+${packageList(index, options)}`,
   });
 }
 
@@ -387,4 +424,7 @@ module.exports = {
   packagePage,
   notFoundPage,
   packageBadgeState,
+  paginatePackages,
+  DEFAULT_PER_PAGE,
+  MAX_PER_PAGE,
 };

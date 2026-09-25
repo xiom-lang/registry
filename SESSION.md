@@ -1081,15 +1081,17 @@ cover raw HTML, attribute injection, and unsafe schemes. A small bounded
 in-process cache keyed by `name@version` avoids re-inflating on every page
 view (versions are immutable).
 
-**Listing at thousands of packages.** Not started. Cards do not scale beyond
-a few dozen. Phases: (1) server-side pagination on `/packages`
-(`?page=&per_page=`, capped, default ~50, plus totals) while `/index.json`
-stays whole for the client; (2) compact rows (name, latest, one-line
-description, badges, updated, size) with a small featured/updated strip on
-home; (3) sorting (updated default, name A-Z) and shareable server-side
-facets (category counts, first-party, signed); (4) search tolerates `xiom-`
-vs `xiom.` and gains prefix matching; (5) index growth: a compact/gzipped
-form eventually, not urgent at 35 packages.
+**Listing at thousands of packages -- phase 1 DONE (2026-09-25).**
+`/packages` (and the home list) accept `?page=` / `?per_page=` (default
+1/50, page size capped at 200, out-of-range values clamp), the JSON response
+carries `page`/`per_page`/`total`/`total_pages`, and the HTML list renders
+previous/next controls. `/index.json` stays whole for the client protocol.
+Phases remaining: (2) compact rows (name, latest, one-line description,
+badges, updated, size) with a small featured/updated strip on home;
+(3) sorting (updated default, name A-Z) and shareable server-side facets
+(category counts, first-party, signed); (4) search tolerates `xiom-` vs
+`xiom.` and gains prefix matching; (5) index growth: a compact/gzipped form
+eventually, not urgent at 35 packages.
 
 ---
 

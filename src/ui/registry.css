@@ -170,6 +170,24 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   margin-top: var(--space-lg);
 }
 
+.pagination {
+  align-items: center;
+  display: flex;
+  font-size: 14px;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-top: var(--space-lg);
+}
+.page-link {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper-dim);
+  padding: 6px 14px;
+}
+.page-link:hover { border-color: var(--signal); color: var(--paper); }
+.page-link.disabled { color: var(--muted); opacity: 0.6; }
+.page-status { color: var(--muted); }
+
 .package-card {
   background: var(--panel);
   border: 1px solid var(--line);

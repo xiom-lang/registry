@@ -56,6 +56,9 @@ const {
   categoriesPage,
   packagePage,
   notFoundPage,
+  paginatePackages,
+  DEFAULT_PER_PAGE,
+  MAX_PER_PAGE,
 } = require('./ui/pages');
 const { loginPage, accountPage, adminPage } = require('./ui/account');
 
@@ -91,6 +94,23 @@ const UI_ASSETS = {
   bannerRegistry: fs.readFileSync(path.join(__dirname, 'ui', 'assets', 'registry.webp')),
   badges: BADGE_ASSETS,
 };
+
+/**
+ * Clamp `?page` / `?per_page` for the listing. Garbage and out-of-range
+ * values fall back to the defaults instead of erroring: pagination is a
+ * browsing affordance, not a protocol contract (SESSION.md section 13).
+ */
+function paginationFromQuery(query) {
+  const clamp = (value, fallback, max) => {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+    return Math.min(parsed, max);
+  };
+  return {
+    page: clamp(query.page, 1, 1_000_000),
+    perPage: clamp(query.per_page, DEFAULT_PER_PAGE, MAX_PER_PAGE),
+  };
+}
 
 /**
  * Build the Express application. Exported for tests; `src/server.js` owns
@@ -374,7 +394,7 @@ function createApp(config = loadConfig()) {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(index, { nav: accountNav(req) }));
+        .send(homePage(index, { nav: accountNav(req), ...paginationFromQuery(req.query) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -433,23 +453,34 @@ function createApp(config = loadConfig()) {
   }
 
   // Package listing: JSON for API consumers, the same list the UI shows.
+  // `?page=` / `?per_page=` paginate the surface (defaults 1/50, page size
+  // capped at 200); `/index.json` stays whole for the client protocol.
   app.get('/packages', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
+    const { page, perPage } = paginationFromQuery(req.query);
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(index, { nav: accountNav(req) }));
+        .send(homePage(index, { nav: accountNav(req), page, perPage }));
     }
+    const paged = paginatePackages(index, { page, perPage });
     res.json({
-      packages: Object.entries(index.packages).map(([name, pkg]) => ({
-        name,
-        description: pkg.description,
-        latest: pkg.latest,
-        versions: Object.keys(pkg.versions).length,
-        categories: pkg.categories || [],
-        keywords: pkg.keywords || [],
-        license: pkg.license || '',
-        repository: pkg.repository || '',
-      })),
+      packages: paged.names.map((name) => {
+        const pkg = index.packages[name];
+        return {
+          name,
+          description: pkg.description,
+          latest: pkg.latest,
+          versions: Object.keys(pkg.versions).length,
+          categories: pkg.categories || [],
+          keywords: pkg.keywords || [],
+          license: pkg.license || '',
+          repository: pkg.repository || '',
+        };
+      }),
+      page: paged.page,
+      per_page: paged.perPage,
+      total: paged.total,
+      total_pages: paged.totalPages,
     });
   });
 
