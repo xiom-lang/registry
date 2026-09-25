@@ -24,6 +24,8 @@ const semver = require('semver');
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
 const DEFAULT_PER_PAGE = 50;
 const MAX_PER_PAGE = 200;
+/** Cards in the home "recently updated" strip (section 13 phase 2). */
+const HOME_STRIP_SIZE = 6;
 
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
 function officialBadge(name) {
@@ -182,10 +184,75 @@ function packageList(index, options = {}) {
   return `<ul class="package-list">\n${cards}\n</ul>\n${paginationNav(paged)}`;
 }
 
-/** Home: registry overview plus the paginated package list. */
-function homePage(index, options = {}) {
+/** Latest installable version entry, or null when everything is yanked. */
+function latestEntry(pkg) {
+  return pkg && pkg.latest && pkg.versions[pkg.latest] ? pkg.versions[pkg.latest] : null;
+}
+
+/** Newest packages first (by latest publish time), for the home strip. */
+function recentlyUpdated(index, limit = HOME_STRIP_SIZE) {
+  return Object.keys(index.packages)
+    .map((name) => {
+      const entry = latestEntry(index.packages[name]);
+      const published = entry && entry.published ? Date.parse(entry.published) : 0;
+      return { name, published: Number.isFinite(published) ? published : 0 };
+    })
+    .sort((a, b) => b.published - a.published || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map((item) => item.name);
+}
+
+function truncate(text, max = 110) {
+  const value = String(text || '').trim();
+  return value.length <= max ? value : `${value.slice(0, max - 1)}\u2026`;
+}
+
+/** One compact listing row: badge, name/description, version/updated/size. */
+function packageRow(name, pkg) {
+  const latest = latestEntry(pkg);
+  const version = pkg.latest
+    ? `<span class="pkg-version mono">${escapeHtml(pkg.latest)}</span>`
+    : '<span class="badge yanked">none</span>';
+  const updated = latest && latest.published ? formatDate(latest.published) : '--';
+  const size = latest && latest.size ? formatBytes(latest.size) : '--';
+  const description = pkg.description ? truncate(pkg.description) : '';
+  return `<li class="pkg-row">
+  ${packageBadge(name, pkg)}
+  <div class="pkg-row-main">
+    <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+    ${officialBadge(name)}
+    ${description ? `<p class="pkg-desc">${escapeHtml(description)}</p>` : ''}
+  </div>
+  <div class="pkg-row-meta">
+    ${version}
+    <span>${escapeHtml(updated)}</span>
+    <span>${escapeHtml(size)}</span>
+  </div>
+</li>`;
+}
+
+/** Compact paginated listing (the full list lives on /packages). */
+function packageRows(index, options = {}) {
   const paged = paginatePackages(index, options);
+  if (paged.total === 0) {
+    return '<div class="empty">No packages yet. Publish with <code>xiom pkg publish</code>.</div>';
+  }
+  const rows = paged.names
+    .map((name) => packageRow(name, index.packages[name]))
+    .join('\n');
+  return `<ul class="pkg-rows">\n${rows}\n</ul>\n${paginationNav(paged)}`;
+}
+
+/** Home: registry overview, recently updated cards, and a link to the list. */
+function homePage(index, options = {}) {
+  const names = recentlyUpdated(index);
+  const total = Object.keys(index.packages).length;
   const lastUpdated = index.updated_at ? `Updated ${formatDate(index.updated_at)}` : 'No publishes yet';
+  const strip = total === 0
+    ? '<div class="empty">No packages yet. Publish with <code>xiom pkg publish</code>.</div>'
+    : `<ul class="package-list featured">\n${names
+      .map((name) => packageCard(name, index.packages[name]))
+      .join('\n')}\n</ul>`;
   return layout({
     title: '',
     nav: options.nav,
@@ -193,14 +260,32 @@ function homePage(index, options = {}) {
   <p>The package registry for XIOM. Browse packages, versions, and ed25519 signatures,
      or install directly: <code>xiom pkg install &lt;package&gt;</code>.</p>
   <div class="meta-row">
-    <span>${paged.total} package${paged.total === 1 ? '' : 's'}</span>
+    <span>${total} package${total === 1 ? '' : 's'}</span>
     <span>Protocol ${escapeHtml(index.version)}</span>
     <span>${escapeHtml(lastUpdated)}</span>
   </div>
   ${categoryStrip(index)}
 </section>
 <h1>Packages</h1>
-${packageList(index, options)}`,
+<h2>Recently updated</h2>
+${strip}
+<p class="browse-all"><a class="button" href="/packages">Browse all ${total} package${total === 1 ? '' : 's'}</a></p>`,
+  });
+}
+
+/** Full listing: compact rows, paginated (section 13 phase 2). */
+function packagesPage(index, options = {}) {
+  const paged = paginatePackages(index, options);
+  return layout({
+    title: 'Packages',
+    description: 'Browse all XIOM registry packages',
+    nav: options.nav,
+    body: `<section class="hero">
+  <h1>Packages</h1>
+  <div class="meta-row"><span>${paged.total} package${paged.total === 1 ? '' : 's'}</span></div>
+  ${categoryStrip(index)}
+</section>
+${packageRows(index, options)}`,
   });
 }
 
@@ -419,6 +504,7 @@ function notFoundPage(message, options = {}) {
 
 module.exports = {
   homePage,
+  packagesPage,
   searchPage,
   categoriesPage,
   packagePage,

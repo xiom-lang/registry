@@ -417,17 +417,18 @@ test('banner is the masthead with the centred search inside it', async () => {
 test('package status badges pick one art file per package and serve the matrix', async () => {
   const html = await (await fetch(`${baseUrl}/packages`, { headers: BROWSER })).text();
 
-  // First-party fixture is unsigned: official track, unsigned state.
-  assert.match(html, /\/packages\/xiom\.official-fixture[\s\S]{0,400}src="\/ui\/pgk_unsigned_official\.webp"/);
+  // First-party fixture is unsigned: official track, unsigned state. Rows
+  // render the badge group before the name, so the source order is img -> name.
+  assert.match(html, /src="\/ui\/pgk_unsigned_official\.webp"[\s\S]{0,400}\/packages\/xiom\.official-fixture/);
   assert.match(html, /src="\/ui\/pgk_unsigned_official\.webp"[^>]*alt="Official package, unsigned"/);
   // Signed latest version: community track, verified (publisher-signed) state,
   // with the explicit "signed" pill beside the icon.
-  assert.match(html, /\/packages\/signed-pkg[\s\S]{0,400}src="\/ui\/pgk_verified_community\.webp"/);
+  assert.match(html, /src="\/ui\/pgk_verified_community\.webp"[\s\S]{0,400}\/packages\/signed-pkg/);
   assert.match(html, /title="Signed by the publisher"/);
   assert.match(html, /src="\/ui\/pgk_verified_community\.webp"[\s\S]{0,200}class="badge signed">signed</);
   // Unsigned community packages.
-  assert.match(html, /\/packages\/demo-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
-  assert.match(html, /\/packages\/hostile-pkg[\s\S]{0,400}src="\/ui\/pgk_unsigned_community\.webp"/);
+  assert.match(html, /src="\/ui\/pgk_unsigned_community\.webp"[\s\S]{0,400}\/packages\/demo-pkg/);
+  assert.match(html, /src="\/ui\/pgk_unsigned_community\.webp"[\s\S]{0,400}\/packages\/hostile-pkg/);
   assert.match(html, /width="80" height="80" loading="lazy"/);
 
   const matrix = {
@@ -569,6 +570,25 @@ test('listing paginates with totals while index.json stays whole', async () => {
   // The protocol index keeps every package regardless of listing params.
   const whole = await (await fetch(`${baseUrl}/index.json`, { headers: API })).json();
   assert.equal(Object.keys(whole.packages).length, 6);
+});
+
+test('the full listing renders compact rows and home shows the recent strip', async () => {
+  const rows = await (await fetch(`${baseUrl}/packages`, { headers: BROWSER })).text();
+  assert.match(rows, /<ul class="pkg-rows">/);
+  assert.match(rows, /<li class="pkg-row">/);
+  // Each row: badge art, name link, then the version/updated/size meta.
+  assert.match(rows, /src="\/ui\/pgk_[a-z]+_[a-z]+\.webp"[\s\S]{0,600}<a class="pkg-name" href="\/packages\/demo-pkg">demo-pkg<\/a>/);
+  assert.match(rows, /class="pkg-row-meta"[\s\S]{0,200}1\.0\.0/);
+  assert.match(rows, /class="pkg-row-meta"[\s\S]{0,400}\d{4}-\d{2}-\d{2}/);
+  assert.match(rows, /class="pkg-row-meta"[\s\S]{0,600}\d+ B\b/);
+  assert.doesNotMatch(rows, /class="package-card"/, 'the full listing uses rows, not cards');
+
+  const home = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();
+  assert.match(home, /<h2>Recently updated<\/h2>/);
+  assert.match(home, /class="package-list featured"/);
+  assert.match(home, /class="package-card"/, 'home keeps the card treatment for the strip');
+  assert.match(home, /Browse all 6 packages/);
+  assert.doesNotMatch(home, /<ul class="pkg-rows">/, 'home shows the strip, not the full row list');
 });
 
 test('unknown routes render the HTML 404 for browsers only', async () => {

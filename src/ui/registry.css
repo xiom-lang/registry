@@ -188,6 +188,55 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .page-link.disabled { color: var(--muted); opacity: 0.6; }
 .page-status { color: var(--muted); }
 
+/* Compact listing rows (section 13 phase 2): the full list at /packages. */
+.pkg-rows {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  list-style: none;
+  margin-top: var(--space-lg);
+  overflow: hidden;
+}
+.pkg-row {
+  align-items: center;
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--space-sm) var(--space-lg);
+}
+.pkg-row + .pkg-row { border-top: 1px solid var(--line-soft); }
+.pkg-row:hover { background: var(--panel-raised); }
+.pkg-row .pkg-badge { border-radius: 8px; height: 44px; width: 44px; }
+.pkg-row .badge { font-size: 11px; padding: 1px 8px; }
+.pkg-row .pkg-name { color: var(--paper); font-size: 16px; font-weight: 600; }
+.pkg-row-main { min-width: 0; }
+.pkg-row-main .pkg-desc {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pkg-row-meta {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 13px;
+  gap: var(--space-md);
+  white-space: nowrap;
+}
+.pkg-row-meta .pkg-version { color: var(--paper-dim); }
+
+.featured { margin-top: var(--space-lg); }
+.browse-all { margin-top: var(--space-lg); text-align: center; }
+
+@media (max-width: 640px) {
+  .pkg-row { grid-template-columns: auto minmax(0, 1fr); }
+  .pkg-row-meta { grid-column: 2; }
+}
+
 .package-card {
   background: var(--panel);
   border: 1px solid var(--line);

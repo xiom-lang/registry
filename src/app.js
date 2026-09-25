@@ -52,6 +52,7 @@ const { wantsHtml } = require('./ui/negotiate');
 const { escapeHtml } = require('./ui/layout');
 const {
   homePage,
+  packagesPage,
   searchPage,
   categoriesPage,
   packagePage,
@@ -394,7 +395,7 @@ function createApp(config = loadConfig()) {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(index, { nav: accountNav(req), ...paginationFromQuery(req.query) }));
+        .send(homePage(index, { nav: accountNav(req) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -452,15 +453,15 @@ function createApp(config = loadConfig()) {
     });
   }
 
-  // Package listing: JSON for API consumers, the same list the UI shows.
-  // `?page=` / `?per_page=` paginate the surface (defaults 1/50, page size
+  // Package listing: compact rows for the UI, JSON for API consumers.
+  // `?page=` / `?per_page=` paginate both surfaces (defaults 1/50, page size
   // capped at 200); `/index.json` stays whole for the client protocol.
   app.get('/packages', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     const { page, perPage } = paginationFromQuery(req.query);
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(index, { nav: accountNav(req), page, perPage }));
+        .send(packagesPage(index, { nav: accountNav(req), page, perPage }));
     }
     const paged = paginatePackages(index, { page, perPage });
     res.json({
