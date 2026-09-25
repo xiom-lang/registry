@@ -159,12 +159,15 @@ test('oauth: a full pair enables sign-in and normalizes admins', () => {
     GITHUB_OAUTH_CLIENT_ID: 'Ov23liTEST',
     GITHUB_OAUTH_CLIENT_SECRET: '0123456789abcdef0123456789abcdef01234567',
     REGISTRY_ADMIN_LOGINS: 'LefterisNotas, alice ',
+    REGISTRY_REVIEWER_LOGINS: 'ReviewerOne',
   }, () => {
     const config = loadConfig();
     assert.equal(config.oauth.enabled, true);
     assert.deepEqual(config.oauth.adminLogins, ['lefterisnotas', 'alice']);
+    assert.deepEqual(config.oauth.reviewerLogins, ['reviewerone']);
     assert.equal(config.accountsPath.endsWith('accounts.json'), true);
     assert.equal(config.requestsPath.endsWith('requests.json'), true);
+    assert.equal(config.reviewsPath.endsWith('reviews.json'), true);
   });
 });
 

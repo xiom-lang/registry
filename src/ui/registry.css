@@ -838,6 +838,26 @@ textarea:focus-visible {
 .count { color: var(--muted); font-size: 14px; font-weight: 400; }
 .request-table td { vertical-align: top; }
 
+/* Reports and the reviewer queue (registry 2.0 phase 3). */
+.review-box { margin-top: var(--space-lg); }
+.report-form-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+}
+.report-form-box summary { color: var(--paper-dim); cursor: pointer; font-weight: 600; }
+.report-form { margin-top: var(--space-md); }
+.report-form .button { margin-top: var(--space-sm); }
+.form-field select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  font: inherit;
+  padding: 10px 12px;
+}
+
 /* README block on the package page (section 13). */
 .readme {
   border: 1px solid var(--line);

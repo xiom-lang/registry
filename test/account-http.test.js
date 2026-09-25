@@ -109,6 +109,7 @@ test.before(async () => {
   process.env.GITHUB_OAUTH_CLIENT_ID = 'test-client-id';
   process.env.GITHUB_OAUTH_CLIENT_SECRET = 'test-client-secret-0123456789';
   process.env.REGISTRY_ADMIN_LOGINS = 'Admin-User';
+  process.env.REGISTRY_REVIEWER_LOGINS = 'user-user';
 
   fake = express();
   fake.use(express.urlencoded({ extended: false }));
@@ -119,6 +120,7 @@ test.before(async () => {
   fake.post('/login/oauth/access_token', (req, res) => {
     if (req.body.code === 'admin-code') return res.json({ access_token: 'admin-token' });
     if (req.body.code === 'user-code') return res.json({ access_token: 'user-token' });
+    if (req.body.code === 'plain-code') return res.json({ access_token: 'plain-token' });
     res.json({ error: 'bad_verification_code', error_description: 'incorrect or expired' });
   });
   fake.get('/user', (req, res) => {
@@ -128,10 +130,31 @@ test.before(async () => {
     if (req.headers.authorization === 'Bearer user-token') {
       return res.json({ id: 777, login: 'user-user', name: 'User', avatar_url: '' });
     }
+    if (req.headers.authorization === 'Bearer plain-token') {
+      return res.json({ id: 888, login: 'plain-user', name: 'Plain', avatar_url: '' });
+    }
     res.status(401).json({ message: 'Bad credentials' });
   });
   fakeServer = await listen(fake);
   fakeBase = originOf(fakeServer);
+
+  // One package in the index so the package page (report form) renders; the
+  // artifact itself is absent, which only hides the readme block.
+  fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+  fs.writeFileSync(path.join(process.env.DATA_DIR, 'index.json'), JSON.stringify({
+    version: '1.0.0',
+    updated_at: new Date().toISOString(),
+    packages: {
+      'readme-pkg': {
+        name: 'readme-pkg',
+        description: 'fixture package',
+        versions: {
+          '1.0.0': { version: '1.0.0', sha256: 'aa'.repeat(32), size: 10, published: new Date().toISOString() },
+        },
+        latest: '1.0.0',
+      },
+    },
+  }));
 
   const config = loadConfig();
   config.oauth.authorizeUrl = `${fakeBase}/login/oauth/authorize`;
@@ -300,6 +323,74 @@ test('anonymous users are redirected to sign-in, not served account pages', asyn
     body: new URLSearchParams({ kind: 'token', scopes: 'x' }),
   });
   assert.equal(response.status, 401);
+});
+
+test('signed-in accounts can report a package and reviewers act on it', async () => {
+  const jar = cookieJar();
+  await login(jar, 'user-code');
+
+  let response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /Report this package/);
+  assert.match(html, /href="\/review"/, 'reviewers get the queue link in the nav');
+  const csrf = csrfFrom(html);
+
+  // Validation first: a report without a note is refused with the reason shown.
+  response = await requestAs(jar, '/packages/readme-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'license', note: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /describe the problem/);
+
+  response = await requestAs(jar, '/packages/readme-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'license', note: 'no license file in the tarball' }),
+  });
+  assert.equal(response.status, 303);
+  const reportId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+  assert.match(reportId, /^rep_[0-9a-f]{12}$/);
+
+  response = await requestAs(jar, '/review', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, new RegExp(reportId));
+  assert.match(html, /no license file in the tarball/);
+  assert.match(html, /Resolve/);
+
+  response = await requestAs(jar, `/review/reports/${reportId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, status: 'resolved', resolution: 'confirmed; license added in 1.0.1' }),
+  });
+  assert.equal(response.status, 303);
+
+  response = await requestAs(jar, '/review', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /license added in 1\.0\.1/);
+  assert.match(html, /@user-user/);
+
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
+  assert.equal(data.reports[reportId].status, 'resolved');
+  assert.equal(data.reports[reportId].resolvedBy, 'user-user');
+});
+
+test('reporting needs sign-in and the queue is reviewer-only', async () => {
+  const anonymous = cookieJar();
+  let response = await requestAs(anonymous, '/packages/readme-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ reason: 'other', note: 'x' }),
+  });
+  assert.equal(response.status, 401);
+
+  const plain = cookieJar();
+  await login(plain, 'plain-code');
+  response = await requestAs(plain, '/review', { headers: BROWSER });
+  assert.equal(response.status, 403);
+
+  response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  const html = await response.text();
+  assert.match(html, /Report this package/, 'any signed-in account can report');
+  assert.doesNotMatch(html, /href="\/review"/, 'plain accounts get no reviewer link');
 });
 
 test('OAuth state is verified and single-use', async () => {

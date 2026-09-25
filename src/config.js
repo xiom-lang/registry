@@ -49,6 +49,10 @@ function loadOAuthConfig() {
     .split(',')
     .map((login) => login.trim().toLowerCase())
     .filter(Boolean);
+  const reviewerLogins = (process.env.REGISTRY_REVIEWER_LOGINS || '')
+    .split(',')
+    .map((login) => login.trim().toLowerCase())
+    .filter(Boolean);
 
   if (Boolean(clientId) !== Boolean(clientSecret)) {
     throw new Error(
@@ -65,6 +69,7 @@ function loadOAuthConfig() {
     clientId,
     clientSecret,
     adminLogins,
+    reviewerLogins,
     scope: 'read:user',
     // Upstream endpoints; tests point these at a local fake provider.
     authorizeUrl: process.env.GITHUB_OAUTH_AUTHORIZE_URL || '',
@@ -194,6 +199,7 @@ function loadConfig() {
     // Registry 2.0 identity + request queue (display data only, no secrets).
     accountsPath: process.env.ACCOUNTS_FILE || path.join(dataDir, 'accounts.json'),
     requestsPath: process.env.REQUESTS_FILE || path.join(dataDir, 'requests.json'),
+    reviewsPath: process.env.REVIEWS_FILE || path.join(dataDir, 'reviews.json'),
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get
@@ -213,6 +219,7 @@ function loadConfig() {
     maxDecompressedBytes,
     maxAccountsBytes: intFromEnv('MAX_ACCOUNTS_BYTES', 2 * MIB),
     maxRequestsBytes: intFromEnv('MAX_REQUESTS_BYTES', 4 * MIB),
+    maxReviewsBytes: intFromEnv('MAX_REVIEWS_BYTES', 4 * MIB),
     rateLimit: {
       disabled: rateLimitDisabled,
       general: {
@@ -244,11 +251,12 @@ function validateConfig(config) {
       + 'publishing is disabled (all publish requests will get 401)',
     );
   }
-  if (config.oauth.adminLogins.length > 0 && !config.oauth.enabled) {
+  if ((config.oauth.adminLogins.length > 0 || config.oauth.reviewerLogins.length > 0)
+      && !config.oauth.enabled) {
     console.warn(
-      'xiom-registry: REGISTRY_ADMIN_LOGINS is set but GitHub OAuth is disabled; '
-      + 'the admin approval queue will be unreachable (set GITHUB_OAUTH_CLIENT_ID and '
-      + 'GITHUB_OAUTH_CLIENT_SECRET, or unset REGISTRY_ADMIN_LOGINS)',
+      'xiom-registry: REGISTRY_ADMIN_LOGINS/REGISTRY_REVIEWER_LOGINS are set but GitHub OAuth '
+      + 'is disabled; the approval and review queues will be unreachable (set '
+      + 'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET, or unset the login lists)',
     );
   }
   if (config.oauth.enabled && config.oauth.adminLogins.length === 0) {

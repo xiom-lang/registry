@@ -1152,6 +1152,15 @@ Accounts phase (after the section 13/14 work), if we build it:
 3. Reviewer role and community moderation: report/abuse flow, a `verified`
    flag set by reviewers (pairs with the four status badges), and a public
    review history per package.
+   **Reports slice DONE (2026-09-25):** any signed-in account can report a
+   package from its page (reason + note, capped per reporter/package);
+   reviewers and admins (`REGISTRY_REVIEWER_LOGINS`, admins automatically)
+   action reports in `/review` with a required resolution note; records live
+   in `reviews.json` on the data volume and closed reports keep who did what
+   and when. Reviewer **decisions** (a distinct reviewed mark, `flagged`
+   from the review store, public decision history on the package page)
+   remain for the next slice; `flagged` stays reviewer/admin-only and is
+   never publisher-declared.
 4. Sponsorship and contributors: GitHub Sponsors status and publish-history
    contributors on package pages, opt-in; leaderboards only over reviewed
    packages so volume is not rewarded blindly.
@@ -1442,6 +1451,7 @@ sign-in: OIDC publishing never uses browser sessions.
 3. Production delta waits only on the owner greenlight: ops deploys the
    combined delta (88 -> 151) + `eco-v0.1.1`, then the batch is verified as
    `eco-v0.1.0`.
-4. Next registry work: section 13 phase 5 (compact/gzipped index form) when
-   scale demands it, then the review/report flows (flagged state, reviewer
-   role) if the owner prefers.
+4. Next registry work: section 15 phase 3 reviewer decisions (distinct
+   reviewed mark, `flagged` from the review store, public decision history),
+   then section 13 phase 5 (compact/gzipped index form) when scale demands
+   it.

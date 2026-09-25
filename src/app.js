@@ -39,6 +39,7 @@ const oauth = require('./oauth');
 const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
 const { AccountStore } = require('./accounts');
 const { RequestStore } = require('./requests');
+const { ReviewStore } = require('./reviews');
 const {
   verify: verifySignature,
   fingerprint,
@@ -63,6 +64,7 @@ const {
   MAX_PER_PAGE,
 } = require('./ui/pages');
 const { loginPage, accountPage, adminPage } = require('./ui/account');
+const { reviewPage } = require('./ui/review');
 
 const SERVICE_NAME = 'XIOM Package Registry';
 const SERVICE_VERSION = require('../package.json').version;
@@ -136,6 +138,7 @@ function createApp(config = loadConfig()) {
     : null;
   const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
   const requests = new RequestStore({ path: config.requestsPath, maxBytes: config.maxRequestsBytes });
+  const reviews = new ReviewStore({ path: config.reviewsPath, maxBytes: config.maxReviewsBytes });
   const registryBaseUrl = config.registryUrl.replace(/\/+$/, '');
   const callbackUri = `${registryBaseUrl}${oauth.CALLBACK_PATH}`;
   const secureCookies = registryBaseUrl.startsWith('https://') || config.env === 'production';
@@ -208,6 +211,9 @@ function createApp(config = loadConfig()) {
   const accountOf = (req) => (req.session && req.session.account) || null;
   const isAdmin = (account) => Boolean(account)
     && config.oauth.adminLogins.includes(String(account.login).toLowerCase());
+  const isReviewer = (account) => Boolean(account)
+    && (isAdmin(account)
+      || config.oauth.reviewerLogins.includes(String(account.login).toLowerCase()));
 
   /** Sign-in state for the nav bar; '' when the feature is off. */
   function accountNav(req) {
@@ -219,12 +225,15 @@ function createApp(config = loadConfig()) {
       if (req.path === '/login') return '';
       return '<a class="nav-account nav-button nav-button-primary" href="/login">Sign in</a>';
     }
+    const review = isReviewer(account)
+      ? `<a class="nav-account" href="/review"${req.path.startsWith('/review') ? ' aria-current="page"' : ''}>Review</a>`
+      : '';
     const admin = isAdmin(account)
       ? '<a class="nav-account" href="/admin/requests"'
         + `${req.path.startsWith('/admin/') ? ' aria-current="page"' : ''}>Admin</a>`
       : '';
     const current = req.path === '/account' ? ' aria-current="page"' : '';
-    return `${admin}<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`;
+    return `${review}${admin}<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`;
   }
 
   function setSessionCookie(res, id) {
@@ -265,6 +274,34 @@ function createApp(config = loadConfig()) {
       return next(new ForbiddenError('registry admin required', 'admin_required'));
     }
     next();
+  }
+
+  function requireReviewer(req, _res, next) {
+    const account = accountOf(req);
+    if (!account) {
+      return next(new UnauthorizedError('sign in to continue', 'login_required'));
+    }
+    if (!isReviewer(account)) {
+      return next(new ForbiddenError('registry reviewer required', 'reviewer_required'));
+    }
+    next();
+  }
+
+  /** View-model for the report controls on a package page. */
+  function packageReviewContext(req, name) {
+    const account = accountOf(req);
+    const flash = req.session && req.session.flash ? req.session.flash : null;
+    if (flash) delete req.session.flash;
+    return {
+      canReport: Boolean(account),
+      canReview: isReviewer(account),
+      openReports: reviews.openReportCount(name),
+      csrf: req.session ? req.session.csrf : '',
+      notice: typeof req.query.reported === 'string'
+        ? 'Report submitted; a reviewer will take a look.'
+        : '',
+      error: flash && flash.error ? flash.error : '',
+    };
   }
 
   /** Double-submit CSRF check against the session's per-session token. */
@@ -521,6 +558,7 @@ function createApp(config = loadConfig()) {
         .send(packagePage(pkg, indexStore.snapshot().registry, '', {
           nav: accountNav(req),
           readme: readmeFor(pkg),
+          review: packageReviewContext(req, pkg.name),
         }));
     }
     res.json(pkg);
@@ -539,6 +577,7 @@ function createApp(config = loadConfig()) {
         .send(packagePage(pkg, indexStore.snapshot().registry, version, {
           nav: accountNav(req),
           readme: readmeFor(pkg),
+          review: packageReviewContext(req, pkg.name),
         }));
     }
     res.json(indexStore.requireVersion(name, version));
@@ -834,6 +873,90 @@ function createApp(config = loadConfig()) {
         if (err instanceof BadRequestError) {
           req.session.flash = { error: err.message };
           return res.redirect(303, '/admin/requests');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // ─── Reports and the reviewer queue (registry 2.0 phase 3) ────────────────
+  // Signed-in accounts can report a package; reviewers and admins resolve or
+  // dismiss with a note. Reports are moderation records only -- no artifact,
+  // signature, or index state is touched.
+
+  app.post(
+    '/packages/:name/report',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      const { name } = req.params;
+      try {
+        if (!indexStore.snapshot().packages[name]) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const report = reviews.createReport({
+          packageName: name,
+          reporter: accountOf(req),
+          reason: String(req.body.reason || ''),
+          note: String(req.body.note || ''),
+        });
+        console.log(`Report ${report.id} filed on ${report.package} by ${report.reporter.login}`);
+        res.redirect(303, `/packages/${encodeURIComponent(name)}?reported=${encodeURIComponent(report.id)}#report`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/packages/${encodeURIComponent(name)}#report`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.get('/review', generalLimit, (req, res, next) => {
+    if (!config.oauth.enabled) return res.redirect(302, '/login');
+    const account = accountOf(req);
+    if (!account) {
+      return res.redirect(302, `/login?returnTo=${encodeURIComponent('/review')}`);
+    }
+    if (!isReviewer(account)) {
+      return next(new ForbiddenError('registry reviewer required', 'reviewer_required'));
+    }
+    const updated = typeof req.query.updated === 'string' && /^rep_[0-9a-f]{12}$/.test(req.query.updated)
+      ? req.query.updated
+      : '';
+    const flash = req.session.flash || null;
+    if (flash) delete req.session.flash;
+    res.type('html').send(reviewPage({
+      account,
+      reports: reviews.listReports(),
+      csrf: req.session.csrf,
+      notice: updated ? `Report ${updated} updated.` : '',
+      error: flash && flash.error ? flash.error : '',
+      nav: accountNav(req),
+    }));
+  });
+
+  app.post(
+    '/review/reports/:id/resolve',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireReviewer,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const updated = reviews.resolveReport(req.params.id, {
+          actor: accountOf(req).login,
+          status: String(req.body.status || 'resolved'),
+          resolution: String(req.body.resolution || ''),
+        });
+        console.log(`Report ${updated.id} ${updated.status} by ${updated.resolvedBy}`);
+        res.redirect(303, `/review?updated=${encodeURIComponent(updated.id)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/review');
         }
         return next(err);
       }

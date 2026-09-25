@@ -19,6 +19,7 @@ const {
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
 const { renderMarkdown } = require('./markdown');
+const { reportForm } = require('./review');
 const semver = require('semver');
 
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
@@ -572,6 +573,24 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 </details>`
     : '';
 
+  // Reports (section 15 phase 3): signed-in accounts can file one; reviewers
+  // also see the queue link and the open report count for this package.
+  const review = options.review || null;
+  const reviewBlock = review
+    ? `<div class="review-box">
+  ${review.notice ? `<p class="notice" role="status">${escapeHtml(review.notice)}</p>` : ''}
+  ${review.error ? `<p class="error-box" role="alert">${escapeHtml(review.error)}</p>` : ''}
+  ${review.canReview
+    ? `<p class="pkg-meta">${review.openReports > 0
+      ? `${review.openReports} open report${review.openReports === 1 ? '' : 's'} on this package \u00b7 `
+      : ''}<a href="/review">Open the review queue</a></p>`
+    : ''}
+  ${review.canReport
+    ? `<details class="report-form-box"><summary>Report this package</summary>${reportForm({ name, csrf: review.csrf })}</details>`
+    : ''}
+</div>`
+    : '';
+
   return layout({
     title: name,
     description: pkg.description || `Versions of ${name}`,
@@ -589,6 +608,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   ${detailGrid}
   ${trustNote}
   ${readmeBlock}
+  ${reviewBlock}
 </section>
 <h2>Versions</h2>
 <table class="versions">

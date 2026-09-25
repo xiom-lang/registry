@@ -168,12 +168,15 @@ services):
   login.
 - `REGISTRY_ADMIN_LOGINS`: comma-separated GitHub logins (case-insensitive)
   that may decide and fulfil requests. Empty means nobody can approve.
+- `REGISTRY_REVIEWER_LOGINS`: comma-separated GitHub logins that may action
+  community reports (`/review`); admins are reviewers automatically.
 
-Data: `accounts.json` (identities) and `requests.json` (queue + per-request
-audit history) live in the `registry_data` / `staging_data` volume and are in
-the restic source list. Sessions are in-memory: a restart signs everyone out.
-The first deploy must exercise a real login round-trip (phase-2 prerequisite
-from the incident review).
+Data: `accounts.json` (identities), `requests.json` (token/publisher queue),
+and `reviews.json` (community reports + resolution notes) live in the
+`registry_data` / `staging_data` volume and are in the restic source list.
+Sessions are in-memory: a restart signs everyone out. The first deploy must
+exercise a real login round-trip (phase-2 prerequisite from the incident
+review).
 
 Mint loop after approving a request in `/admin/requests` (the app never
 mints, never reads the token store, and holds no mail credentials):
