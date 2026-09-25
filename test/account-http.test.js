@@ -283,6 +283,14 @@ test('anonymous users are redirected to sign-in, not served account pages', asyn
   assert.equal(response.status, 302);
   assert.equal(response.headers.get('location'), '/login?returnTo=%2Faccount');
 
+  // The nav shows Sign in as a button next to the text menu.
+  response = await requestAs(jar, '/packages', { headers: BROWSER });
+  assert.equal(response.status, 200);
+  assert.match(
+    await response.text(),
+    /class="nav-account nav-button nav-button-primary" href="\/login"/,
+  );
+
   response = await requestAs(jar, '/admin/requests');
   assert.equal(response.status, 302);
   assert.equal(response.headers.get('location'), '/login?returnTo=%2Fadmin%2Frequests');

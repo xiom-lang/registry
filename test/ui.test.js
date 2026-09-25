@@ -405,6 +405,7 @@ test('banner is the masthead with the centred search inside it', async () => {
     assert.match(html, /<form class="banner-search"/, path);
     assert.doesNotMatch(html, /class="search-form site-search"/, `no duplicate page-level search on ${path}`);
     assert.doesNotMatch(html, /class="brand"/, `no duplicate header brand on ${path}`);
+    assert.match(html, /<a class="nav-button" href="https:\/\/github\.com\/xiom-lang\/registry">GitHub<\/a>/, `GitHub is a nav button on ${path}`);
   }
 
   const home = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();

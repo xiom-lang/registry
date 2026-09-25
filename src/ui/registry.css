@@ -201,13 +201,13 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .pkg-row {
   align-items: center;
   display: grid;
-  gap: var(--space-md);
+  gap: var(--space-xs) var(--space-sm);
   grid-template-columns: auto minmax(0, 1fr) auto;
-  padding: var(--space-sm) var(--space-lg);
+  padding: 2px var(--space-lg);
 }
 .pkg-row + .pkg-row { border-top: 1px solid var(--line-soft); }
 .pkg-row:hover { background: var(--panel-raised); }
-.pkg-row .pkg-badge { border-radius: 8px; height: 44px; width: 44px; }
+.pkg-row .pkg-badge { border-radius: 10px; height: 56px; width: 56px; }
 .pkg-row .badge { font-size: 11px; padding: 1px 8px; }
 .pkg-row .pkg-name { color: var(--paper); font-size: 16px; font-weight: 600; }
 .pkg-row-main { min-width: 0; }
@@ -639,6 +639,22 @@ table.versions tr:hover td { background: var(--panel); }
 .site-header nav a.nav-account { color: var(--signal); }
 .site-header nav a.nav-account:hover { color: var(--paper); }
 .site-header nav a[aria-current="page"] { color: var(--paper); }
+
+/* Nav actions (Sign in, GitHub) read as buttons, not as menu text. */
+.site-header nav a.nav-button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--paper-dim);
+  line-height: 1;
+  padding: 7px 14px;
+}
+.site-header nav a.nav-button:hover { border-color: var(--signal); color: var(--paper); }
+.site-header nav a.nav-button-primary {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: #fff;
+}
+.site-header nav a.nav-button-primary:hover { background: var(--signal-dim); color: #fff; }
 
 .account-card {
   background: var(--panel);

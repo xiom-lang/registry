@@ -96,7 +96,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
       <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>
       <a href="https://xiom-lang.org">xiom-lang.org</a>
-      <a href="https://github.com/xiom-lang/registry">GitHub</a>
+      <a class="nav-button" href="https://github.com/xiom-lang/registry">GitHub</a>
       ${nav ? `<span class="nav-right">${nav}</span>` : ''}
     </nav>
   </div>

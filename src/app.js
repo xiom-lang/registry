@@ -210,7 +210,7 @@ function createApp(config = loadConfig()) {
       // No self-link on the sign-in page: it reloads the same page and reads
       // as a dead control.
       if (req.path === '/login') return '';
-      return '<a class="nav-account" href="/login">Sign in</a>';
+      return '<a class="nav-account nav-button nav-button-primary" href="/login">Sign in</a>';
     }
     const admin = isAdmin(account)
       ? '<a class="nav-account" href="/admin/requests"'
