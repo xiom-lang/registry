@@ -121,8 +121,19 @@ test.before(async () => {
   fs.mkdirSync(readmeDir, { recursive: true });
   fs.writeFileSync(path.join(readmeDir, 'package.xi'),
     'name: "readme-pkg";\nversion: "1.0.0";\ndescription: "Has a readme";');
-  fs.writeFileSync(path.join(readmeDir, 'README.md'),
-    '# Readme fixture\n\n<script>alert(1)</script>\n');
+  fs.writeFileSync(path.join(readmeDir, 'README.md'), [
+    '# Readme fixture',
+    '',
+    'Install with `xiom pkg install readme-pkg`.',
+    '',
+    '- first',
+    '- second',
+    '',
+    '[Guide](https://xiom-lang.org/docs)',
+    '',
+    '<script>alert(1)</script>',
+    '',
+  ].join('\n'));
   const readmeTarball = path.join(sandbox, 'readme-pkg.tar.gz');
   await tar.c({ gzip: true, file: readmeTarball, cwd: readmeDir }, ['package.xi', 'README.md']);
   assert.equal((await publish({
@@ -499,7 +510,7 @@ test('packageBadgeState precedence and track selection', () => {
   assert.equal(stateOf(packageBadgeState('demo-pkg', { name: 'demo-pkg', versions: {} })), 'unsigned');
 });
 
-test('readme is served from the stored tarball and rendered escaped', async () => {
+test('readme is served from the stored tarball and rendered safely', async () => {
   const raw = await fetch(`${baseUrl}/packages/readme-pkg/1.0.0/readme`, { headers: API });
   assert.equal(raw.status, 200);
   assert.match(raw.headers.get('content-type'), /text\/markdown/);
@@ -508,11 +519,14 @@ test('readme is served from the stored tarball and rendered escaped', async () =
   assert.match(body, /# Readme fixture/);
   assert.match(body, /<script>alert\(1\)<\/script>/, 'raw markdown keeps its source text');
 
-  // Both package-page forms embed the escaped readme inside <details>.
+  // Both package-page forms embed the rendered readme inside <details>.
   for (const target of ['/packages/readme-pkg', '/packages/readme-pkg/1.0.0']) {
     const page = await (await fetch(`${baseUrl}${target}`, { headers: BROWSER })).text();
     assert.match(page, /<details class="readme">/, target);
-    assert.match(page, /<pre class="readme-body"># Readme fixture/, target);
+    assert.match(page, /<div class="markdown"><h1>Readme fixture<\/h1>/, target);
+    assert.match(page, /<code>xiom pkg install readme-pkg<\/code>/, target);
+    assert.match(page, /<ul>\n<li>first<\/li>\n<li>second<\/li>\n<\/ul>/, target);
+    assert.match(page, /<a href="https:\/\/xiom-lang\.org\/docs" rel="noopener nofollow" target="_blank">Guide<\/a>/, target);
     assert.match(page, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, `readme markup escaped on ${target}`);
     assert.doesNotMatch(page, /<script>alert\(1\)<\/script>/, `no live script from a readme on ${target}`);
     assert.match(page, /href="\/packages\/readme-pkg\/1\.0\.0\/readme"/, target);

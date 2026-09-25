@@ -18,6 +18,7 @@ const {
 } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
+const { renderMarkdown } = require('./markdown');
 const semver = require('semver');
 
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
@@ -325,15 +326,15 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 <code>xiom pkg trust --registry ${escapeHtml(registryUrl)} --key ${escapeHtml(detail.publicKey)}</code></p>`
     : '';
 
-  // README from the stored tarball (SESSION.md section 13 phase 2): escaped
-  // text in a collapsed block; the raw markdown stays one link away.
+  // README from the stored tarball (SESSION.md section 13): rendered through
+  // the escape-first markdown subset, with the raw markdown one link away.
   const readmeText = typeof options.readme === 'function'
     ? options.readme(detailVersion)
     : options.readme;
   const readmeBlock = typeof readmeText === 'string' && readmeText.trim() !== ''
     ? `<details class="readme">
   <summary>README</summary>
-  <pre class="readme-body">${escapeHtml(readmeText)}</pre>
+  <div class="markdown">${renderMarkdown(readmeText)}</div>
   <p class="pkg-meta"><a href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(detailVersion)}/readme">raw markdown</a></p>
 </details>`
     : '';

@@ -1066,15 +1066,20 @@ package pages; no action yet.
 
 ## 13. UI roadmap (discuss later, owner idea 2026-09-23)
 
-**Readme on the package page -- phases 1, 2, 4 DONE (2026-09-25).**
+**Readme on the package page -- phases 1-4 DONE (2026-09-25).**
 `GET /packages/:name/:version/readme` extracts `README.md` from the stored
 tarball (existing tar reader generalized to `readTarMember`, any depth,
 case-insensitive basename, 64 KB cap, `text/markdown`, immutable cache
-header); the package page embeds it escaped inside `<details>` with a
-raw-markdown link; publish warns when the tarball has no README.md. A small
-bounded in-process cache keyed by `name@version` avoids re-inflating on
-every page view (versions are immutable). Phase 3 (dependency-free
-CommonMark subset) remains open; escaped text ships first, as recorded here.
+header); the package page renders it through the escape-first markdown
+renderer (`src/ui/markdown.js`: headings, paragraphs, lists and task lists,
+fenced code, blockquotes, rules, GFM tables, emphasis, links and https
+images) inside `<details>` with a raw-markdown link; publish warns when the
+tarball has no README.md. The renderer escapes the source before any rule
+runs, emits only its own allowlisted tags, and scheme-checks URLs
+(http/https/mailto for links, https only for images); hostile-input tests
+cover raw HTML, attribute injection, and unsafe schemes. A small bounded
+in-process cache keyed by `name@version` avoids re-inflating on every page
+view (versions are immutable).
 
 **Listing at thousands of packages.** Not started. Cards do not scale beyond
 a few dozen. Phases: (1) server-side pagination on `/packages`
@@ -1369,8 +1374,8 @@ Accept: text/html (JSON is the default negotiation).
 - **Compose/env**: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`,
   `REGISTRY_ADMIN_LOGINS` pass through on both services; endpoint overrides
   (`GITHUB_OAUTH_*_URL`) exist for tests/mirrors only.
-- **Badge art**: package status icons render at 48px (owner feedback;
-  28 -> 36 -> 48, test updated).
+- **Badge art**: package status icons render at 64px (owner feedback;
+  28 -> 36 -> 48 -> 64, test updated).
 
 **Deploy**: the pending staging/production recreate now also activates
 sign-in. No new secrets are needed if the env files still carry the stored

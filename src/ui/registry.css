@@ -754,16 +754,56 @@ textarea:focus-visible {
   font-weight: 600;
   padding: var(--space-md) var(--space-lg);
 }
-.readme-body {
+.readme .pkg-meta { padding: 0 var(--space-lg) var(--space-md); }
+
+/* Rendered markdown (GitHub-like reading styles, XIOM palette). */
+.markdown {
   border-top: 1px solid var(--line);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-  max-height: 480px;
-  overflow: auto;
-  padding: var(--space-md) var(--space-lg);
-  white-space: pre-wrap;
+  color: var(--paper-dim);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  padding: var(--space-lg);
 }
+.markdown > :first-child { margin-top: 0; }
+.markdown h1, .markdown h2, .markdown h3,
+.markdown h4, .markdown h5, .markdown h6 {
+  color: var(--paper);
+  margin: var(--space-lg) 0 var(--space-sm);
+}
+.markdown h1 { border-bottom: 1px solid var(--line); font-size: 24px; padding-bottom: 8px; }
+.markdown h2 { border-bottom: 1px solid var(--line-soft); font-size: 20px; padding-bottom: 6px; }
+.markdown h3 { font-size: 17px; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 15px; }
+.markdown p { margin: var(--space-sm) 0; }
+.markdown a { text-decoration: underline; text-underline-offset: 2px; }
+.markdown ul, .markdown ol { margin: var(--space-sm) 0 var(--space-sm) 24px; }
+.markdown li { margin: 4px 0; }
+.markdown li > ul, .markdown li > ol { margin: 4px 0 4px 18px; }
+.markdown code { background: var(--panel-raised); font-size: 0.9em; }
+.markdown pre {
+  background: var(--panel-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin: var(--space-md) 0;
+  overflow: auto;
+  padding: var(--space-md);
+}
+.markdown pre code { background: transparent; border: 0; padding: 0; }
+.markdown blockquote {
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  margin: var(--space-md) 0;
+  padding: 2px 0 2px 14px;
+}
+.markdown hr { border: 0; border-top: 1px solid var(--line); margin: var(--space-lg) 0; }
+.markdown img { border-radius: var(--radius-sm); max-width: 100%; }
+.markdown table { border-collapse: collapse; margin: var(--space-md) 0; }
+.markdown th, .markdown td { border: 1px solid var(--line); padding: 6px 10px; }
+.markdown th { background: var(--panel-raised); color: var(--paper); }
+.markdown .task-list-item { list-style: none; margin-left: -20px; }
+.markdown .task-list-item input { margin-right: 6px; }
+.markdown .md-invalid { color: var(--muted); text-decoration: line-through; }
 
 @media (max-width: 860px) {
   .account-grid { grid-template-columns: 1fr; }
