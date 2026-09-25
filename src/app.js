@@ -54,6 +54,7 @@ const {
   homePage,
   packagesPage,
   searchPage,
+  searchPackages,
   categoriesPage,
   packagePage,
   notFoundPage,
@@ -595,36 +596,22 @@ function createApp(config = loadConfig()) {
 
   app.get('/search', generalLimit, (req, res) => {
     const rawQuery = String(req.query.q || '');
-    const query = rawQuery.toLowerCase();
     const category = String(req.query.category || '').trim().toLowerCase();
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
         .send(searchPage(index, rawQuery, category, { nav: accountNav(req) }));
     }
-    const results = [];
-    for (const [name, pkg] of Object.entries(index.packages)) {
-      const categories = pkg.categories || [];
-      const keywords = pkg.keywords || [];
-      const matchesQuery = !query
-        || name.toLowerCase().includes(query)
-        || (pkg.description || '').toLowerCase().includes(query)
-        || keywords.some((keyword) => keyword.includes(query))
-        || categories.some((entry) => entry.includes(query));
-      const matchesCategory = !category || categories.includes(category);
-      if (matchesQuery && matchesCategory) {
-        results.push({
-          name,
-          description: pkg.description,
-          latest: pkg.latest,
-          versions: Object.keys(pkg.versions).length,
-          categories,
-          keywords,
-          license: pkg.license || '',
-          repository: pkg.repository,
-        });
-      }
-    }
+    const results = searchPackages(index, rawQuery, category).map(({ name, pkg }) => ({
+      name,
+      description: pkg.description,
+      latest: pkg.latest,
+      versions: Object.keys(pkg.versions).length,
+      categories: pkg.categories || [],
+      keywords: pkg.keywords || [],
+      license: pkg.license || '',
+      repository: pkg.repository,
+    }));
     res.json({ query: rawQuery, category, results });
   });
 

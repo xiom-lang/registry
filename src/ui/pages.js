@@ -375,23 +375,48 @@ ${packageRows(index, options)}`,
   });
 }
 
+/**
+ * Search matcher (SESSION.md section 13 phase 4). Matching treats `-` and
+ * `.` as equivalent, so `xiom-tar` finds `xiom.tar`; results rank exact
+ * name, then name prefix, then name substring, then description / keyword /
+ * category hits (alphabetical inside a rank).
+ *
+ * @returns {{ name: string, pkg: object, score: number }[]}
+ */
+function searchPackages(index, query = '', category = '') {
+  const needle = String(query).trim().toLowerCase();
+  const active = String(category).trim().toLowerCase();
+  const tolerant = (value) => value.toLowerCase().replace(/[-.]/g, '.');
+  const needleTolerant = tolerant(needle);
+
+  const matches = [];
+  for (const [name, pkg] of Object.entries(index.packages)) {
+    const categories = pkg.categories || [];
+    const keywords = pkg.keywords || [];
+    if (active !== '' && !categories.includes(active)) continue;
+    if (needle === '') {
+      matches.push({ name, pkg, score: 0 });
+      continue;
+    }
+    const nameTolerant = tolerant(name);
+    let score = -1;
+    if (nameTolerant === needleTolerant) score = 0;
+    else if (nameTolerant.startsWith(needleTolerant)) score = 1;
+    else if (nameTolerant.includes(needleTolerant)) score = 2;
+    else if ((pkg.description || '').toLowerCase().includes(needle)) score = 3;
+    else if (keywords.some((keyword) => keyword.includes(needle))
+      || categories.some((entry) => entry.includes(needle))) score = 4;
+    if (score >= 0) matches.push({ name, pkg, score });
+  }
+  matches.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+  return matches;
+}
+
 /** Search results (or the full list when the query is empty). */
 function searchPage(index, query = '', category = '', options = {}) {
-  const needle = query.trim().toLowerCase();
   const active = category.trim().toLowerCase();
-  const matches = Object.entries(index.packages)
-    .filter(([name, pkg]) => {
-      const categories = pkg.categories || [];
-      const keywords = pkg.keywords || [];
-      const matchesCategory = active === '' || categories.includes(active);
-      if (!matchesCategory) return false;
-      if (needle === '') return true;
-      return name.toLowerCase().includes(needle)
-        || (pkg.description || '').toLowerCase().includes(needle)
-        || keywords.some((keyword) => keyword.includes(needle))
-        || categories.some((entry) => entry.includes(needle));
-    })
-    .sort(([a], [b]) => a.localeCompare(b));
+  const needle = query.trim();
+  const matches = searchPackages(index, query, category);
 
   const parts = [];
   parts.push(`${matches.length} package${matches.length === 1 ? '' : 's'}`);
@@ -402,7 +427,7 @@ function searchPage(index, query = '', category = '', options = {}) {
   const list = matches.length === 0
     ? '<div class="empty">No packages match this search.</div>'
     : `<ul class="package-list">
-${matches.map(([name, pkg]) => packageCard(name, pkg)).join('\n')}
+${matches.map(({ name, pkg }) => packageCard(name, pkg)).join('\n')}
 </ul>`;
 
   return layout({
@@ -597,6 +622,7 @@ module.exports = {
   notFoundPage,
   packageBadgeState,
   paginatePackages,
+  searchPackages,
   DEFAULT_PER_PAGE,
   MAX_PER_PAGE,
 };

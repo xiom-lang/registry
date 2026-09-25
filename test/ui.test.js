@@ -338,6 +338,24 @@ test('search page filters and escapes the query', async () => {
   assert.doesNotMatch(await xss.text(), /<script>alert\(1\)<\/script>/);
 });
 
+test('search tolerates hyphen/dot names and ranks name matches first', async () => {
+  // `xiom-official` and `xiom.official` both find xiom.official-fixture.
+  const hyphen = await (await fetch(`${baseUrl}/search?q=xiom-official`, { headers: BROWSER })).text();
+  assert.match(hyphen, /xiom\.official-fixture/);
+  const dotted = await (await fetch(`${baseUrl}/search?q=xiom.official`, { headers: API })).json();
+  assert.deepEqual(dotted.results.map((entry) => entry.name), ['xiom.official-fixture']);
+
+  // Name-prefix matches rank above substring matches (readme-pkg before
+  // no-readme-pkg), and hyphens inside a name still match.
+  const ranked = await (await fetch(`${baseUrl}/search?q=readme`, { headers: BROWSER })).text();
+  assert.ok(
+    ranked.indexOf('/packages/readme-pkg') < ranked.indexOf('/packages/no-readme-pkg'),
+    'prefix match ranks above substring match',
+  );
+  const exact = await (await fetch(`${baseUrl}/search?q=demo-pkg`, { headers: API })).json();
+  assert.deepEqual(exact.results.map((entry) => entry.name), ['demo-pkg']);
+});
+
 test('hostile package descriptions are escaped in HTML', async () => {
   // Rewrite the index description directly (publish does not accept one from
   // the client; this simulates a hostile package.xi that the server parsed).
