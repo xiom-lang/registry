@@ -200,6 +200,9 @@ function loadConfig() {
     accountsPath: process.env.ACCOUNTS_FILE || path.join(dataDir, 'accounts.json'),
     requestsPath: process.env.REQUESTS_FILE || path.join(dataDir, 'requests.json'),
     reviewsPath: process.env.REVIEWS_FILE || path.join(dataDir, 'reviews.json'),
+    // App-managed trusted-publisher entries (approved requests); the
+    // read-only TRUSTED_PUBLISHERS_FILE stays the operator channel.
+    storedPublishersPath: process.env.PUBLISHERS_STATE_FILE || path.join(dataDir, 'publishers.json'),
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get
@@ -220,6 +223,7 @@ function loadConfig() {
     maxAccountsBytes: intFromEnv('MAX_ACCOUNTS_BYTES', 2 * MIB),
     maxRequestsBytes: intFromEnv('MAX_REQUESTS_BYTES', 4 * MIB),
     maxReviewsBytes: intFromEnv('MAX_REVIEWS_BYTES', 4 * MIB),
+    maxPublishersBytes: intFromEnv('MAX_PUBLISHERS_BYTES', 1 * MIB),
     rateLimit: {
       disabled: rateLimitDisabled,
       general: {

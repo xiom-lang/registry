@@ -1182,12 +1182,16 @@ Guardrails if we build it:
 it is -- publishers sign with their own keys, OIDC/static-token publishing,
 immutability, yank, and the trusted-publishers loader contract are untouched.
 Phase 2 only adds a request/approval front door: requests are GitHub-OAuth
-identified, the host mints and mails tokens, and trusted-publisher approvals
-write entries in the same format (with an audit log). Existing publishers see
-zero difference, and the manual issue-template/ops flow remains available as
-the fallback for both request types. The GitHub token-request template stays
-as the parallel, dev-signed path; the platform front door is the community
-(social-style) path.
+identified, the host mints and mails tokens, and **approving a
+trusted-publisher request activates the entry immediately** (the app writes
+it to `publishers.json` on the data volume with request provenance; the
+read-only operator file stays the first-party channel). Existing publishers
+see zero difference, and the manual issue-template/ops flow remains
+available as the fallback for both request types. The GitHub token-request
+template stays as the parallel, dev-signed path; the platform front door is
+the community (social-style) path. A ready-to-copy OIDC workflow template is
+served at `/ui/templates/community-publish.yml` and linked from the request
+form and PUBLISHING.md.
 
 **Status icon set v2 (owner, 2026-09-24 evening).** The owner replaced the
 first four with a state x track matrix: 14 files, `pgk_<state>_<track>.webp`

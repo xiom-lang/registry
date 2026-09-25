@@ -172,28 +172,30 @@ services):
   community reports (`/review`); admins are reviewers automatically.
 
 Data: `accounts.json` (identities), `requests.json` (token/publisher queue),
-and `reviews.json` (community reports, resolution notes, and reviewer
-decisions with their audit history) live in the `registry_data` /
-`staging_data` volume and are in the restic source list.
+`reviews.json` (community reports, resolution notes, and reviewer decisions
+with their audit history), and `publishers.json` (approved trusted-publisher
+entries) live in the `registry_data` / `staging_data` volume and are in the
+restic source list.
 Sessions are in-memory: a restart signs everyone out. The first deploy must
 exercise a real login round-trip (phase-2 prerequisite from the incident
 review).
 
-Mint loop after approving a request in `/admin/requests` (the app never
-mints, never reads the token store, and holds no mail credentials):
+Approving requests in `/admin/requests`:
 
-1. Mint on the host, one line at a time:
-   `docker run --rm -v "$PWD:/w" -w /w node:22-alpine node scripts/tokens.js add --file tokens.json --label <login>-<request-id> --scopes "<scopes>"`
-   (or `rotate`/`remove`; sign-off and delivery rules unchanged), or add the
-   approved entry to `/etc/xiom-registry/trusted-publishers.json` for a
-   trusted-publisher request.
-2. Deliver the token privately from `registry@xiom-lang.org`.
-3. Mark the request fulfilled in the UI with a reference (label + date).
-   Approved-but-unfulfilled requests stay visible until then, and every
-   transition is appended to the request's audit history.
-4. Recreate the service after token/publisher file edits:
-   `docker compose up -d --no-deps registry` (staging equivalent with
-   `--env-file .env.staging --profile staging`).
+- **Trusted publisher:** one click. The app writes the entry to
+  `publishers.json` on the data volume and activates it immediately — no host
+  editing, no restart; the queue then shows it as live, with a **Revoke**
+  button. The read-only `/etc/xiom-registry/trusted-publishers.json` stays
+  the operator channel for first-party grants.
+- **Token:** approving shows the exact host mint command in the UI. Run it,
+  deliver the token privately from `registry@xiom-lang.org`, then click
+  **Mark fulfilled** with a reference (label + mail date). The app never
+  mints, never reads the token store, and holds no mail credentials.
+
+Data files in the volume (restic source list): `index.json`,
+`accounts.json`, `requests.json`, `reviews.json`, and `publishers.json`
+(approved trusted-publisher entries with request provenance). Recreate the
+service only after editing the operator file or the token store.
 
 ## Hestia reverse proxy
 

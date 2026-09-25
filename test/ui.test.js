@@ -649,6 +649,16 @@ test('the full listing renders compact rows and home shows the recent strip', as
   assert.doesNotMatch(home, /<ul class="pkg-rows">/, 'home shows the strip, not the full row list');
 });
 
+test('the community workflow template is served for copy-paste', async () => {
+  const response = await fetch(`${baseUrl}/ui/templates/community-publish.yml`, { headers: API });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/yaml/);
+  const body = await response.text();
+  assert.match(body, /audience=xiom-registry/);
+  assert.match(body, /\.github\/workflows\/publish-registry\.yml/);
+  assert.match(body, /xiom pkg publish/);
+});
+
 test('unknown routes render the HTML 404 for browsers only', async () => {
   const html = await fetch(`${baseUrl}/no/such/page`, { headers: BROWSER });
   assert.equal(html.status, 404);

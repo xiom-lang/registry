@@ -40,6 +40,7 @@ const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL
 const { AccountStore } = require('./accounts');
 const { RequestStore } = require('./requests');
 const { ReviewStore } = require('./reviews');
+const { PublisherStore } = require('./publisher-store');
 const {
   verify: verifySignature,
   fingerprint,
@@ -74,6 +75,12 @@ const SERVICE_VERSION = require('../package.json').version;
 const SERVICE_STARTED_AT = new Date().toISOString();
 // Read once: the UI stylesheet is static and small.
 const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
+// Community OIDC publish workflow, served so a beginner can copy it straight
+// into .github/workflows/publish-registry.yml (registry 2.0 request flow).
+const COMMUNITY_PUBLISH_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, 'ui', 'templates', 'community-publish.yml'),
+  'utf-8',
+);
 // Package status badge art: state x track matrix (see src/ui/pages.js).
 // `trusted` exists only on the community track -- first-party/official
 // publishes are org-controlled by definition. Keep this in sync with the
@@ -139,6 +146,20 @@ function createApp(config = loadConfig()) {
   const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
   const requests = new RequestStore({ path: config.requestsPath, maxBytes: config.maxRequestsBytes });
   const reviews = new ReviewStore({ path: config.reviewsPath, maxBytes: config.maxReviewsBytes });
+  const publisherStore = new PublisherStore({
+    path: config.storedPublishersPath,
+    maxBytes: config.maxPublishersBytes,
+  });
+  // Approved trusted-publisher requests activate from boot; the read-only
+  // operator file wins if the same repository+workflow is granted there.
+  const filePublisherKeys = new Set(
+    config.publishers.map((entry) => `${entry.repository}\u0000${entry.workflow}`),
+  );
+  const storedPublishers = publisherStore.list()
+    .filter((entry) => !filePublisherKeys.has(`${entry.repository}\u0000${entry.workflow}`));
+  if (storedPublishers.length > 0) {
+    config.publishers = [...config.publishers, ...storedPublishers];
+  }
   const registryBaseUrl = config.registryUrl.replace(/\/+$/, '');
   const callbackUri = `${registryBaseUrl}${oauth.CALLBACK_PATH}`;
   const secureCookies = registryBaseUrl.startsWith('https://') || config.env === 'production';
@@ -497,6 +518,11 @@ function createApp(config = loadConfig()) {
     res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(REGISTRY_CSS);
   });
 
+  // Ready-to-copy workflow for community trusted publishing.
+  app.get('/ui/templates/community-publish.yml', generalLimit, (req, res) => {
+    res.type('text/yaml').set('Cache-Control', 'public, max-age=3600').send(COMMUNITY_PUBLISH_TEMPLATE);
+  });
+
   // Brand marks, served from memory (same files the website uses).
   app.get('/favicon.ico', generalLimit, (req, res) => {
     res.type('image/x-icon').set('Cache-Control', 'public, max-age=604800')
@@ -849,6 +875,7 @@ function createApp(config = loadConfig()) {
     res.type('html').send(adminPage({
       account,
       requests: requests.list(),
+      activePublishers: publisherStore.list().map((entry) => entry.requestId),
       csrf: req.session.csrf,
       notice: updated ? `Request ${updated} updated.` : '',
       error: flash && flash.error ? flash.error : '',
@@ -864,16 +891,62 @@ function createApp(config = loadConfig()) {
     requireCsrf,
     (req, res, next) => {
       try {
-        const updated = requests.decide(req.params.id, {
-          action: String(req.body.action || ''),
-          actor: accountOf(req).login,
-          note: String(req.body.note || ''),
-        });
-        console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
+        const actor = accountOf(req).login;
+        const action = String(req.body.action || '');
+        const note = String(req.body.note || '');
+        const request = requests.get(req.params.id);
+        let updated;
+        if (request.kind === 'publisher' && action === 'approve') {
+          // Approving a trusted publisher *is* the host action: activate the
+          // entry now and auto-fulfil, so the admin's job is one click.
+          const entry = publisherStore.add({
+            requestId: request.id,
+            repository: request.repository,
+            workflow: request.workflow,
+            refs: request.refs,
+            scopes: request.scopes,
+            approvedBy: actor,
+          });
+          config.publishers = [...config.publishers, entry];
+          requests.decide(request.id, { action, actor, note });
+          updated = requests.fulfil(request.id, {
+            actor,
+            reference: `trusted publisher entry activated (${entry.repository} / ${entry.workflow})`,
+          });
+          console.log(`Trusted publisher ${entry.repository} / ${entry.workflow} activated for ${request.id} by ${actor}`);
+        } else {
+          updated = requests.decide(request.id, { action, actor, note });
+          console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
+        }
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(updated.id)}`);
       } catch (err) {
-        if (err instanceof BadRequestError) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
           // Keep the admin on the queue with the reason visible.
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/admin/requests');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/requests/:id/revoke',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const request = requests.get(req.params.id);
+        const actor = accountOf(req).login;
+        publisherStore.remove(request.id);
+        config.publishers = config.publishers.filter((entry) => entry.requestId !== request.id);
+        requests.revoke(request.id, { actor, note: String(req.body.note || '') });
+        console.log(`Trusted publisher entry for ${request.id} revoked by ${actor}`);
+        res.redirect(303, `/admin/requests?updated=${encodeURIComponent(request.id)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
           req.session.flash = { error: err.message };
           return res.redirect(303, '/admin/requests');
         }
@@ -1181,7 +1254,7 @@ function createApp(config = loadConfig()) {
   });
 
   // Expose for tests / graceful shutdown.
-  app.locals.registry = { config, indexStore, artifacts, accounts, requests };
+  app.locals.registry = { config, indexStore, artifacts, accounts, requests, reviews, publisherStore };
   return app;
 }
 

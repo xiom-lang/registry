@@ -110,6 +110,33 @@ unsigned. The registry shows the signature fingerprint on the package page,
 and first-party tokens require signatures. Do not lose the key: republishing
 the same version with a different key is impossible (versions are immutable).
 
+## Trusted publishing from GitHub Actions (recommended)
+
+If your package lives in a GitHub repository and you publish from Actions,
+use a **trusted publisher**: no token, no secret. The registry trusts the
+repository + workflow + ref you name, and GitHub proves them with OIDC.
+
+1. **Add the workflow.** Download the ready-made template at
+   `/ui/templates/community-publish.yml` on your registry
+   (`https://registry.xiom-lang.org/ui/templates/community-publish.yml`) and
+   save it as **`.github/workflows/publish-registry.yml`** in your repo —
+   create the folders if they don't exist. Commit and push.
+2. **Request the trust.** Sign in at the registry and submit a
+   **Trusted publisher** request:
+   - repository: `<owner>/<repo>`
+   - workflow: `publish-registry.yml` (the file name, not a ref)
+   - refs: `refs/heads/main` (or your release tag pattern, e.g. `refs/tags/v*`)
+   - package names: the `name` from your `package.xi`
+3. **Wait for approval.** When a maintainer approves it, the entry is active
+   immediately — nothing else to set up. Your account page shows the status.
+4. **Publish.** GitHub → Actions → *Publish to XIOM registry (OIDC)* →
+   **Run workflow**, `mode: publish`.
+5. **Optional: stable signature.** Add an `XIOM_SIGNING_KEY` repository
+   secret (the 64-hex key from `xiom pkg keygen`) so every run signs with the
+   same key; without it each run signs with a fresh key.
+
+Publishing from your own machine instead? Use the token path below.
+
 ## 4. Request a publish token
 
 Two front doors, same review:
@@ -118,8 +145,8 @@ Two front doors, same review:
   **https://registry.xiom-lang.org/login** and submit the request form. The
   request is queued for a maintainer with an audit trail. Nothing is minted
   in the browser: approved tokens are issued on the registry host and mailed
-  from **registry@xiom-lang.org**. If your package publishes from GitHub
-  Actions, choose **trusted publisher** instead - it ships no secret at all.
+  from **registry@xiom-lang.org**. Publishing from GitHub Actions? Use a
+  **trusted publisher** instead (section above) - it ships no secret at all.
 - **Issue template (fallback):** open a token request in the registry
   repository:
   **https://github.com/xiom-lang/registry/issues/new/choose** ("Token request").

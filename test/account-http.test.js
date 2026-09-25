@@ -453,6 +453,62 @@ test('reviewers can flag, review, and clear a package with a public history', as
   assert.match(html, /Review history/);
 });
 
+test('approving a trusted publisher activates it and revoking removes it', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+
+  let response = await requestAs(jar, '/account');
+  let html = await response.text();
+  const csrf = csrfFrom(html);
+  response = await requestAs(jar, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf,
+      kind: 'publisher',
+      scopes: 'readme-pkg',
+      repository: 'alice/readme-pkg',
+      workflow: 'publish-registry.yml',
+      refs: 'refs/heads/main',
+    }),
+  });
+  assert.equal(response.status, 303);
+  const id = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  response = await requestAs(jar, '/admin/requests', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Approve &amp; activate/);
+
+  response = await requestAs(jar, `/admin/requests/${id}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+
+  // The entry is live for OIDC matching, and the request auto-fulfilled.
+  const { config } = app.locals.registry;
+  const entry = config.publishers.find((candidate) => candidate.requestId === id);
+  assert.ok(entry, 'approved entry is in the live publisher list');
+  assert.equal(entry.repository, 'alice/readme-pkg');
+  assert.equal(entry.workflow, 'publish-registry.yml');
+  assert.equal(entry.firstParty, false);
+
+  response = await requestAs(jar, '/admin/requests', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Trusted publisher is <strong>live<\/strong>/);
+  assert.match(html, /Revoke trusted publisher/);
+
+  response = await requestAs(jar, `/admin/requests/${id}/revoke`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, note: 'mistake' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(config.publishers.find((candidate) => candidate.requestId === id), undefined);
+
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'requests.json'), 'utf-8'));
+  assert.equal(data.requests[id].status, 'fulfilled');
+  assert.equal(data.requests[id].history.at(-1).action, 'revoked');
+});
+
 test('OAuth state is verified and single-use', async () => {
   const jar = cookieJar();
   let response = await requestAs(jar, '/auth/github/start');

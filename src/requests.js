@@ -15,7 +15,7 @@ const fs = require('fs');
 const { BadRequestError, ConflictError, NotFoundError } = require('./errors');
 const { atomicWriteFile } = require('./index');
 const { validatePackageName } = require('./names');
-const { normalizePublishers, normalizeScope } = require('./publishers');
+const { normalizePublishers, normalizeScope, normalizeWorkflow, isWorkflowFile } = require('./publishers');
 
 const REQUESTS_SCHEMA_VERSION = '1.0.0';
 const MAX_REQUESTS_BYTES = 4 * 1024 * 1024;
@@ -73,11 +73,18 @@ function normalizePublisherRequest({ repository, workflow, refs, scopes }) {
   const refList = Array.isArray(refs)
     ? refs
     : String(refs || '').split(/[\s,]+/).filter(Boolean);
+  const workflowValue = normalizeWorkflow(clean(workflow, 200));
+  if (!isWorkflowFile(workflowValue)) {
+    throw new BadRequestError(
+      'workflow must be a file name like "publish-registry.yml" (the refs go in the refs field)',
+      'invalid_workflow',
+    );
+  }
   try {
     const [entry] = normalizePublishers([{
       label: 'request',
       repository: clean(repository, 200),
-      workflow: clean(workflow, 200),
+      workflow: workflowValue,
       refs: refList.map((ref) => clean(ref, 200)),
       scopes,
     }], 'request');
@@ -251,6 +258,27 @@ class RequestStore {
         actor: clean(actor, 64),
         action: 'fulfilled',
         ...(mintReference ? { note: mintReference } : {}),
+      }],
+    };
+    this.#commit({ ...this.requests, [record.id]: updated });
+    return updated;
+  }
+
+  /** Record that a live trusted-publisher entry was revoked. */
+  revoke(id, { actor, note = '' }) {
+    const record = this.get(id);
+    if (record.kind !== 'publisher') {
+      throw new BadRequestError('only trusted-publisher requests can be revoked', 'not_publisher_request');
+    }
+    const now = new Date().toISOString();
+    const revokeNote = clean(note, MAX_NOTE);
+    const updated = {
+      ...record,
+      history: [...record.history, {
+        at: now,
+        actor: clean(actor, 64),
+        action: 'revoked',
+        ...(revokeNote ? { note: revokeNote } : {}),
       }],
     };
     this.#commit({ ...this.requests, [record.id]: updated });

@@ -78,6 +78,15 @@ test('creates a trusted-publisher request with loader validation', () => {
     workflow: 'publish.yml',
     refs: '',
   }), /refs/);
+  // The workflow field is a file name; refs belong in the refs field.
+  assert.throws(() => requests.create({
+    kind: 'publisher',
+    requester: REQUESTER,
+    scopes: 'my-lib',
+    repository: 'alice/my-lib',
+    workflow: 'refs/heads/main',
+    refs: 'refs/heads/main',
+  }), /workflow must be a file name/);
 });
 
 test('decision and fulfilment transitions append to the audit history', () => {

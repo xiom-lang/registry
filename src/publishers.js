@@ -33,6 +33,13 @@ function normalizeWorkflow(value) {
     : workflow;
 }
 
+/** Workflow fields are file names (`publish-registry.yml`), never refs. */
+const WORKFLOW_FILE = /^[A-Za-z0-9._-]+\.(yml|yaml)$/;
+
+function isWorkflowFile(value) {
+  return WORKFLOW_FILE.test(normalizeWorkflow(String(value || '')));
+}
+
 /** Extract `sub/dir/file.yml` from `owner/repo/.github/workflows/file.yml@ref`. */
 function workflowFileFromRef(workflowRef) {
   if (typeof workflowRef !== 'string') return null;
@@ -237,6 +244,7 @@ module.exports = {
   normalizePublishers,
   normalizeScope,
   normalizeWorkflow,
+  isWorkflowFile,
   workflowFileFromRef,
   matchPublisher,
 };

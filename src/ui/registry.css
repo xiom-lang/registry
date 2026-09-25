@@ -864,6 +864,16 @@ textarea:focus-visible {
 .review-history summary { color: var(--paper-dim); cursor: pointer; font-weight: 600; }
 .review-history-list { color: var(--muted); font-size: 13px; margin: var(--space-sm) 0 0 20px; }
 .review-decision-row { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); }
+.mint-command {
+  background: var(--panel-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  margin: var(--space-sm) 0;
+  overflow-x: auto;
+  padding: var(--space-sm) var(--space-md);
+  white-space: pre-wrap;
+}
 
 /* README block on the package page (section 13). */
 .readme {
