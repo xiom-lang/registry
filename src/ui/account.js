@@ -98,12 +98,19 @@ function accountPage({
     <legend>What do you need?</legend>
     <label class="radio-row"><input type="radio" name="kind" value="token"
       ${defaults.kind === 'token' ? 'checked' : ''}>
-      <span><strong>Publish token</strong> -- for publishing from your machine with
-      <code>xiom pkg publish</code>.</span></label>
+      <span><strong>Publish token</strong> &mdash; you publish from your own machine or CI.
+      A maintainer mints a token scoped to your package on the registry host and sends it
+      to you privately; you sign with your key, so the package shows as <strong>verified</strong>.
+      Choose this when the package is not published from GitHub Actions.</span></label>
     <label class="radio-row"><input type="radio" name="kind" value="publisher"
       ${defaults.kind === 'publisher' ? 'checked' : ''}>
-      <span><strong>Trusted publisher</strong> -- for publishing from a GitHub
-      Actions workflow via OIDC. Preferred: no secret ever leaves GitHub.</span></label>
+      <span><strong>Trusted publisher</strong> &mdash; you publish from a GitHub Actions
+      workflow. <strong>Nothing is minted and no secret exists:</strong> the registry
+      verifies your repository + workflow + ref through GitHub OIDC, so the package shows
+      as <strong>trusted</strong>. Recommended.</span></label>
+    <p class="pkg-meta">The human <strong>reviewed</strong> mark is separate from both:
+       a reviewer sets it after looking at the package, and anyone can report a package
+       for review.</p>
   </fieldset>
   <div class="form-grid">
     <label class="form-field">

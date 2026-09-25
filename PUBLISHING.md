@@ -137,6 +137,20 @@ repository + workflow + ref you name, and GitHub proves them with OIDC.
 
 Publishing from your own machine instead? Use the token path below.
 
+### Which badge will my package show?
+
+| How you publish | What the registry proved | Badge |
+|---|---|---|
+| Trusted publisher (OIDC) | your repository + workflow + ref, through GitHub | **trusted** |
+| Publish token + signing key | a token scoped to your package + your ed25519 signature | **verified** |
+| Publish token, unsigned | a token scoped to your package | **unsigned** |
+| Any of the above + a reviewer decision | a human looked at it | **+ reviewed** pill |
+
+The badge is one per package (the latest version decides); the `signed`,
+`trusted`, and `reviewed` pills stack next to it. Nothing is minted in the
+browser: trusted publishers need no token at all, and publish tokens are
+minted by a maintainer on the registry host and delivered privately.
+
 ## 4. Request a publish token
 
 Two front doors, same review:
