@@ -188,6 +188,18 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .page-link.disabled { color: var(--muted); opacity: 0.6; }
 .page-status { color: var(--muted); }
 
+/* Sort + facet controls on the full listing (section 13 phase 3). */
+.facet-bar { display: grid; gap: var(--space-sm); margin-top: var(--space-lg); }
+.facet-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: var(--space-sm);
+}
+.facet-sort { color: var(--muted); }
+.facet-sort .chip { font-size: 12px; }
+
 /* Compact listing rows (section 13 phase 2): the full list at /packages. */
 .pkg-rows {
   background: var(--panel);

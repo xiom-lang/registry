@@ -140,9 +140,45 @@ function packageCard(name, pkg) {
 </li>`;
 }
 
-/** Slice the sorted package list for one page (clamping is the caller's job). */
-function paginatePackages(index, { page = 1, perPage = DEFAULT_PER_PAGE } = {}) {
-  const names = Object.keys(index.packages).sort();
+/**
+ * Filter + sort package names for the listing (SESSION.md section 13
+ * phase 3): `sort` is 'updated' (newest latest-publish first, the default)
+ * or 'name'; facets are category, firstParty, and signed (the latest
+ * installable version carries a publisher signature).
+ */
+function listingNames(index, { sort = 'updated', category = '', firstParty = false, signed = false } = {}) {
+  let names = Object.keys(index.packages);
+  if (category) {
+    const needle = category.toLowerCase();
+    names = names.filter((name) => (index.packages[name].categories || []).includes(needle));
+  }
+  if (firstParty) names = names.filter((name) => isFirstPartyNamespace(name));
+  if (signed) {
+    names = names.filter((name) => {
+      const entry = latestEntry(index.packages[name]);
+      return Boolean(entry && entry.signature && entry.publicKey);
+    });
+  }
+  const publishedAt = (name) => {
+    const entry = latestEntry(index.packages[name]);
+    const parsed = entry && entry.published ? Date.parse(entry.published) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  if (sort === 'name') names.sort((a, b) => a.localeCompare(b));
+  else names.sort((a, b) => publishedAt(b) - publishedAt(a) || a.localeCompare(b));
+  return names;
+}
+
+/** Slice the filtered + sorted package list for one page. */
+function paginatePackages(index, {
+  page = 1,
+  perPage = DEFAULT_PER_PAGE,
+  sort = 'updated',
+  category = '',
+  firstParty = false,
+  signed = false,
+} = {}) {
+  const names = listingNames(index, { sort, category, firstParty, signed });
   const total = names.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(Math.max(1, page), totalPages);
@@ -153,13 +189,30 @@ function paginatePackages(index, { page = 1, perPage = DEFAULT_PER_PAGE } = {}) 
     totalPages,
     page: current,
     perPage,
+    sort,
+    category,
+    firstParty: Boolean(firstParty),
+    signed: Boolean(signed),
   };
 }
 
-/** Previous/next controls for the package list (canonical path: /packages). */
-function paginationNav({ page, totalPages, perPage, total }) {
+/** Build a /packages query string for a link (HTML-escaped for attributes). */
+function listingQuery({ sort, category, firstParty, signed }, page, perPage) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('per_page', String(perPage));
+  if (sort && sort !== 'updated') params.set('sort', sort);
+  if (category) params.set('category', category);
+  if (firstParty) params.set('first_party', '1');
+  if (signed) params.set('signed', '1');
+  return `?${params.toString().replaceAll('&', '&amp;')}`;
+}
+
+/** Previous/next controls, preserving the active sort and facets. */
+function paginationNav(paged) {
+  const { page, totalPages, perPage, total } = paged;
   if (totalPages <= 1) return '';
-  const link = (target, label) => `<a class="page-link" href="/packages?page=${target}&amp;per_page=${perPage}">${label}</a>`;
+  const link = (target, label) => `<a class="page-link" href="/packages${listingQuery(paged, target, perPage)}">${label}</a>`;
   const previous = page > 1
     ? link(page - 1, '&larr; Previous')
     : '<span class="page-link disabled">&larr; Previous</span>';
@@ -171,6 +224,33 @@ function paginationNav({ page, totalPages, perPage, total }) {
   <span class="page-status">Page ${page} of ${totalPages} &middot; ${total} package${total === 1 ? '' : 's'}</span>
   ${next}
 </nav>`;
+}
+
+/** Shareable sort + facet controls for the listing. */
+function facetBar(index, paged) {
+  const href = (overrides) => `/packages${listingQuery({ ...paged, ...overrides }, 1, paged.perPage)}`;
+  const chip = (label, overrides, active) => `<a class="chip${active ? ' chip-active' : ''}" href="${href(overrides)}">${label}</a>`;
+  const filters = [
+    chip('All packages', { category: '', firstParty: false, signed: false },
+      !paged.category && !paged.firstParty && !paged.signed),
+    chip('First-party', { firstParty: !paged.firstParty }, paged.firstParty),
+    chip('Signed', { signed: !paged.signed }, paged.signed),
+  ].join('');
+  const categories = categoryCounts(index)
+    .map(({ name, count }) => chip(
+      `${escapeHtml(name)} <span class="chip-count">${count}</span>`,
+      { category: paged.category === name ? '' : name },
+      paged.category === name,
+    ))
+    .join('');
+  const sorts = [['updated', 'Updated'], ['name', 'A-Z']]
+    .map(([value, label]) => chip(label, { sort: value }, paged.sort === value))
+    .join('');
+  return `<div class="facet-bar">
+  <div class="facet-group" role="group" aria-label="Filters">${filters}</div>
+  <div class="facet-group" role="group" aria-label="Categories">${categories}</div>
+  <div class="facet-group facet-sort" role="group" aria-label="Sort">${sorts}</div>
+</div>`;
 }
 
 function packageList(index, options = {}) {
@@ -273,18 +353,24 @@ ${strip}
   });
 }
 
-/** Full listing: compact rows, paginated (section 13 phase 2). */
+/** Full listing: facets, compact rows, paginated (section 13 phases 2-3). */
 function packagesPage(index, options = {}) {
   const paged = paginatePackages(index, options);
+  const filters = [];
+  if (paged.category) filters.push(`category "${paged.category}"`);
+  if (paged.firstParty) filters.push('first-party');
+  if (paged.signed) filters.push('signed');
+  const summary = `${paged.total} package${paged.total === 1 ? '' : 's'}`
+    + (filters.length > 0 ? ` \u00b7 ${filters.join(' \u00b7 ')}` : '');
   return layout({
     title: 'Packages',
     description: 'Browse all XIOM registry packages',
     nav: options.nav,
     body: `<section class="hero">
   <h1>Packages</h1>
-  <div class="meta-row"><span>${paged.total} package${paged.total === 1 ? '' : 's'}</span></div>
-  ${categoryStrip(index)}
+  <div class="meta-row"><span>${escapeHtml(summary)}</span></div>
 </section>
+${facetBar(index, paged)}
 ${packageRows(index, options)}`,
   });
 }

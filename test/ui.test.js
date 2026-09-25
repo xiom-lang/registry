@@ -120,7 +120,7 @@ test.before(async () => {
   const readmeDir = path.join(sandbox, 'readme-fixture');
   fs.mkdirSync(readmeDir, { recursive: true });
   fs.writeFileSync(path.join(readmeDir, 'package.xi'),
-    'name: "readme-pkg";\nversion: "1.0.0";\ndescription: "Has a readme";');
+    'name: "readme-pkg";\nversion: "1.0.0";\ndescription: "Has a readme";\ncategories: ["data"];');
   fs.writeFileSync(path.join(readmeDir, 'README.md'), [
     '# Readme fixture',
     '',
@@ -549,11 +549,12 @@ test('readme is served from the stored tarball and rendered safely', async () =>
 });
 
 test('listing paginates with totals while index.json stays whole', async () => {
-  const page = await (await fetch(`${baseUrl}/packages?per_page=2&page=3`, { headers: API })).json();
+  const page = await (await fetch(`${baseUrl}/packages?sort=name&per_page=2&page=3`, { headers: API })).json();
   assert.equal(page.page, 3);
   assert.equal(page.per_page, 2);
   assert.equal(page.total, 6);
   assert.equal(page.total_pages, 3);
+  assert.equal(page.sort, 'name');
   assert.deepEqual(page.packages.map((pkg) => pkg.name), ['signed-pkg', 'xiom.official-fixture']);
 
   // Out-of-range values clamp instead of erroring.
@@ -571,6 +572,36 @@ test('listing paginates with totals while index.json stays whole', async () => {
   // The protocol index keeps every package regardless of listing params.
   const whole = await (await fetch(`${baseUrl}/index.json`, { headers: API })).json();
   assert.equal(Object.keys(whole.packages).length, 6);
+});
+
+test('listing sorts and facets are shareable and combinable', async () => {
+  // Default sort is newest-published first; A-Z is explicit and stable.
+  const updated = await (await fetch(`${baseUrl}/packages`, { headers: API })).json();
+  assert.equal(updated.sort, 'updated');
+  assert.deepEqual(updated.packages.map((pkg) => pkg.name).sort(), [
+    'demo-pkg', 'hostile-pkg', 'no-readme-pkg', 'readme-pkg', 'signed-pkg', 'xiom.official-fixture',
+  ]);
+  const byName = await (await fetch(`${baseUrl}/packages?sort=name&per_page=2&page=3`, { headers: API })).json();
+  assert.deepEqual(byName.packages.map((pkg) => pkg.name), ['signed-pkg', 'xiom.official-fixture']);
+
+  const firstParty = await (await fetch(`${baseUrl}/packages?first_party=1`, { headers: API })).json();
+  assert.equal(firstParty.first_party, true);
+  assert.deepEqual(firstParty.packages.map((pkg) => pkg.name), ['xiom.official-fixture']);
+
+  const signed = await (await fetch(`${baseUrl}/packages?signed=1`, { headers: API })).json();
+  assert.equal(signed.signed, true);
+  assert.deepEqual(signed.packages.map((pkg) => pkg.name), ['signed-pkg']);
+
+  const category = await (await fetch(`${baseUrl}/packages?category=data`, { headers: API })).json();
+  assert.equal(category.category, 'data');
+  assert.deepEqual(category.packages.map((pkg) => pkg.name), ['readme-pkg']);
+
+  // Facets survive pagination links and render as active chips.
+  const html = await (await fetch(`${baseUrl}/packages?first_party=1&sort=name`, { headers: BROWSER })).text();
+  assert.match(html, /1 package \u00b7 first-party/);
+  assert.match(html, /class="chip chip-active" href="[^"]*">First-party<\/a>/);
+  assert.match(html, /class="chip chip-active" href="[^"]*">A-Z<\/a>/);
+  assert.equal((html.match(/<li class="pkg-row">/g) || []).length, 1, 'the first-party filter narrows the rows');
 });
 
 test('the full listing renders compact rows and home shows the recent strip', async () => {

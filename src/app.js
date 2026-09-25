@@ -97,19 +97,25 @@ const UI_ASSETS = {
 };
 
 /**
- * Clamp `?page` / `?per_page` for the listing. Garbage and out-of-range
- * values fall back to the defaults instead of erroring: pagination is a
- * browsing affordance, not a protocol contract (SESSION.md section 13).
+ * Clamp `?page` / `?per_page` and read the listing facets (sort, category,
+ * first_party, signed). Garbage and out-of-range values fall back to the
+ * defaults instead of erroring: the listing is a browsing affordance, not a
+ * protocol contract (SESSION.md section 13).
  */
-function paginationFromQuery(query) {
+function listingFromQuery(query) {
   const clamp = (value, fallback, max) => {
     const parsed = Number.parseInt(String(value ?? ''), 10);
     if (!Number.isFinite(parsed) || parsed < 1) return fallback;
     return Math.min(parsed, max);
   };
+  const flag = (value) => value === '1' || value === 'true';
   return {
     page: clamp(query.page, 1, 1_000_000),
     perPage: clamp(query.per_page, DEFAULT_PER_PAGE, MAX_PER_PAGE),
+    sort: query.sort === 'name' ? 'name' : 'updated',
+    category: typeof query.category === 'string' ? query.category.trim().toLowerCase() : '',
+    firstParty: flag(query.first_party),
+    signed: flag(query.signed),
   };
 }
 
@@ -453,17 +459,17 @@ function createApp(config = loadConfig()) {
     });
   }
 
-  // Package listing: compact rows for the UI, JSON for API consumers.
-  // `?page=` / `?per_page=` paginate both surfaces (defaults 1/50, page size
-  // capped at 200); `/index.json` stays whole for the client protocol.
+  // Package listing: compact rows with sort/facets for the UI, JSON for API
+  // consumers. `?page=` / `?per_page=` paginate both surfaces (defaults 1/50,
+  // page size capped at 200); `/index.json` stays whole for the client.
   app.get('/packages', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
-    const { page, perPage } = paginationFromQuery(req.query);
+    const listing = listingFromQuery(req.query);
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagesPage(index, { nav: accountNav(req), page, perPage }));
+        .send(packagesPage(index, { nav: accountNav(req), ...listing }));
     }
-    const paged = paginatePackages(index, { page, perPage });
+    const paged = paginatePackages(index, listing);
     res.json({
       packages: paged.names.map((name) => {
         const pkg = index.packages[name];
@@ -482,6 +488,10 @@ function createApp(config = loadConfig()) {
       per_page: paged.perPage,
       total: paged.total,
       total_pages: paged.totalPages,
+      sort: paged.sort,
+      category: paged.category,
+      first_party: paged.firstParty,
+      signed: paged.signed,
     });
   });
 

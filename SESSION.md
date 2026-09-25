@@ -1081,18 +1081,19 @@ cover raw HTML, attribute injection, and unsafe schemes. A small bounded
 in-process cache keyed by `name@version` avoids re-inflating on every page
 view (versions are immutable).
 
-**Listing at thousands of packages -- phases 1-2 DONE (2026-09-25).**
+**Listing at thousands of packages -- phases 1-3 DONE (2026-09-25).**
 `/packages` (and the home list) accept `?page=` / `?per_page=` (default
 1/50, page size capped at 200, out-of-range values clamp); the JSON response
-carries `page`/`per_page`/`total`/`total_pages`. The full listing now renders
+carries `page`/`per_page`/`total`/`total_pages`. The full listing renders
 compact rows (badge art, name, one-line description, latest, updated, size)
 with pagination; home keeps the card treatment for a six-package "Recently
-updated" strip plus a "Browse all N packages" link. `/index.json` stays
-whole for the client protocol. Phases remaining: (3) sorting (updated
-default, name A-Z) and shareable server-side facets (category counts,
-first-party, signed); (4) search tolerates `xiom-` vs `xiom.` and gains
-prefix matching; (5) index growth: a compact/gzipped form eventually, not
-urgent at 35 packages.
+updated" strip plus a "Browse all N packages" link. Sorting is `updated`
+(newest latest-publish first, the default) or `name` (A-Z), and the facets
+`category`, `first_party`, and `signed` are shareable query params rendered
+as chip toggles; sort and facets survive pagination links. `/index.json`
+stays whole for the client protocol. Phases remaining: (4) search tolerates
+`xiom-` vs `xiom.` and gains prefix matching; (5) index growth: a
+compact/gzipped form eventually, not urgent at 35 packages.
 
 ---
 
@@ -1439,6 +1440,6 @@ sign-in: OIDC publishing never uses browser sessions.
 3. Production delta waits only on the owner greenlight: ops deploys the
    combined delta (88 -> 151) + `eco-v0.1.1`, then the batch is verified as
    `eco-v0.1.0`.
-4. Next registry work: section 13 phases 3-4 (sorting + facets, search
-   tolerance), then the review/report flows (flagged state, reviewer role)
-   if the owner prefers.
+4. Next registry work: section 13 phase 4 (search tolerance) and phase 5
+   (index growth) when it matters, then the review/report flows (flagged
+   state, reviewer role) if the owner prefers.
