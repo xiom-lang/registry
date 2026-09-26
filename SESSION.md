@@ -1872,6 +1872,14 @@ renders correctly at 390x844 and 1280x900 with no page overflow. Both changes
 are on `main`; the live containers pick them up on the next `git pull` +
 recreate (the cover is cosmetic, the env declarations matter for load tests).
 
+**Ops follow-up (2026-09-26 16:54Z):** ops deploys `394db71` plus the cover
+next and will confirm `docker exec xiom-registry printenv PUBLISH_RATE_MAX`
+shows 600 after the recreate. Staging's `XIOM_STAGING_*` overrides replace the
+ad-hoc `/tmp` compose override for load tests; the tier-1 index-wall
+measurement taken with that override still stands. Cover weight (~567 KB vs
+180 KB) is accepted as a later optimization, not urgent.
+
+
 
 
 
