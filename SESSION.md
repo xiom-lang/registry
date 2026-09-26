@@ -1845,6 +1845,17 @@ the CI image smoke now boots with `TRUST_PROXY=1` and fails on any `ERR_ERL`
 line. DEPLOY.md has the verification recipe (rotate spoofed XFF, watch
 `RateLimit-*`; grep the log).
 
+**Deployed and verified (2026-09-26 15:38Z).** Ops rebuilt both environments
+with `8fb8cae`: staging `TRUST_PROXY=1` via `.env.staging` (new
+`XIOM_STAGING_TRUST_PROXY`), production `TRUST_PROXY=1` with
+`PUBLISH_RATE_MAX=600` held for the batch; no `ERR_ERL` on either, `/health`
+2.1.0. Enforcement confirmed twice with rotating spoofed `X-Forwarded-For`:
+ops saw `remaining 298 -> 297 -> 296`, the registry lane saw
+`299 -> 298 -> 297` -- one shared bucket, no per-header reset. `D5`
+(restore `PUBLISH_RATE_MAX=20`) stays open until the packages lane signals
+that `eco-v0.1.1` is complete.
+
+
 
 ---
 
