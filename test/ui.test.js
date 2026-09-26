@@ -538,10 +538,18 @@ test('packageBadgeState precedence and track selection', () => {
   // Human review is a distinct pill alongside publisher claims; flagged art wins.
   const reviewed = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { reviewed: true }));
   assert.equal(stateOf(reviewed), 'verified');
+  assert.equal(reviewed.requested, 'reviewed', 'the requested decision is reported for the fallback class');
   assert.deepEqual(reviewed.pills, ['signed', 'reviewed']);
   const reviewedFlagged = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { reviewed: true, flagged: true }));
   assert.equal(stateOf(reviewedFlagged), 'flagged');
   assert.deepEqual(reviewedFlagged.pills, []);
+
+  // Muted without its own art: the derived art stays but the label tells the
+  // truth (showing "Signed by the publisher" on a muted package was wrong).
+  const mutedFallback = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { muted: true }));
+  assert.equal(stateOf(mutedFallback), 'verified');
+  assert.equal(mutedFallback.requested, 'muted');
+  assert.match(mutedFallback.label, /Muted by the registry maintainers/);
 
   // Claim pills are independent of the state art: an incubating package still
   // shows what the registry proved (trusted/signed/reviewed).
@@ -583,6 +591,7 @@ test('packageBadgeState precedence and track selection', () => {
     oidcTrusted: false,
   };
   assert.equal(badgeArtFor(decisionInput).state, 'verified', 'no reviewed art: signed art stays');
+  assert.equal(badgeArtFor(decisionInput).requested, 'reviewed');
   assert.equal(badgeArtFor(decisionInput, withDecisionArt).state, 'reviewed', 'reviewed art wins when present');
   const mutedInput = { ...decisionInput, pkg: { muted: true } };
   assert.equal(badgeArtFor(mutedInput).state, 'verified');

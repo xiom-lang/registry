@@ -2078,6 +2078,28 @@ Coverage: loader validation/exclusions, generator on a temp STATUS tree, badge
 precedence (override vs package vs version stage), and a boot-audit test;
 245 unit tests and 20 e2e checks pass.
 
+**21.5 Icon state guarantee (owner report, 2026-09-26).** The owner muted
+`test-registry-smoke` on staging and the icon still showed the verified art:
+the 15-file matrix ships flagged/yanked/deprecated/incubator/prerelease/
+trusted/verified/unsigned, but **muted and reviewed never had art**, and the
+resolver silently fell back (the alt text even claimed "Signed by the
+publisher" on a muted package). Fixed so an admin state change is always
+visible on the icon with no new assets:
+
+- the resolver reports the requested decision separately from the resolved
+  art; when the decision art is missing the image alt/title announces the
+  decision (muted/reviewed) instead of the trust label;
+- `muted` renders the derived art dimmed (grayscale + reduced opacity) with a
+  small "MUTED" tag; `reviewed` adds a signal-coloured ring;
+- dedicated `pgk_muted_*` / `pgk_reviewed_*` files still take over untouched
+  the moment they are added (`src/ui/assets/SOURCES.md` documents both).
+
+Verified live: production `xiom.hello` shows the incubator art via the stage
+override, staging `xiom.algo@0.1.1` shows incubator art from its published
+stage, and the muted fixture renders dimmed art + tag + truthful alt. 245 unit
+tests and 20 e2e checks pass.
+
+
 
 
 

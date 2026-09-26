@@ -409,6 +409,18 @@ test('reviewers can flag, review, and clear a package with a public history', as
   assert.match(html, /Mark reviewed/, 'reviewers get decision controls');
   const csrf = csrfFrom(html);
 
+  // Marking reviewed gives the icon its fallback ring (no reviewed art ships
+  // in the matrix) and the public decision pill.
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'review', note: 'looks fine' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /reviewed by a reviewer/);
+  assert.match(html, /pkg-badge--reviewed/);
+
   // Flagging needs a reason; the error comes back on the package page.
   response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
     method: 'POST',
@@ -443,12 +455,13 @@ test('reviewers can flag, review, and clear a package with a public history', as
   response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
   html = await response.text();
   assert.doesNotMatch(html, /flagged by a reviewer/);
+  assert.match(html, /reviewed by a reviewer/, 'undo restored the prior reviewed decision');
   assert.match(html, /cleared<\/span> by @user-user/);
 
   const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
   assert.deepEqual(
     data.packages['readme-pkg'].history.map((entry) => entry.action),
-    ['flagged', 'cleared'],
+    ['reviewed', 'flagged', 'cleared'],
   );
 
   // A plain account sees the history but no controls.

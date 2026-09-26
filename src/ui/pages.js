@@ -90,9 +90,14 @@ const BADGE_LABELS = {
 function badgeArtFor(input, available = BADGE_ASSETS) {
   const { pkg, latest, versionCount, stage, track, signed, oidcTrusted } = input;
   const candidates = [];
-  if (pkg && pkg.flagged === true) candidates.push('flagged');
-  else if (pkg && pkg.muted === true) candidates.push('muted');
-  else if (pkg && pkg.reviewed === true) candidates.push('reviewed');
+  // The decision requested by a maintainer/reviewer. When its dedicated art
+  // exists it wins; otherwise the resolver falls through to the derived art
+  // and the badge adds a visible fallback treatment (dim for muted, a ring
+  // for reviewed) plus a truthful label, so admin state changes are never
+  // invisible on the icon.
+  const requested = pkg && pkg.flagged === true ? 'flagged'
+    : (pkg && pkg.muted === true ? 'muted' : (pkg && pkg.reviewed === true ? 'reviewed' : ''));
+  if (requested) candidates.push(requested);
   if (!latest && versionCount > 0) candidates.push('yanked');
   if (stage === 'deprecated') candidates.push('deprecated');
   if (stage === 'incubating') candidates.push('incubator');
@@ -104,9 +109,9 @@ function badgeArtFor(input, available = BADGE_ASSETS) {
   candidates.push('unsigned');
   for (const state of candidates) {
     const file = pickBadgeFile(state, track, available);
-    if (file) return { state, file };
+    if (file) return { state, file, requested };
   }
-  return { state: 'unsigned', file: `pgk_unsigned_${track}.webp` };
+  return { state: 'unsigned', file: `pgk_unsigned_${track}.webp`, requested };
 }
 
 /** Decision-independent trust labels for console rows (A1 / audit follow-up). */
@@ -161,11 +166,15 @@ function packageBadgeState(name, pkg) {
     if (signed) pills.push('signed');
     if (pkg && pkg.reviewed === true) pills.push('reviewed');
   }
-  const { state, file } = badgeArtFor({
+  const { state, file, requested } = badgeArtFor({
     pkg, latest, versionCount, stage, track, signed, oidcTrusted,
   });
-  const [communityLabel, officialLabel = communityLabel] = BADGE_LABELS[state] || BADGE_LABELS.unsigned;
-  return { file, label: official ? officialLabel : communityLabel, pills };
+  // When the decision art is not in this build, the label still announces the
+  // decision: showing "Signed by the publisher" on a muted package was
+  // misleading (owner report, 2026-09-26).
+  const labelState = requested && requested !== state && BADGE_LABELS[requested] ? requested : state;
+  const [communityLabel, officialLabel = communityLabel] = BADGE_LABELS[labelState] || BADGE_LABELS.unsigned;
+  return { file, label: official ? officialLabel : communityLabel, pills, state, requested };
 }
 
 function packageBadge(name, pkg, omitPills = []) {
@@ -174,7 +183,9 @@ function packageBadge(name, pkg, omitPills = []) {
     .filter((pill) => !omitPills.includes(pill))
     .map((pill) => `<span class="badge ${pill}">${pill}</span>`)
     .join('');
-  return `<span class="pkg-badge-group"><img class="pkg-badge" src="/ui/${badge.file}"`
+  const fallback = badge.requested && badge.requested !== badge.state ? badge.requested : '';
+  return `<span class="pkg-badge-group${fallback ? ` pkg-badge-group--${fallback}` : ''}">`
+    + `<img class="pkg-badge${fallback ? ` pkg-badge--${fallback}` : ''}" src="/ui/${badge.file}"`
     + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
     + ` width="80" height="80" loading="lazy" decoding="async">${pills}</span>`;
 }

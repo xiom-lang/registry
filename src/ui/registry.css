@@ -345,6 +345,28 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   margin-left: auto;
   max-width: 100%;
   min-width: 0;
+  position: relative;
+}
+
+/* Fallback treatments when a decision's own art is not in the build: a muted
+   package dims its art and carries a "muted" tag, a reviewed package gets a
+   signal ring. Dropping pgk_muted_* / pgk_reviewed_* into src/ui/assets
+   replaces these automatically (owner report, 2026-09-26). */
+.pkg-badge--muted { filter: grayscale(1) opacity(0.55); }
+.pkg-badge--reviewed { outline: 2px solid var(--signal-dim); outline-offset: 2px; border-radius: 14px; }
+.pkg-badge-group--muted::after {
+  background: var(--ink);
+  border: 1px solid var(--muted);
+  border-radius: 999px;
+  bottom: -6px;
+  color: var(--muted);
+  content: 'muted';
+  font-size: 9px;
+  left: 4px;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  position: absolute;
+  text-transform: uppercase;
 }
 
 .pkg-badge {
