@@ -1855,6 +1855,24 @@ ops saw `remaining 298 -> 297 -> 296`, the registry lane saw
 (restore `PUBLISH_RATE_MAX=20`) stays open until the packages lane signals
 that `eco-v0.1.1` is complete.
 
+**20.8.3 Compose env declarations and the refreshed cover (2026-09-26).** Ops
+found that `RATE_LIMIT_DISABLED` in `.env.staging` never reached the staging
+container: compose only passes variables declared in the service
+`environment:` block, so the capacity test measured the 300/min limiter
+instead of the app. All seven rate-limit knobs (general / publish / download
+plus the disable switch) are now declared for both services, with
+`XIOM_STAGING_*` overrides so a staging load test cannot weaken production;
+`test/compose-env.test.js` guards compose + both env examples in CI, and
+DEPLOY.md documents the rule, the `printenv` verification, and the batch
+runbook caveat (`PUBLISH_RATE_MAX` was undeclared until this change, so any
+earlier `.env` bump may never have applied -- check `printenv`). The owner
+also refreshed the banner cover (`2172x724` VP8, ~3:1); the layout's
+width/height hints and the UI test were updated in `e9549d8`, and the banner
+renders correctly at 390x844 and 1280x900 with no page overflow. Both changes
+are on `main`; the live containers pick them up on the next `git pull` +
+recreate (the cover is cosmetic, the env declarations matter for load tests).
+
+
 
 
 ---

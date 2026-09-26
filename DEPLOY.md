@@ -263,7 +263,14 @@ Same mechanics as staging, but production is gated by the owner. Four switches:
    ```bash
    docker compose build registry
    docker compose up -d --no-deps registry
+   docker exec xiom-registry printenv PUBLISH_RATE_MAX   # must print 600
    ```
+   The `printenv` check matters: compose passes only variables declared in the
+   service `environment:` block (see "Load-test knobs and the compose env
+   rule"). `PUBLISH_RATE_MAX` has been declared since the 2026-09-26 compose
+   change; if this prints nothing on an older checkout, the batch ran at the
+   default 20/min and the runbook step silently did nothing. Restore 20 (and
+   verify again) when the packages lane confirms the batch is complete.
 2. **Entry scopes** — set the production `xiom-packages/packages` entry to the
    full allowlist (generate `staging-scopes.txt` exactly as for staging, then
    apply it to `/etc/xiom-registry/trusted-publishers.json`), `firstParty: true`.
