@@ -797,7 +797,19 @@ test('package moderation flags, mutes, hides from discovery, and stays audited',
   assert.equal(audits[0].subject_id, 'readme-pkg');
   assert.equal(audits[0].detail, 'metadata spam');
 
-  // Flag then clear: the public pill follows the decision.
+  // Muted packages disappear from every discovery surface, not just the
+  // listing: search (HTML and JSON) and the home strip too, while the raw
+  // index keeps them (this is the owner's "muted = cannot search it?" check).
+  // The page echoes the query itself, so assert on the result links/JSON rows.
+  const search = await requestAs(jar, '/search?q=readme-pkg', { headers: BROWSER });
+  assert.doesNotMatch(await search.text(), /href="\/packages\/readme-pkg"/);
+  const searchJson = await requestAs(jar, '/search?q=readme-pkg', { headers: { Accept: 'application/json' } });
+  assert.deepEqual((await searchJson.json()).results, []);
+  const home = await requestAs(jar, '/', { headers: BROWSER });
+  assert.doesNotMatch(await home.text(), /readme-pkg/);
+
+  // Flag then undo: the public pill follows the decision, and undo restores
+  // the state the package had before the overlay (here: the mute).
   response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
     method: 'POST',
     body: new URLSearchParams({ csrf, action: 'flag', note: 'unsafe install script' }),
@@ -810,10 +822,26 @@ test('package moderation flags, mutes, hides from discovery, and stays audited',
     body: new URLSearchParams({ csrf, action: 'clear' }),
   });
   assert.equal(response.status, 303);
-  const clearedPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
-  const clearedHtml = await clearedPage.text();
-  assert.doesNotMatch(clearedHtml, /flagged by a reviewer/);
-  assert.doesNotMatch(clearedHtml, /Hidden from listings and search/);
+  assert.equal(
+    app.locals.registry.reviews.decision('readme-pkg').status,
+    'muted',
+    'undo returned to the decision before the flag',
+  );
+  const restoredPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  const restoredHtml = await restoredPage.text();
+  assert.doesNotMatch(restoredHtml, /flagged by a reviewer/);
+  assert.match(restoredHtml, /Hidden from listings and search/);
+
+  // Keep unwinding so the tests after this one start from a clean decision.
+  let guard = 0;
+  while (app.locals.registry.reviews.decision('readme-pkg').status && guard < 6) {
+    await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf, action: 'clear' }),
+    });
+    guard += 1;
+  }
+  assert.equal(app.locals.registry.reviews.decision('readme-pkg').status, '');
 });
 
 test('admins yank a version from the console and the decision is recorded', async () => {

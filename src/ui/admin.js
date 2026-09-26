@@ -12,6 +12,7 @@
 
 const { escapeHtml, formatWhen, shortId } = require('./format');
 const { layout } = require('./layout');
+const { packageTrustChips } = require('./pages');
 const {
   noticeBox,
   statusPill,
@@ -254,6 +255,7 @@ function packageModerationCard({ name, pkg, decision, csrf }) {
   return `<li class="request-card">
   <div class="request-head">
     <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
+    ${packageTrustChips(name, pkg)}
     ${decisionPill(status)}
     <span class="pkg-meta">latest ${latest}${yanked.length > 0 ? ` &middot; yanked: ${escapeHtml(yanked.join(', '))}` : ''}</span>
   </div>
@@ -264,7 +266,7 @@ function packageModerationCard({ name, pkg, decision, csrf }) {
     <button class="button" type="submit" name="action" value="review">Mark reviewed</button>
     <button class="button danger" type="submit" name="action" value="flag">Flag</button>
     <button class="button" type="submit" name="action" value="mute">Mute</button>
-    ${status ? '<button class="button" type="submit" name="action" value="clear">Clear decision</button>' : ''}
+    ${status ? '<button class="button" type="submit" name="action" value="clear">Undo last decision</button>' : ''}
   </form>
   ${versions.length > 0 ? `<details class="mint-details">
     <summary>Yank a version</summary>

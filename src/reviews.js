@@ -242,13 +242,23 @@ class ReviewStore {
       );
     }
     const prior = this.packages[name];
-    const history = [...(prior ? prior.history : []), {
+    // Decision history is a stack: reviewed/flagged/muted push a state and
+    // 'cleared' pops the latest one (undo). The visible status is the top of
+    // the stack, so undoing a flag after a mute returns to muted, undoing that
+    // returns to the previous state, and so on -- a package that was reviewed
+    // before an overlay never reads as "undecided" (owner audit,
+    // 2026-09-26). With nothing to undo it clears. On load the stored `status`
+    // stays authoritative, so records written before this change keep their
+    // displayed state.
+    const entry = {
       at: new Date().toISOString(),
       actor: clean(actor, 64),
-      action: status || 'cleared',
+      action: status === '' ? 'cleared' : status,
       ...(decisionNote ? { note: decisionNote } : {}),
-    }];
-    const record = { status, history };
+    };
+    const history = [...(prior ? prior.history : []), entry];
+    const nextStatus = status === '' ? (decisionStack(history).at(-1) || '') : status;
+    const record = { status: nextStatus, history };
     this.#commit({ ...this.packages, [name]: record }, this.reports, this.ratings);
     return record;
   }
@@ -330,6 +340,24 @@ function normalizeReport(id, entry) {
   return report;
 }
 
+/**
+ * Replay a decision history into a state stack: reviewed/flagged/muted push a
+ * state, 'cleared' pops the latest one (undo), anything else is ignored. The
+ * top is the visible status; '' when nothing is left.
+ */
+function decisionStack(history) {
+  const stack = [];
+  for (const item of Array.isArray(history) ? history : []) {
+    if (!item || typeof item.action !== 'string') continue;
+    if (item.action === 'reviewed' || item.action === 'flagged' || item.action === 'muted') {
+      stack.push(item.action);
+    } else if (item.action === 'cleared') {
+      stack.pop();
+    }
+  }
+  return stack;
+}
+
 /** Allowlist-normalize one on-disk decision record; malformed entries drop. */
 function normalizeDecision(name, entry) {
   if (!SAFE_PACKAGE_NAME.test(name) || !entry || typeof entry !== 'object') return null;
@@ -371,4 +399,5 @@ module.exports = {
   MAX_RATING_TEXT,
   REPORT_REASONS,
   DECISION_STATUSES,
+  decisionStack,
 };

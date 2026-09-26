@@ -37,3 +37,14 @@ Filenames normalized on receipt: `pkg_*` -> `pgk_*` and
 `pgk_flagged_comm_community` / `pkg_trusted_community` accordingly. All
 assets are XIOM project brand assets under the repository's dual MIT OR
 Apache-2.0 license.
+
+**Decision art (optional, registry 2.1 audit 2026-09-26):** reviewer
+decisions can have their own art. Drop `pgk_reviewed_<track>.webp` and/or
+`pgk_muted_<track>.webp` here (tracks: `community`, `official`) and the UI
+picks them up automatically -- no code change, no rebuild of the resolver
+list. Until a file exists, the resolver falls back to the derived state art
+(`trusted` -> `verified` -> `unsigned`), so an `<img>` never 404s and a cleared
+decision always shows the package's real trust state. `flagged` art ships and
+wins over every other state. The visible fallback chain is
+flagged/muted/reviewed -> yanked -> deprecated -> incubator -> prerelease ->
+trusted -> verified -> unsigned.

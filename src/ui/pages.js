@@ -8,6 +8,9 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const {
   escapeHtml,
   formatBytes,
@@ -27,6 +30,76 @@ const DEFAULT_PER_PAGE = 50;
 const MAX_PER_PAGE = 200;
 /** Cards in the home "recently updated" strip (section 13 phase 2). */
 const HOME_STRIP_SIZE = 6;
+
+// Badge matrix assets present in this build. Decision art (reviewed, muted)
+// takes effect the moment the owner drops the files in; until then the
+// resolver falls through to the derived state art so no <img> ever 404s.
+const BADGE_ASSETS = new Set(fs.readdirSync(path.join(__dirname, 'assets')));
+
+/** Filename for a state x track when that art exists in this build, else ''. */
+function pickBadgeFile(state, track, available = BADGE_ASSETS) {
+  const file = `pgk_${state}_${track}.webp`;
+  return available.has(file) ? file : '';
+}
+
+const BADGE_LABELS = {
+  flagged: ['Flagged by a registry reviewer', 'Flagged first-party package'],
+  muted: [
+    'Muted by the registry maintainers: hidden from listings and search',
+    'Muted first-party package: hidden from listings and search',
+  ],
+  reviewed: ['Reviewed by a registry reviewer', 'Reviewed first-party package'],
+  yanked: ['Withdrawn: every version is yanked'],
+  deprecated: ['Deprecated package', 'Deprecated first-party package'],
+  incubator: ['Incubating package', 'Incubating first-party package'],
+  prerelease: ['Pre-release'],
+  trusted: ['Trusted publisher: publishing identity verified by the registry'],
+  verified: ['Signed by the publisher', 'Official package, signed by the publisher'],
+  unsigned: ['Community package, unsigned', 'Official package, unsigned'],
+};
+
+/**
+ * Resolve the state x track art for a package, first existing art wins:
+ * decision overlay (flagged / muted / reviewed), all-yanked, deprecated,
+ * incubating, prerelease, trusted, verified, unsigned. Reviewed and muted art
+ * is optional: without `pgk_<state>_<track>.webp` the derivation continues, so
+ * a cleared or decision-less package always shows its real trust art.
+ */
+function badgeArtFor(input, available = BADGE_ASSETS) {
+  const { pkg, latest, versionCount, stage, track, signed, oidcTrusted } = input;
+  const candidates = [];
+  if (pkg && pkg.flagged === true) candidates.push('flagged');
+  else if (pkg && pkg.muted === true) candidates.push('muted');
+  else if (pkg && pkg.reviewed === true) candidates.push('reviewed');
+  if (!latest && versionCount > 0) candidates.push('yanked');
+  if (stage === 'deprecated') candidates.push('deprecated');
+  if (stage === 'incubating') candidates.push('incubator');
+  if (pkg && typeof pkg.latest === 'string' && semver.prerelease(pkg.latest) !== null) {
+    candidates.push('prerelease');
+  }
+  if (track === 'community' && oidcTrusted) candidates.push('trusted');
+  if (signed) candidates.push('verified');
+  candidates.push('unsigned');
+  for (const state of candidates) {
+    const file = pickBadgeFile(state, track, available);
+    if (file) return { state, file };
+  }
+  return { state: 'unsigned', file: `pgk_unsigned_${track}.webp` };
+}
+
+/** Decision-independent trust labels for console rows (A1 / audit follow-up). */
+function packageTrustChips(name, pkg) {
+  const track = isFirstPartyNamespace(name) ? 'official' : 'community';
+  const latest = pkg && pkg.latest ? pkg.versions[pkg.latest] : null;
+  const parts = [];
+  if (track === 'official') parts.push('official');
+  if (latest && latest.publisher && typeof latest.publisher.repository === 'string') {
+    parts.push('trusted');
+  }
+  if (latest && latest.signature && latest.publicKey) parts.push('signed');
+  if (pkg && pkg.reviewed === true) parts.push('reviewed');
+  return parts.map((part) => `<span class="badge ${part}">${part}</span>`).join('');
+}
 
 /** `xiom.*` / `xiom-*` names are publishable only by first-party tokens. */
 function officialBadge(name) {
@@ -66,34 +139,11 @@ function packageBadgeState(name, pkg) {
     if (signed) pills.push('signed');
     if (pkg && pkg.reviewed === true) pills.push('reviewed');
   }
-  const badge = (state, communityLabel, officialLabel = communityLabel) => ({
-    file: `pgk_${state}_${track}.webp`,
-    label: official ? officialLabel : communityLabel,
-    pills,
+  const { state, file } = badgeArtFor({
+    pkg, latest, versionCount, stage, track, signed, oidcTrusted,
   });
-
-  if (pkg && pkg.flagged === true) {
-    return badge('flagged', 'Flagged by a registry reviewer');
-  }
-  if (!latest && versionCount > 0) {
-    return badge('yanked', 'Withdrawn: every version is yanked');
-  }
-  if (stage === 'deprecated') {
-    return badge('deprecated', 'Deprecated package', 'Deprecated first-party package');
-  }
-  if (stage === 'incubating') {
-    return badge('incubator', 'Incubating package', 'Incubating first-party package');
-  }
-  if (pkg && typeof pkg.latest === 'string' && semver.prerelease(pkg.latest) !== null) {
-    return badge('prerelease', 'Pre-release');
-  }
-  if (track === 'community' && oidcTrusted) {
-    return badge('trusted', 'Trusted publisher: publishing identity verified by the registry');
-  }
-  if (signed) {
-    return badge('verified', 'Signed by the publisher', 'Official package, signed by the publisher');
-  }
-  return badge('unsigned', 'Community package, unsigned', 'Official package, unsigned');
+  const [communityLabel, officialLabel = communityLabel] = BADGE_LABELS[state] || BADGE_LABELS.unsigned;
+  return { file, label: official ? officialLabel : communityLabel, pills };
 }
 
 function packageBadge(name, pkg, omitPills = []) {
@@ -787,6 +837,9 @@ module.exports = {
   whatsNewPage,
   notFoundPage,
   packageBadgeState,
+  badgeArtFor,
+  pickBadgeFile,
+  packageTrustChips,
   paginatePackages,
   searchPackages,
   DEFAULT_PER_PAGE,

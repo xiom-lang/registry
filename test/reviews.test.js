@@ -118,15 +118,33 @@ test('reviewer decisions are audited and flagging needs a reason', () => {
   assert.equal(flagged.status, 'flagged');
   assert.deepEqual(flagged.history.map((entry) => entry.action), ['reviewed', 'flagged']);
 
+  // Clearing undoes the flag and restores the prior reviewed decision: an
+  // official/signed package never reads as "undecided" after an overlay is
+  // removed. The history keeps the whole trail.
   const cleared = reviews.setDecision('demo-pkg', { status: '', actor: 'root' });
-  assert.equal(cleared.status, '');
+  assert.equal(cleared.status, 'reviewed');
   assert.deepEqual(cleared.history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
   assert.deepEqual(reviews.listDecisions().map((entry) => entry.name), ['demo-pkg']);
   assert.equal(reviews.decision('other-pkg'), null);
 
   const reloaded = new ReviewStore({ path: reviews.path });
-  assert.equal(reloaded.decision('demo-pkg').status, '');
+  assert.equal(reloaded.decision('demo-pkg').status, 'reviewed');
   assert.deepEqual(reloaded.decision('demo-pkg').history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
+
+  // Undo is a stack: [reviewed, flagged, muted] unwinds to muted, then
+  // reviewed, then undecided -- no ping-pong between overlays.
+  reloaded.setDecision('demo-pkg', { status: 'flagged', actor: 'root', note: 'x' });
+  reloaded.setDecision('demo-pkg', { status: 'muted', actor: 'root', note: 'y' });
+  assert.equal(reloaded.decision('demo-pkg').status, 'muted');
+  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, 'flagged');
+  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, 'reviewed');
+  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, '');
+
+  // With nothing before the current decision, undo clears to undecided.
+  reloaded.setDecision('other-pkg', { status: 'flagged', actor: 'root', note: 'x' });
+  const undone = reloaded.setDecision('other-pkg', { status: '', actor: 'root' });
+  assert.equal(undone.status, '');
+  assert.deepEqual(undone.history.map((entry) => entry.action), ['flagged', 'cleared']);
 });
 
 test('reports and decisions coexist in one file', () => {

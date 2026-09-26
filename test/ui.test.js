@@ -557,6 +557,41 @@ test('packageBadgeState precedence and track selection', () => {
   ));
   assert.equal(stateOf(incubatingTrusted), 'incubator');
   assert.deepEqual(incubatingTrusted.pills, ['trusted', 'signed']);
+
+  // Decision art is optional. When the owner drops pgk_reviewed_* or
+  // pgk_muted_* into the asset set the resolver picks it up; without it the
+  // derived art (signed/trusted/unsigned) stays, so an <img> never 404s and a
+  // cleared package always shows its real trust state.
+  const { badgeArtFor, pickBadgeFile, packageTrustChips } = require('../src/ui/pages');
+  const withDecisionArt = new Set([
+    'pgk_reviewed_community.webp', 'pgk_muted_community.webp',
+    'pgk_trusted_community.webp', 'pgk_verified_community.webp', 'pgk_unsigned_community.webp',
+  ]);
+  const decisionInput = {
+    pkg: { reviewed: true },
+    latest: { signature: 'aa', publicKey: 'bb' },
+    versionCount: 1,
+    stage: '',
+    track: 'community',
+    signed: true,
+    oidcTrusted: false,
+  };
+  assert.equal(badgeArtFor(decisionInput).state, 'verified', 'no reviewed art: signed art stays');
+  assert.equal(badgeArtFor(decisionInput, withDecisionArt).state, 'reviewed', 'reviewed art wins when present');
+  const mutedInput = { ...decisionInput, pkg: { muted: true } };
+  assert.equal(badgeArtFor(mutedInput).state, 'verified');
+  assert.equal(badgeArtFor(mutedInput, withDecisionArt).state, 'muted');
+  assert.equal(pickBadgeFile('muted', 'official'), '', 'no official muted art in this build');
+  assert.equal(pickBadgeFile('flagged', 'community'), 'pgk_flagged_community.webp');
+
+  // Console rows get decision-independent trust chips, so a cleared decision
+  // never reads as "the package is undecided".
+  const chips = packageTrustChips('xiom.core', make('xiom.core', '1.0.0', signed, { reviewed: true }));
+  assert.match(chips, /class="badge official">official</);
+  assert.match(chips, /class="badge signed">signed</);
+  assert.match(chips, /class="badge reviewed">reviewed</);
+  const plainChips = packageTrustChips('demo-pkg', make('demo-pkg', '1.0.0', {}));
+  assert.equal(plainChips, '');
 });
 
 test('readme is served from the stored tarball and rendered safely', async () => {

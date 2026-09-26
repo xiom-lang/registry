@@ -114,7 +114,7 @@ function decisionControls({ name, csrf }) {
   <input name="note" placeholder="Decision note (required to flag)" maxlength="500" aria-label="Decision note">
   <button class="button primary" type="submit" name="action" value="review">Mark reviewed</button>
   <button class="button danger" type="submit" name="action" value="flag">Flag</button>
-  <button class="button" type="submit" name="action" value="clear">Clear</button>
+  <button class="button" type="submit" name="action" value="clear">Undo last decision</button>
 </form>`;
 }
 

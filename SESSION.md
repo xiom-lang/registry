@@ -1987,6 +1987,37 @@ staging, then walk claim -> verify on staging with a real account; promote the
 same commit to production afterwards. First claim creates
 `ownership.json`; nothing to migrate.
 
+**21.2 Decision audit fixes (owner report, 2026-09-26).** The owner tested the
+admin decisions and reported three things. Findings and fixes:
+
+1. **"Icons don't change with the decision."** Only `flagged` had art; the
+   badge resolver ignored `muted` and `reviewed` entirely, and no reviewed or
+   muted art files exist. Fixed with an optional decision-art resolver:
+   `pgk_reviewed_<track>.webp` / `pgk_muted_<track>.webp` are picked up the
+   moment they are dropped into `src/ui/assets` (documented in SOURCES.md),
+   and until then the resolver falls back to the derived art so nothing
+   404s. To get distinct icons for reviewed/muted, the owner only has to add
+   those four files (community/official x reviewed/muted).
+2. **"Muted = cannot search it?"** Confirmed and now covered by tests: muted
+   packages are absent from the home strip, `/packages` (HTML and JSON),
+   `/search` (HTML and JSON), and category counts, while the package page
+   still resolves, downloads work, and `/index.json` keeps the entry.
+3. **"Clear decision doesn't get to the previous state."** It was wiping to
+   undecided. Decision history is now a stack: `cleared` undoes the latest
+   decision (reviewed -> flag -> undo returns to reviewed; flag after mute
+   undoes to muted, then to the state before that), and the button is labelled
+   "Undo last decision". On load the stored `status` stays authoritative, so
+   records written before this change keep their displayed state. The admin
+   console rows also gained decision-independent trust chips
+   (official/trusted/signed/reviewed), so a package with no decision -- or a
+   just-cleared one -- never reads as "undecided" when it is official or
+   signed.
+
+Coverage: `decisionStack` replay tests, badge-art resolver tests with and
+without decision assets, console chip assertions, explicit muted-search tests,
+and the undo-chain HTTP test; 239 unit tests and 20 e2e checks pass.
+
+
 
 ### Track B -- publishing DX (client + registry, section 20.7)
 
