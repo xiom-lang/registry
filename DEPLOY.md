@@ -254,6 +254,38 @@ Data files in the volume (restic source list): `index.json`,
 (approved trusted-publisher entries with request provenance). Recreate the
 service only after editing the operator file or the token store.
 
+## Production batch runbook (packages ecosystem)
+
+Same mechanics as staging, but production is gated by the owner. Four switches:
+
+1. **Code** — `git pull`, add `PUBLISH_RATE_MAX=600` to the production `.env`
+   for the batch window, then rebuild and recreate production only:
+   ```bash
+   docker compose build registry
+   docker compose up -d --no-deps registry
+   ```
+2. **Entry scopes** — set the production `xiom-packages/packages` entry to the
+   full allowlist (generate `staging-scopes.txt` exactly as for staging, then
+   apply it to `/etc/xiom-registry/trusted-publishers.json`), `firstParty: true`.
+3. **Refs** — decide the production trigger and keep the entry in sync:
+   - `["refs/tags/eco-v*"]` — batch/per-package tags, one environment approval
+     per tag (the original production path);
+   - add `["refs/heads/main"]` to also allow dispatch runs, one owner approval
+     per run through the `registry-publish` environment.
+4. **Recreate** so the publishers file reloads, then verify the startup line
+   (`publishers: N OIDC entries`) and publish from the packages lane:
+   ```bash
+   # dispatch one name (if refs/heads/main is allowed):
+   gh workflow run publish-registry.yml -R xiom-packages/packages \
+     -f registry=https://registry.xiom-lang.org -f package=<name>
+   # or the batch tag (if eco-v* is allowed):
+   git tag eco-v0.1.1 && git push origin eco-v0.1.1
+   ```
+   Every run still needs the owner's approval via the `registry-publish`
+   environment, and the workflow's readiness guard skips anything not
+   `stage: stable` with a green suite. Verify each entry afterwards
+   (provenance, sha256, ed25519, badges, readmes) exactly as on staging.
+
 ## Hestia reverse proxy
 
 This host runs nginx-only (`PROXY_SYSTEM` is not enabled), so custom web
