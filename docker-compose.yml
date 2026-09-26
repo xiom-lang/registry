@@ -59,6 +59,8 @@ services:
       # Notification email (optional). Unset = in-app notices only.
       - SMTP_URL=${SMTP_URL:-}
       - SMTP_FROM=${SMTP_FROM:-}
+      # Shared secret for the fulfiller worker's internal API (unset = off).
+      - FULFILLER_SECRET=${FULFILLER_SECRET:-}
     security_opt:
       - no-new-privileges:true
     # Drop all capabilities; the service needs none.
@@ -121,6 +123,7 @@ services:
       - REGISTRY_REVIEWER_LOGINS=${REGISTRY_REVIEWER_LOGINS:-}
       - SMTP_URL=${SMTP_URL:-}
       - SMTP_FROM=${SMTP_FROM:-}
+      - FULFILLER_SECRET=${FULFILLER_SECRET:-}
     security_opt:
       - no-new-privileges:true
     cap_drop:

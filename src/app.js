@@ -29,7 +29,7 @@ const {
   UnprocessableEntityError,
   RateLimitedError,
 } = require('./errors');
-const { loadConfig } = require('./config');
+const { loadConfig, loadTokens } = require('./config');
 const { IndexStore, computeLatest, normalizeDependencies } = require('./index');
 const { ArtifactStore } = require('./storage');
 const { authenticate, assertPublishScope, safeEqual } = require('./tokens');
@@ -173,6 +173,21 @@ function createApp(config = loadConfig()) {
   const notifications = new NotificationStore({ db });
   const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
   const outbox = startOutbox({ notifications, mailer });
+
+  // Token-file hot reload: the fulfiller worker mints into the mounted file
+  // and the next publish sees it -- no force-recreate. Failures keep the
+  // previous token set so a half-written file can never lock everyone out.
+  if (config.tokensFile) {
+    const watcher = fs.watchFile(config.tokensFile, { interval: 2000 }, () => {
+      try {
+        config.tokens = loadTokens();
+        console.log(`tokens reloaded from ${config.tokensFile}: ${config.tokens.size}`);
+      } catch (err) {
+        console.error(`token reload failed (keeping previous tokens): ${err.message}`);
+      }
+    });
+    watcher.unref?.();
+  }
   const registryBaseUrl = config.registryUrl.replace(/\/+$/, '');
   const callbackUri = `${registryBaseUrl}${oauth.CALLBACK_PATH}`;
   const secureCookies = registryBaseUrl.startsWith('https://') || config.env === 'production';
@@ -1230,6 +1245,63 @@ function createApp(config = loadConfig()) {
           return res.redirect(303, '/review');
         }
         return next(err);
+      }
+    },
+  );
+
+  // ─── Internal fulfilment API (fulfiller worker only; secret-gated) ───────
+  // The worker mints into the host token file and mails the token; these
+  // routes let it read approved token requests and mark them fulfilled, which
+  // raises the requester's notification. Disabled without FULFILLER_SECRET.
+
+  function requireFulfiller(req, _res, next) {
+    if (!config.fulfillerSecret) {
+      return next(new NotFoundError('not found', 'not_found'));
+    }
+    const header = String(req.get('authorization') || '');
+    const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (!presented || !safeEqual(presented, config.fulfillerSecret)) {
+      return next(new ForbiddenError('invalid fulfiller secret', 'forbidden'));
+    }
+    next();
+  }
+
+  app.get('/internal/requests', generalLimit, requireFulfiller, (req, res) => {
+    const status = String(req.query.status || 'approved');
+    const tokenRequests = requests.list({ status }).filter((entry) => entry.kind === 'token');
+    res.json({
+      requests: tokenRequests.map((entry) => {
+        const stored = accounts.get(entry.requester.githubId);
+        return {
+          id: entry.id,
+          scopes: entry.scopes,
+          requester: entry.requester,
+          notifyEmail: stored ? stored.notifyEmail : '',
+          createdAt: entry.createdAt,
+        };
+      }),
+    });
+  });
+
+  app.post(
+    '/internal/requests/:id/fulfilled',
+    writeLimit,
+    express.json({ limit: '16kb' }),
+    requireFulfiller,
+    (req, res, next) => {
+      try {
+        const reference = String((req.body && req.body.reference) || 'fulfilled by the worker');
+        const updated = requests.fulfil(req.params.id, { actor: 'fulfiller', reference });
+        notifyRequester(
+          updated,
+          'request-fulfilled',
+          'Token request fulfilled',
+          updated.mintReference ? `Reference: ${updated.mintReference}` : 'Your token was delivered.',
+        );
+        console.log(`Request ${updated.id} fulfilled by the fulfiller worker`);
+        res.json({ ok: true, id: updated.id, status: updated.status });
+      } catch (err) {
+        next(err);
       }
     },
   );

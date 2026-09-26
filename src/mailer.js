@@ -12,10 +12,11 @@
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 
 /**
- * @param {{ smtpUrl?: string, from?: string, log?: Console }} options
+ * @param {{ smtpUrl?: string, from?: string, sendmailPath?: string,
+ *           log?: Console }} options
  */
-function createMailer({ smtpUrl = '', from = '', log = console } = {}) {
-  if (!smtpUrl || !from) {
+function createMailer({ smtpUrl = '', from = '', sendmailPath = '', log = console } = {}) {
+  if (!from || (!smtpUrl && !sendmailPath)) {
     return {
       enabled: false,
       async send() {
@@ -24,7 +25,9 @@ function createMailer({ smtpUrl = '', from = '', log = console } = {}) {
     };
   }
   const nodemailer = require('nodemailer');
-  const transport = nodemailer.createTransport(smtpUrl);
+  const transport = smtpUrl
+    ? nodemailer.createTransport(smtpUrl)
+    : nodemailer.createTransport({ sendmail: true, newline: 'unix', path: sendmailPath });
   return {
     enabled: true,
     async send({ to, subject, text }) {

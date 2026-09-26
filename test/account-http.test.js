@@ -110,6 +110,7 @@ test.before(async () => {
   process.env.GITHUB_OAUTH_CLIENT_SECRET = 'test-client-secret-0123456789';
   process.env.REGISTRY_ADMIN_LOGINS = 'Admin-User';
   process.env.REGISTRY_REVIEWER_LOGINS = 'user-user';
+  process.env.FULFILLER_SECRET = 'test-fulfiller-secret';
 
   fake = express();
   fake.use(express.urlencoded({ extended: false }));
@@ -583,6 +584,53 @@ test('signed-in accounts rate a package, one rating each', async () => {
   const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
   assert.equal(Object.keys(data.ratings['readme-pkg']).length, 1);
   assert.equal(data.ratings['readme-pkg']['777'].stars, 3);
+});
+
+test('the internal fulfilment API is secret-gated and fulfils token requests', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+  let response = await requestAs(jar, '/account');
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(jar, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, kind: 'token', scopes: 'internal-demo' }),
+  });
+  const id = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  response = await requestAs(jar, `/admin/requests/${id}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+
+  // Missing or wrong secret: refused. Correct secret: the approved queue.
+  let internal = await fetch(`${baseUrl}/internal/requests`);
+  assert.equal(internal.status, 403);
+  internal = await fetch(`${baseUrl}/internal/requests?status=approved`, {
+    headers: { Authorization: 'Bearer wrong' },
+  });
+  assert.equal(internal.status, 403);
+
+  internal = await fetch(`${baseUrl}/internal/requests?status=approved`, {
+    headers: { Authorization: 'Bearer test-fulfiller-secret' },
+  });
+  assert.equal(internal.status, 200);
+  const listed = await internal.json();
+  const entry = listed.requests.find((candidate) => candidate.id === id);
+  assert.ok(entry, 'approved token request is visible to the worker');
+  assert.deepEqual(entry.scopes, ['internal-demo']);
+  assert.equal(entry.notifyEmail, '', 'no notification email on file yet');
+
+  internal = await fetch(`${baseUrl}/internal/requests/${id}/fulfilled`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer test-fulfiller-secret', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reference: 'mailed test@example.com' }),
+  });
+  assert.equal(internal.status, 200);
+
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'requests.json'), 'utf-8'));
+  assert.equal(data.requests[id].status, 'fulfilled');
+  assert.equal(data.requests[id].fulfilledBy, 'fulfiller');
+  assert.equal(data.requests[id].mintReference, 'mailed test@example.com');
 });
 
 test('OAuth state is verified and single-use', async () => {

@@ -193,22 +193,61 @@ Approving requests in `/admin/requests`:
   editing, no restart; the queue then shows it as live, with a **Revoke**
   button. The read-only `/etc/xiom-registry/trusted-publishers.json` stays
   the operator channel for first-party grants.
-- **Token:** the supported path is ops' `issue-token.sh`, which mints into the
-  correct token file, mails the token from `registry@xiom-lang.org`, and
-  prints a value-free summary. After approving the request in the UI:
+- **Token:** with the fulfiller worker running, the admin's only action is
+  **Approve** — the worker mints, mails, and marks the request fulfilled.
+  Without the worker, the supported manual path is ops' `issue-token.sh`
+  (mints the correct file and mails from `registry@xiom-lang.org`); the raw
+  `scripts/tokens.js` command is the last-resort fallback. The app never
+  mints, never reads the token store, and holds no mail credentials.
 
-  ```bash
-  issue-token.sh --issue <request-id> --label <handle>-<request-id> \
-    --email <requester-address> --scopes "<scopes>" --staging
-  ```
-  (drop `--staging` for production; `--key <64-hex>` pins the publisher key and
-  implies `--trusted`). Then record fulfilment in the UI with a reference.
+## Token fulfilment worker (one-click approvals)
 
-  The raw `scripts/tokens.js` command shown in the queue is the fallback: it
-  edits `tokens.json` (production) or `tokens.staging.json` (staging) and
-  **requires a force-recreate** (`up -d --force-recreate --no-deps <service>`)
-  so the container reloads the file. The app never mints, never reads the
-  token store, and holds no mail credentials.
+`scripts/fulfiller.js` runs on the host next to the token file. Every cycle
+it asks the registry's secret-gated internal API for approved token requests,
+mints a token into the mounted file, mails it, and marks the request
+fulfilled. The registry **hot-reloads the token file**, so a mint is live on
+the next publish — no force-recreate. If the requester has no notification
+email, the request stays approved and the worker logs the skip.
+
+Set the same secret on both sides (`FULFILLER_SECRET`, passed through compose
+for the app), then run the worker on a timer:
+
+```ini
+# /etc/systemd/system/xiom-fulfiller-staging.service
+[Unit]
+Description=XIOM registry token fulfilment worker (staging)
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/xiom/registry
+EnvironmentFile=/opt/xiom/registry/.env.staging
+Environment=FULFILLER_URL=http://127.0.0.1:3200
+Environment=FULFILLER_TOKENS_FILE=/opt/xiom/registry/tokens.staging.json
+Environment=SENDMAIL_PATH=/usr/sbin/sendmail
+Environment=MAIL_FROM=registry@xiom-lang.org
+ExecStart=/usr/bin/node scripts/fulfiller.js --once
+```
+
+```ini
+# /etc/systemd/system/xiom-fulfiller-staging.timer
+[Unit]
+Description=Poll approved XIOM token requests (staging)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+
+[Install]
+WantedBy=timers.target
+```
+
+Production uses `FULFILLER_URL=http://127.0.0.1:3000` and
+`FULFILLER_TOKENS_FILE=/opt/xiom/registry/tokens.json`. `--once` is
+timer/cron friendly; without it the script polls every
+`FULFILLER_INTERVAL_MS` (minimum 5s). `SMTP_URL` can replace
+`SENDMAIL_PATH`. First-party pins (`FULFILLER_TRUSTED`,
+`FULFILLER_PUBLIC_KEY`, `FULFILLER_FIRST_PARTY`) mirror `issue-token.sh`.
 
 Data files in the volume (restic source list): `index.json`,
 `accounts.json`, `requests.json`, `reviews.json`, and `publishers.json`

@@ -212,6 +212,10 @@ function loadConfig() {
     smtpFrom: process.env.SMTP_FROM || '',
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
+    // Path used by the hot-reload watcher (empty when API_KEY is the source).
+    tokensFile: process.env.TOKENS_FILE || '',
+    // Shared secret for the internal fulfilment API (empty = API disabled).
+    fulfillerSecret: process.env.FULFILLER_SECRET || '',
     // GitHub OIDC trusted publishers. Missing file = no publishers (JWTs get
     // 403); malformed config throws here so startup fails loudly.
     publishers: loadTrustedPublishers(),
@@ -281,4 +285,4 @@ function validateConfig(config) {
   }
 }
 
-module.exports = { loadConfig };
+module.exports = { loadConfig, loadTokens };

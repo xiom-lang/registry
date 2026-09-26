@@ -52,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${XIOM_REGISTRY:-}" ]; then
-            echo "::error::the registry input is empty; set it (staging: https://staging.registry.xiom-lang.org)"
+            echo "::error::the registry input is empty; set it (production: https://registry.xiom-lang.org, test instance: https://staging.registry.xiom-lang.org)"
             exit 1
           fi
           echo "TARGET registry: ${XIOM_REGISTRY}"

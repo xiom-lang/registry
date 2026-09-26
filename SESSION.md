@@ -1503,7 +1503,15 @@ without weakening the publishing guarantees.
   `--email`, `--scopes`, `--staging`, optional `--key`): it mints into the
   correct token file, mails the token from `registry@xiom-lang.org`, and
   prints a value-free summary. The raw `scripts/tokens.js` path in the queue
-  remains the fallback and needs a force-recreate afterwards.
+  remains the fallback; the hot-reload below makes the old force-recreate
+  unnecessary either way.
+- **Fulfiller worker DONE (2026-09-26):** `scripts/fulfiller.js` polls the
+  secret-gated internal API (`FULFILLER_SECRET`; `GET /internal/requests`,
+  `POST /internal/requests/:id/fulfilled`), mints into the correct token file,
+  mails via sendmail or SMTP, and marks the request fulfilled — one admin
+  click, no shell. The registry **hot-reloads the token file**
+  (`fs.watchFile`), so a mint is live on the next publish with no recreate.
+  Requests with no notification email stay approved and are logged.
 - `/whats-new` renders `CHANGELOG.md` with the readme markdown pipeline;
   the service version (`/health`) is 2.0.0 and the footer links the page.
 
