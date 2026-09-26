@@ -370,6 +370,39 @@ done
 docker logs --tail 200 xiom-registry 2>&1 | grep ERR_ERL   # expect no output
 ```
 
+### Load-test knobs and the compose env rule
+
+**A variable in `.env` / `.env.staging` only reaches a container if the service
+`environment:` block declares it.** Compose does not inherit undeclared host
+variables. This bit the first staging capacity test: `RATE_LIMIT_DISABLED=1`
+was in `.env.staging` but not declared, so the container kept the 300/min
+limiter and the run measured the limiter instead of the app.
+
+The rate-limit family is now declared for both services, with staging-specific
+overrides so a test cannot weaken production limits while both run from one
+env context:
+
+| Variable (production / staging override) | Default | Notes |
+|---|---|---|
+| `RATE_LIMIT_DISABLED` / `XIOM_STAGING_RATE_LIMIT_DISABLED` | off | `1` removes every limiter (load tests only) |
+| `RATE_LIMIT_WINDOW_MS` / `XIOM_STAGING_RATE_LIMIT_WINDOW_MS` | 60000 | general window |
+| `RATE_LIMIT_MAX` / `XIOM_STAGING_RATE_LIMIT_MAX` | 300 | general requests per window |
+| `PUBLISH_RATE_WINDOW_MS` / `XIOM_STAGING_PUBLISH_RATE_WINDOW_MS` | 60000 | publish window |
+| `PUBLISH_RATE_MAX` / `XIOM_STAGING_PUBLISH_RATE_MAX` | 20 | publish requests per window |
+| `DOWNLOAD_RATE_WINDOW_MS` / `XIOM_STAGING_DOWNLOAD_RATE_WINDOW_MS` | 60000 | artifact download window |
+| `DOWNLOAD_RATE_MAX` / `XIOM_STAGING_DOWNLOAD_RATE_MAX` | 600 | artifact downloads per window |
+
+Before a run, confirm what the container actually has (not what `.env` says):
+
+```
+docker compose --env-file .env.staging --profile staging config | grep RATE_LIMIT
+docker exec xiom-registry-staging printenv | grep -E 'RATE_LIMIT|PUBLISH_RATE|DOWNLOAD_RATE'
+```
+
+Remove test values and recreate afterwards. When adding any new operator knob
+to `src/config.js`, declare it in the matching service block; the
+rate-limit family is guarded by `test/compose-env.test.js` in CI.
+
 ## Tokens
 
 Generate or append a publish token (never commit the file):

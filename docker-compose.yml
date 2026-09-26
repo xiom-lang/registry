@@ -68,6 +68,17 @@ services:
       - SMTP_FROM=${SMTP_FROM:-}
       # Shared secret for the fulfiller worker's internal API (unset = off).
       - FULFILLER_SECRET=${FULFILLER_SECRET:-}
+      # Rate-limit knobs, DECLARED so .env values actually reach the container
+      # (compose does not inherit undeclared variables). Empty = built-in
+      # default. Disabling the limiter is a load-test move: set
+      # RATE_LIMIT_DISABLED=1, run the test, then remove it and recreate.
+      - RATE_LIMIT_DISABLED=${RATE_LIMIT_DISABLED:-}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-}
+      - PUBLISH_RATE_WINDOW_MS=${PUBLISH_RATE_WINDOW_MS:-}
+      - PUBLISH_RATE_MAX=${PUBLISH_RATE_MAX:-}
+      - DOWNLOAD_RATE_WINDOW_MS=${DOWNLOAD_RATE_WINDOW_MS:-}
+      - DOWNLOAD_RATE_MAX=${DOWNLOAD_RATE_MAX:-}
     security_opt:
       - no-new-privileges:true
     # Drop all capabilities; the service needs none.
@@ -139,6 +150,16 @@ services:
       - SMTP_URL=${SMTP_URL:-}
       - SMTP_FROM=${SMTP_FROM:-}
       - FULFILLER_SECRET=${FULFILLER_SECRET:-}
+      # Staging rate-limit knobs. The XIOM_STAGING_* names let a load test
+      # relax or disable staging limits without touching production when both
+      # services share one env context; each falls back to the shared value.
+      - RATE_LIMIT_DISABLED=${XIOM_STAGING_RATE_LIMIT_DISABLED:-${RATE_LIMIT_DISABLED:-}}
+      - RATE_LIMIT_WINDOW_MS=${XIOM_STAGING_RATE_LIMIT_WINDOW_MS:-${RATE_LIMIT_WINDOW_MS:-}}
+      - RATE_LIMIT_MAX=${XIOM_STAGING_RATE_LIMIT_MAX:-${RATE_LIMIT_MAX:-}}
+      - PUBLISH_RATE_WINDOW_MS=${XIOM_STAGING_PUBLISH_RATE_WINDOW_MS:-${PUBLISH_RATE_WINDOW_MS:-}}
+      - PUBLISH_RATE_MAX=${XIOM_STAGING_PUBLISH_RATE_MAX:-${PUBLISH_RATE_MAX:-}}
+      - DOWNLOAD_RATE_WINDOW_MS=${XIOM_STAGING_DOWNLOAD_RATE_WINDOW_MS:-${DOWNLOAD_RATE_WINDOW_MS:-}}
+      - DOWNLOAD_RATE_MAX=${XIOM_STAGING_DOWNLOAD_RATE_MAX:-${DOWNLOAD_RATE_MAX:-}}
     security_opt:
       - no-new-privileges:true
     cap_drop:
