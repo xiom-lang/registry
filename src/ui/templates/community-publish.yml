@@ -98,12 +98,15 @@ jobs:
           set -euo pipefail
           pin="v0.61.3"
           pv="${pin#v}"
-          curl -fsSL -o xiom-compiler.tar.gz \
+          # Keep the toolchain OUT of the repository: `xiom pkg publish`
+          # packages the working directory, so anything downloaded here would
+          # be bundled into the package and blow the registry size limit.
+          curl -fsSL -o "$RUNNER_TEMP/xiom-compiler.tar.gz" \
             "https://github.com/xiom-lang/xiom/releases/download/${pin}/xiom-${pv}-linux-x64.tar.gz"
-          mkdir -p compiler
-          tar -xzf xiom-compiler.tar.gz -C compiler
-          test -x compiler/bin/xiom
-          echo "$PWD/compiler/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/compiler"
+          tar -xzf "$RUNNER_TEMP/xiom-compiler.tar.gz" -C "$RUNNER_TEMP/compiler"
+          test -x "$RUNNER_TEMP/compiler/bin/xiom"
+          echo "$RUNNER_TEMP/compiler/bin" >> "$GITHUB_PATH"
 
       - name: Prepare signing key
         if: github.event.inputs.mode == 'publish'
