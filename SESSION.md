@@ -1872,12 +1872,20 @@ renders correctly at 390x844 and 1280x900 with no page overflow. Both changes
 are on `main`; the live containers pick them up on the next `git pull` +
 recreate (the cover is cosmetic, the env declarations matter for load tests).
 
-**Ops follow-up (2026-09-26 16:54Z):** ops deploys `394db71` plus the cover
-next and will confirm `docker exec xiom-registry printenv PUBLISH_RATE_MAX`
-shows 600 after the recreate. Staging's `XIOM_STAGING_*` overrides replace the
-ad-hoc `/tmp` compose override for load tests; the tier-1 index-wall
-measurement taken with that override still stands. Cover weight (~567 KB vs
-180 KB) is accepted as a later optimization, not urgent.
+**Ops follow-up (2026-09-26 17:13Z): deployed.** Both services now run
+`394db71` + `e9549d8` + docs: production `docker exec xiom-registry printenv
+PUBLISH_RATE_MAX` prints 600, so the declaration works and the batch hold is
+real (the earlier stall was the undeclared default 20, as diagnosed); staging
+defaults to 20 with `XIOM_STAGING_*` available for load tests; caps intact;
+cover shipped. Independent registry-lane check: both instances report
+`/health` 2.1.0 and serve `/ui/registry.webp` at 567,228 bytes; the staging
+home renders at 390x844 with no page overflow. The tier-1 index-wall
+measurement (taken with the old `/tmp` override) still stands; cover weight
+stays a later optimization. Remaining: `D5` (restore 20 on
+the packages "batch done" signal), ops' account-tab/admin browser smoke and
+the packages staging canary; `A1` ownership claims stays queued for the
+owner's go.
+
 
 
 
