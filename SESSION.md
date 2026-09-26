@@ -1907,6 +1907,39 @@ PUBLISHING.md ("one publish per job" is the template's pattern). `D5` is
 satisfied from the registry side: ops restores `PUBLISH_RATE_MAX=20` now that
 the completion signal has arrived.
 
+**20.8.5 Playground C3 relay (2026-09-26 17:37Z).** The playground lane asked
+for the first real `xiom.*` publishes, the index contract, a no-egress
+consumption path, and production-vs-staging. Registry-lane answers (evidence:
+live indexes re-checked at 17:40Z):
+- The premise is outdated: production `/index.json` holds **250 packages, 249
+  of them real `xiom.*`** (the `xiom.staging-e2e-probe` is present too), after
+  `eco-v0.1.1` + `eco-v0.1.2` completed at 17:23Z. The wave-33 delta (10
+  names) lands in `eco-v0.1.3` once ops syncs scopes. Small candidate
+  examples: `xiom.hello` (1,938 B), `xiom.bmp` (6,418 B), `xiom.option`
+  (7,763 B) -- package choice is the packages/playground call.
+- Index contract: public, no auth, protocol `1.0.0`, stable shape. Version
+  entries carry `version, sha256, signature, publicKey, size, published,
+  dependencies, publisher { repository, workflow, ref, commit, runId, runUrl,
+  event }` and optionally `yanked/yankedAt/yankReason`; package entries carry
+  `description` and optionally `repository, license, categories, keywords,
+  stage`. Artifacts are public at
+  `/packages/<name>/<version>/package.tar.gz` with a `.sha256` sidecar;
+  `/packages/<name>` returns one package as JSON. Rate limits: 300/min general,
+  600/min downloads. Muting never removes an entry from `/index.json`.
+- No-egress path: no offline bundle exists today (mirror/offline is roadmap
+  `C3`, size L). The canonical mirror layout is the URL layout
+  (`index.json`, `packages/<name>/<version>/package.tar.gz`, `.sha256`); the
+  client cache is `$XIOM_HOME/packages/<pkg>-<ver>/` (from the client's own
+  usage text), with offline-resolution semantics owned by the client lane
+  (`XIOM_PKG_LOCKED` exists). The registry lane can add a fetch-to-mirror
+  script on request. Notable: published packages declare `xiom.std`, which is
+  **not in the index** -- the toolchain/stdlib provides it, matching the
+  playground's `/toolchain` mount (client lane to confirm).
+- Data lands on **production** directly (policy); staging is a feature-test
+  instance whose data is frozen/may be recreated, so consumers should pin the
+  production index only.
+
+
 
 
 
