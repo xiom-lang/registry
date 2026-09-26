@@ -329,6 +329,23 @@ curl -fsS -H 'Accept: text/html' http://127.0.0.1:3210/publish | grep -q 'Publis
 docker rm -f xiom-check
 ```
 
+### Resource caps (load prep, SCALING_LOAD_PLAN L0)
+
+Both services carry per-service caps so a traffic spike cannot starve the
+shared VPS. These are pre-baseline defaults; ops tunes them after the staging
+characterization run by setting the `.env` values (no compose edit needed —
+`docker compose up -d` recreates the container when a value changes):
+
+| Service | `cpus` | `mem_limit` | `pids_limit` | Overrides |
+|---|---|---|---|---|
+| `registry` (production) | 1.5 | 1g | 256 | `XIOM_REGISTRY_CPUS`, `XIOM_REGISTRY_MEM_LIMIT`, `XIOM_REGISTRY_PIDS_LIMIT` |
+| `staging` | 1.0 | 768m | 256 | `XIOM_STAGING_CPUS`, `XIOM_STAGING_MEM_LIMIT`, `XIOM_STAGING_PIDS_LIMIT` |
+
+`docker compose config` validates the interpolation in CI and locally; a
+recreate applies the caps without any application change. Prefer applying a
+production recreate outside an active publish batch window (survivable either
+way -- publishes are atomic -- but a quiet window avoids needless retries).
+
 ## Tokens
 
 Generate or append a publish token (never commit the file):

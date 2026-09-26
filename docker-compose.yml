@@ -20,6 +20,13 @@ services:
     image: xiom-registry:latest
     container_name: xiom-registry
     restart: unless-stopped
+    # Per-service resource caps (ops load-prep, SCALING_LOAD_PLAN L0). Pre-
+    # baseline defaults: ops tunes them after the staging characterization run.
+    # Overridable from .env so tuning does not need a compose edit; changing a
+    # value and running `docker compose up -d` recreates the container.
+    cpus: "${XIOM_REGISTRY_CPUS:-1.5}"
+    mem_limit: "${XIOM_REGISTRY_MEM_LIMIT:-1g}"
+    pids_limit: "${XIOM_REGISTRY_PIDS_LIMIT:-256}"
     # Bind loopback only: Hestia nginx terminates TLS and proxies inward.
     # XIOM_REGISTRY_PORT exists because Gitea already owns 3000 on the panel
     # host; this deployment currently uses 3100 for both hostnames, and the
@@ -100,6 +107,11 @@ services:
     image: xiom-registry:latest
     container_name: xiom-registry-staging
     restart: unless-stopped
+    # Staging caps (ops load-prep, SCALING_LOAD_PLAN L0): deliberately one
+    # notch below production so the characterization run sees headroom.
+    cpus: "${XIOM_STAGING_CPUS:-1.0}"
+    mem_limit: "${XIOM_STAGING_MEM_LIMIT:-768m}"
+    pids_limit: "${XIOM_STAGING_PIDS_LIMIT:-256}"
     ports:
       - "127.0.0.1:${XIOM_STAGING_PORT:-3200}:3000"
     volumes:

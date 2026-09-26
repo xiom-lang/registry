@@ -1879,6 +1879,7 @@ packages, every decision audited, `/index.json` immutable in shape).
 | D3 | Audit/report pagination + filters | The console caps at 100/200 rows; paginate when tables grow (checklist note). | S |
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
 | D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
+| D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
 
 ### Explicit non-goals (unchanged)
 

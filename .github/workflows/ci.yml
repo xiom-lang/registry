@@ -38,6 +38,13 @@ jobs:
           node --check seed.js
           node --check scripts/keygen.js
 
+      # Compose interpolation and schema errors fail here, not on the VPS.
+      # Both profiles render with the defaults in docker-compose.yml (no .env).
+      - name: Compose config validation
+        run: |
+          docker compose config -q
+          docker compose --profile staging config -q
+
       - name: Unit tests
         run: npm test
 
