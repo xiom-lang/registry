@@ -269,8 +269,12 @@ function pendingRow(record, csrf) {
 }
 
 function approvedRow(record, csrf) {
-  const mint = `docker run --rm -v "$PWD:/w" -w /w node:22-alpine node scripts/tokens.js add --file tokens.json `
-    + `--label ${record.requester.login}-${record.id} --scopes "${record.scopes.join(',')}"`;
+  const mint = '# production uses --file tokens.json; staging uses --file tokens.staging.json\n'
+    + 'docker run --rm -v "$PWD:/w" -w /w node:24-alpine node scripts/tokens.js add \\\n'
+    + `  --file <tokens.json | tokens.staging.json> --label ${record.requester.login}-${record.id} \\\n`
+    + `  --scopes "${record.scopes.join(',')}"\n`
+    + '# then copy the line starting "token:" (not the public key) and force-recreate the\n'
+    + '# service so it reloads the file (docker compose ... up -d --force-recreate --no-deps <service>)';
   return `<li class="request-card">
   <div class="request-head">
     <span class="mono">${escapeHtml(record.id)}</span>

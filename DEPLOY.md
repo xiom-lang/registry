@@ -193,10 +193,14 @@ Approving requests in `/admin/requests`:
   editing, no restart; the queue then shows it as live, with a **Revoke**
   button. The read-only `/etc/xiom-registry/trusted-publishers.json` stays
   the operator channel for first-party grants.
-- **Token:** approving shows the exact host mint command in the UI. Run it,
-  deliver the token privately from `registry@xiom-lang.org`, then click
-  **Mark fulfilled** with a reference (label + mail date). The app never
-  mints, never reads the token store, and holds no mail credentials.
+- **Token:** approving shows the exact host mint command in the UI. Note the
+  file: production tokens live in `tokens.json`, staging in
+  `tokens.staging.json` (compose mounts each as `/run/secrets/xiom-tokens.json`
+  in its own container). Run the mint, copy the `token:` line, force-recreate
+  the service so it reloads the file, deliver the token privately from
+  `registry@xiom-lang.org`, then click **Mark fulfilled** with a reference
+  (label + mail date). The app never mints, never reads the token store, and
+  holds no mail credentials.
 
 Data files in the volume (restic source list): `index.json`,
 `accounts.json`, `requests.json`, `reviews.json`, and `publishers.json`
