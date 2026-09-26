@@ -1830,4 +1830,61 @@ image and smoke-tests `/health`, `/publish`, `/whats-new`, `/packages`, and
 `efa7073`; the image was verified locally by building, booting, hitting the
 routes, and confirming `/app/PUBLISHING.md` is present.
 
+---
+
+## 21. Registry feature roadmap (consolidated, 2026-09-26)
+
+Gathers the directions recorded in sections 6, 10, 15, 18, and 20.7 into one
+ordered list. Nothing here changes the publish protocol or the 2.0/2.1
+guarantees (sessions never publish, no platform signing keys for community
+packages, every decision audited, `/index.json` immutable in shape).
+
+### Track A -- finish the community layer (the section 18 expansion)
+
+| Order | Feature | Notes / source | Size |
+|---|---|---|---|
+| A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. | M |
+| A2 | **Notification coverage** | 18.1: review decisions and ratings writes as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
+| A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
+| A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
+| A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
+| A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
+
+### Track B -- publishing DX (client + registry, section 20.7)
+
+| Order | Feature | Notes | Size |
+|---|---|---|---|
+| B1 | `xiom pkg publish` packaging guard | Ignore file / CI artifact filter so juniors cannot ship `target/`; pairs with the guide. | S |
+| B2 | `xiom pkg yank <pkg>@<ver>` | The guide currently curls the API; a subcommand makes withdrawal a first-class op. | S |
+| B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). | M |
+| B4 | Trusted-publisher self-service | Owner-facing edit/revoke request for their own repo+workflow entries (ops still executes revocation); currently admin-only. | S |
+| B5 | Token rotation self-service | Request rotation from `/account/requests`; fulfilment stays host-side. | S |
+
+### Track C -- protocol-adjacent platform (sections 6 and 10)
+
+| Order | Feature | Notes | Size |
+|---|---|---|---|
+| C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). | M |
+| C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. | S |
+| C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. | L |
+| C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
+| C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. | M |
+
+### Track D -- operations and hardening
+
+| Order | Feature | Notes | Size |
+|---|---|---|---|
+| D1 | Fulfilment worker on the VPS | Ops item from 20.7; one admin click end-to-end with mail. | S (ops) |
+| D2 | Ops-repo issue template removal | Point the org profile at `/publish`; the web request flow is the only front door. | S (ops) |
+| D3 | Audit/report pagination + filters | The console caps at 100/200 rows; paginate when tables grow (checklist note). | S |
+| D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
+| D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
+
+### Explicit non-goals (unchanged)
+
+Containers (GHCR), money handling, platform-held signing keys for community
+packages, and rewriting the registry in XIOM before selfhost is stable
+(section 7). A browser session never becomes a publish credential in any of
+the above.
+
 
