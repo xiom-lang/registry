@@ -125,7 +125,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
   </div>
 </header>
 <header class="page-banner">
-  <img src="/ui/registry.webp" alt="" width="1539" height="510">
+  <img src="/ui/registry.webp" alt="" width="2172" height="724">
   <div class="xiom-banner-text">
     <a class="xiom-heading" href="/" aria-label="XIOM Registry home">
       <span class="xiom-brand" aria-hidden="true">XIOM</span><span class="xiom-section" aria-hidden="true">REGISTRY</span>

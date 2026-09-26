@@ -421,7 +421,7 @@ test('banner is the masthead with the centred search inside it', async () => {
     const html = await (await fetch(`${baseUrl}${path}`, { headers: BROWSER })).text();
     assert.equal((html.match(/class="page-banner"/g) || []).length, 1, path);
     assert.match(html, /src="\/ui\/registry\.webp"/, path);
-    assert.match(html, /width="1539" height="510"/, path);
+    assert.match(html, /width="2172" height="724"/, path);
     assert.match(html, /class="xiom-brand" aria-hidden="true">XIOM</, path);
     assert.match(html, /class="xiom-section" aria-hidden="true">REGISTRY</, path);
     assert.match(html, /<a class="xiom-heading" href="\/" aria-label="XIOM Registry home">/, path);
