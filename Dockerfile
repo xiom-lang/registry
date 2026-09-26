@@ -25,9 +25,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Application code.
+# Application code. Keep this list in sync with the root-level files the
+# service reads at runtime: CHANGELOG.md (/whats-new) and PUBLISHING.md
+# (/publish fallback) are read by src/app.js; a missing file here crashes the
+# container at startup, which is why CI boots the image and hits /health.
 COPY src ./src
-COPY seed.js NOTICE LICENSE-MIT LICENSE-APACHE CHANGELOG.md ./
+COPY seed.js NOTICE LICENSE-MIT LICENSE-APACHE CHANGELOG.md PUBLISHING.md ./
 
 # Writable volumes (data/index.json, packages/<name>/<version>/package.tar.gz,
 # and the upload staging directory) must be owned by the unprivileged user.

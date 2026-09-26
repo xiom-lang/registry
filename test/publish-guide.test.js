@@ -118,6 +118,32 @@ test('the workflow template is copy-paste ready for beginners', () => {
   assert.match(template, /RUNNER_TEMP\/compiler/);
 });
 
+test('a missing bundled guide degrades to a signpost instead of failing', async () => {
+  // This is the staging 2.1 crash-loop in miniature: the image lacked
+  // PUBLISHING.md and the fallback was read at module load, so the container
+  // exited before startup. The read is lazy now and the page stays 200.
+  await withApp((config) => {
+    config.publishingDocUrl = 'http://127.0.0.1:9/unreachable/PUBLISHING.md';
+    config.publishingBundledPath = path.join(os.tmpdir(), 'xiom-no-guide-here', 'PUBLISHING.md');
+  }, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/publish`, { headers: BROWSER });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /bundled guide is missing from this deployment/);
+    assert.match(html, /github\.com\/xiom-lang\/registry\/blob\/main\/PUBLISHING\.md/);
+  });
+});
+
+test('the Dockerfile copies every root file the service reads at runtime', () => {
+  const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf-8');
+  const copyLine = dockerfile.split('\n').find((line) => line.startsWith('COPY seed.js'));
+  assert.ok(copyLine, 'the root-level COPY line exists');
+  for (const file of ['CHANGELOG.md', 'PUBLISHING.md']) {
+    assert.match(copyLine, new RegExp(`(^|\\s)${file.replace('.', '\\.')}(\\s|$)`),
+      `${file} is copied into the image`);
+  }
+});
+
 test('the GitHub token-request issue template is gone', () => {
   assert.equal(
     fs.existsSync(path.join(REPO, '.github', 'ISSUE_TEMPLATE', 'token-request.yml')),

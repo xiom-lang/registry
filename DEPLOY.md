@@ -313,6 +313,22 @@ docker compose ps
 curl -s http://127.0.0.1:3100/health
 ```
 
+The image must contain every **root-level file the service reads at runtime**
+(`CHANGELOG.md` for `/whats-new`, `PUBLISHING.md` for the `/publish` fallback).
+A missing file makes the container exit before it ever listens -- that is what
+took staging down during the 2.1 deploy, because unit tests run from the
+checkout where the file exists. CI now boots the built image and hits
+`/health`, `/publish`, `/whats-new`, `/packages`, and `/index.json`; if you
+touch the Dockerfile, run the same smoke locally before pushing:
+
+```
+docker build -t xiom-registry:check .
+docker run -d --name xiom-check -p 127.0.0.1:3210:3000 xiom-registry:check
+curl -fsS http://127.0.0.1:3210/health
+curl -fsS -H 'Accept: text/html' http://127.0.0.1:3210/publish | grep -q 'Publishing to XIOM'
+docker rm -f xiom-check
+```
+
 ## Tokens
 
 Generate or append a publish token (never commit the file):

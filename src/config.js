@@ -214,6 +214,10 @@ function loadConfig() {
     // raw URL; the bundled copy in the image is always the fallback, so the
     // guide cannot 404 when GitHub is unreachable.
     publishingDocUrl: process.env.PUBLISHING_DOC_URL || '',
+    // Bundled fallback for /publish. Overridable so a test (or a minimal
+    // image) can point at a missing file and the page still renders.
+    publishingBundledPath: process.env.PUBLISHING_DOC_FILE
+      || path.join(__dirname, '..', 'PUBLISHING.md'),
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // Path used by the hot-reload watcher (empty when API_KEY is the source).

@@ -43,3 +43,50 @@ jobs:
 
       - name: Docker build
         run: docker build -t xiom-registry:ci .
+
+      # Boot the image and hit real routes. The Dockerfile copies only the
+      # root-level files the service reads at runtime; this smoke catches a
+      # missing file (ENOENT at startup) that unit tests, run from the
+      # checkout, can never see. (Ops caught exactly that on staging 2.1.)
+      - name: Image smoke (boot the built image)
+        run: |
+          set -euo pipefail
+          docker run -d --name registry-smoke -p 127.0.0.1:3210:3000 xiom-registry:ci
+          healthy=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3210/health >/dev/null 2>&1; then
+              healthy=1
+              break
+            fi
+            if ! docker ps --format '{{.Names}}' | grep -q '^registry-smoke$'; then
+              echo "::error::registry-smoke exited before becoming healthy"
+              docker logs registry-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$healthy" -ne 1 ]; then
+            echo "::error::registry-smoke did not become healthy in 30s"
+            docker logs registry-smoke
+            exit 1
+          fi
+          echo "health: $(curl -fsS http://127.0.0.1:3210/health)"
+          for path in /publish /whats-new /packages /index.json; do
+            status="$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "http://127.0.0.1:3210${path}")"
+            echo "${path} -> ${status}"
+            case "$status" in
+              200|301) ;;
+              *) echo "::error::${path} returned ${status} from the built image"; docker logs registry-smoke; exit 1 ;;
+            esac
+          done
+          if ! curl -fsS -H 'Accept: text/html' http://127.0.0.1:3210/publish | grep -q 'Publishing to XIOM'; then
+            echo "::error::/publish did not render the guide"
+            docker logs registry-smoke
+            exit 1
+          fi
+
+      - name: Image smoke cleanup
+        if: always()
+        run: |
+          docker logs registry-smoke 2>/dev/null | tail -n 20 || true
+          docker rm -f registry-smoke 2>/dev/null || true

@@ -23,7 +23,9 @@ function publishGuidePage({ markdown, source = 'bundled', fetchedAt = '', nav = 
   const guideBody = String(markdown || '').replace(/^#\s+[^\n]*\n+/, '');
   const fetchedLine = source === 'github' && fetchedAt
     ? `Live copy from GitHub, refreshed ${formatWhen(fetchedAt)}.`
-    : 'Bundled copy shipped with this registry (GitHub was unreachable for a refresh).';
+    : (source === 'fallback'
+      ? 'The bundled guide is missing from this deployment and the live copy could not be fetched; the GitHub link has the full guide.'
+      : 'Bundled copy shipped with this registry (GitHub was unreachable for a refresh).');
   const body = `<section class="hero">
   <h1>Publishing to XIOM</h1>
   <p>Everything a package needs to reach this registry: a five-minute quickstart,

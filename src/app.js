@@ -106,10 +106,19 @@ const COMMUNITY_PUBLISH_TEMPLATE = fs.readFileSync(
 // Release notes rendered at /whats-new (same escape-first markdown pipeline).
 const CHANGELOG_MD = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf-8');
 // The publishing guide: /publish refreshes it from GitHub with a short TTL and
-// falls back to this bundled copy, so the page never depends on network luck.
-const PUBLISHING_DOC_BUNDLED = fs.readFileSync(path.join(__dirname, '..', 'PUBLISHING.md'), 'utf-8');
+// falls back to the bundled copy. The bundle is read lazily (never at module
+// load) so a minimal image without PUBLISHING.md still boots; if both sources
+// are unavailable the page renders a short signpost instead of failing.
 const PUBLISHING_DOC_DEFAULT_URL = 'https://raw.githubusercontent.com/xiom-lang/registry/main/PUBLISHING.md';
 const PUBLISHING_DOC_TTL_MS = 10 * 60 * 1000;
+const PUBLISHING_DOC_FALLBACK = [
+  '# Publishing to XIOM',
+  '',
+  'The bundled publishing guide is missing from this deployment and the live',
+  'copy could not be fetched. Read the full guide at',
+  '[github.com/xiom-lang/registry](https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md),',
+  'or grab the workflow template at `/ui/templates/community-publish.yml`.',
+].join('\n');
 // Package status badge art: state x track matrix (see src/ui/pages.js).
 // `trusted` exists only on the community track -- first-party/official
 // publishes are org-controlled by definition. Keep this in sync with the
@@ -664,6 +673,15 @@ function createApp(config = loadConfig()) {
   // "View the source on GitHub" link (SESSION.md section 20).
   let publishingDocCache = { at: 0, markdown: '', source: 'bundled' };
 
+  /** Read the bundled guide lazily; a missing file must never kill a request. */
+  function readBundledGuide() {
+    try {
+      return fs.readFileSync(config.publishingBundledPath, 'utf-8');
+    } catch {
+      return '';
+    }
+  }
+
   async function publishingDoc() {
     if (publishingDocCache.markdown && Date.now() - publishingDocCache.at < PUBLISHING_DOC_TTL_MS) {
       return publishingDocCache;
@@ -684,7 +702,10 @@ function createApp(config = loadConfig()) {
     } catch {
       // Network, DNS, timeout: the bundled guide is authoritative enough.
     }
-    publishingDocCache = { at: Date.now(), markdown: PUBLISHING_DOC_BUNDLED, source: 'bundled', fetchedAt: '' };
+    const bundled = readBundledGuide();
+    publishingDocCache = bundled.trim().length > 0
+      ? { at: Date.now(), markdown: bundled, source: 'bundled', fetchedAt: '' }
+      : { at: Date.now(), markdown: PUBLISHING_DOC_FALLBACK, source: 'fallback', fetchedAt: '' };
     return publishingDocCache;
   }
 
