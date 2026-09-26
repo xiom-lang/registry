@@ -1496,7 +1496,14 @@ without weakening the publishing guarantees.
   account; in-app notices render on `/account`.
 - Email on top of the outbox (`src/mailer.js`, nodemailer): `SMTP_URL` +
   `SMTP_FROM`, drained on a timer; unset SMTP = in-app only, rows marked
-  `skipped`. Each account can set a notification email.
+  `skipped`. Each account can set a notification email. **From-address rule
+  (ops, 2026-09-26):** use an `xiom-lang.org` address (SPF/DKIM/MX live);
+  generic mail from the VPS host domain is rejected by Gmail.
+- Token fulfilment runs through ops' `issue-token.sh` (`--issue`, `--label`,
+  `--email`, `--scopes`, `--staging`, optional `--key`): it mints into the
+  correct token file, mails the token from `registry@xiom-lang.org`, and
+  prints a value-free summary. The raw `scripts/tokens.js` path in the queue
+  remains the fallback and needs a force-recreate afterwards.
 - `/whats-new` renders `CHANGELOG.md` with the readme markdown pipeline;
   the service version (`/health`) is 2.0.0 and the footer links the page.
 
