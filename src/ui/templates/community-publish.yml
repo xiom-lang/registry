@@ -48,6 +48,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Show target
+        run: |
+          set -euo pipefail
+          if [ -z "${XIOM_REGISTRY:-}" ]; then
+            echo "::error::the registry input is empty; set it (staging: https://staging.registry.xiom-lang.org)"
+            exit 1
+          fi
+          echo "TARGET registry: ${XIOM_REGISTRY}"
+          echo "mode:            ${{ github.event.inputs.mode }}"
+          echo "repo:            ${GITHUB_REPOSITORY}"
+          echo "ref:             ${GITHUB_REF}"
+          echo "package.xi name: $(sed -n 's/.*name:[[:space:]]*"\([^"]*\)".*/\1/p' package.xi | head -n1)"
+
       - name: Mint registry token (GitHub OIDC)
         run: |
           set -euo pipefail
