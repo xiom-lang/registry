@@ -1541,3 +1541,78 @@ without weakening the publishing guarantees.
 **Guardrails:** every UGC surface feeds the report -> reviewer flow;
 `flagged` overrides display; no platform signing keys for community
 packages; browser sessions stay identity-only and never publish.
+
+---
+
+## 19. 2026-09-26 wrap-up and next-session handoff
+
+**Verified end-to-end (staging, package `test-registry-smoke`):**
+- `0.1.0` published through the website trusted-publisher path (one admin
+  click, no host step) -> **trusted + signed**; `0.1.1` published with a
+  host-minted token + local ed25519 key -> **verified + signed**. External
+  checks: sha256 re-hash, ed25519 over the exact bytes, badge art/pills,
+  rendered README.
+- Registry 2.0.0 on staging: SQLite platform layer, notification outbox +
+  optional email (`SMTP_URL`/`SMTP_FROM`), `/whats-new` (CHANGELOG.md),
+  fulfiller worker (`scripts/fulfiller.js`) with the secret-gated internal
+  API and **token-file hot-reload** (no force-recreate after a mint), ops
+  `issue-token.sh` as the supported manual mint path.
+- Packages lane published the waves 18-30 batch to staging behind the
+  280-name scope superset and `PUBLISH_RATE_MAX=600`. Counts at wrap-up:
+  **staging 218 packages, production 113 packages, both v2.0.0**.
+
+**Policy change (owner, 2026-09-26):** staging is for testing **features**,
+not a mandatory gate for data. Populating the registry goes **directly to
+production**; use staging only when a change needs feature testing.
+
+**Production state to confirm next session:** production already serves
+v2.0.0 with 113 packages, so the code recreate happened and a first wave
+landed. Verify on the VPS that the production `xiom-packages/packages` entry
+carries the 280-name scope superset and the intended refs
+(`refs/tags/eco-v*` and/or `refs/heads/main`), and that `PUBLISH_RATE_MAX`
+is raised for batch windows (DEPLOY.md "Production batch runbook").
+
+**Next session focus -- UI/UX audit, plan, then implementation (start on
+staging):**
+1. Audit the current surfaces on staging, desktop **and mobile**: home,
+   `/packages` rows, package page (readme/reviews/reports), `/account`,
+   `/login`, `/admin/requests`, `/review`, `/whats-new`, nav/footer.
+2. Write the plan (SESSION.md section 20 + `docs/checklists/ui-ux.md`) for:
+   mobile-first layout and data density; friendlier package/account data
+   presentation ("raw JSON dump" fields are not user friendly); account
+   settings pages; an admin console (mute/flag/yank packages, reports,
+   fulfilment); and **user management + roles** (promote/demote
+   reviewer/admin, suspend/ban) as the community grows.
+3. Implement on staging first, then straight to production per the policy.
+
+**Open backlog:** in-app help (`/help/publishing` with both paths, template,
+badge table); enable the fulfiller worker on the VPS (`FULFILLER_SECRET` +
+systemd timer) and app email (xiom-lang.org from-address); `xiom pkg publish`
+packaging guard (exclude CI artifacts / honor an ignore file); optional
+`user:email` scope for verified notification addresses; production scope/ref
+confirmation above.
+
+**Paste-ready prompt for the next session:**
+
+```text
+Work in the xiom-lang/registry repository (E:\xiom-lang\registry). Read
+SESSION.md section 19 first; it is the current handoff. Staging runs registry
+2.0.0 (https://staging.registry.xiom-lang.org) and production is the
+population target: per the 2026-09-26 policy, publish data directly to
+production and use staging only to test feature changes.
+
+Task, in order:
+1. UI/UX audit of the staging instance (browse with Accept: text/html and a
+   mobile viewport): home, /packages, package pages, /account, /login,
+   /admin/requests, /review, /whats-new, nav/footer.
+2. Write the plan as SESSION.md section 20 plus docs/checklists/ui-ux.md:
+   mobile-first layout and data presentation, account settings pages, an
+   admin console (mute/flag/yank packages, reports, fulfilment), and user
+   management + roles (promote/demote reviewer/admin, suspend/ban).
+3. Implement the plan starting on staging, then direct to production.
+
+Rules: DCO-signed conventional commits, push to main; run npm test (212) and
+npm run test:e2e (20) before claiming anything done; keep the 2.0 guarantees
+(sessions never publish, every approval/decision audited, one-click trusted
+publishers, `/index.json` protocol untouched).
+```
