@@ -1790,3 +1790,31 @@ The step-by-step implementation checklist lives in
 - Ops repo: remove the token-request issue template there too and point the
   org profile at `/publish`.
 - `xiom pkg yank` client subcommand (guide keeps the curl path until then).
+
+### 20.8 Implementation status (2026-09-26, registry lane)
+
+Section 20 is implemented and verified locally; the checklist in
+`docs/checklists/ui-ux.md` is fully checked except the deploy step. Commits on
+`main` (DCO-signed):
+
+| Commit | Scope |
+|---|---|
+| `5c432ee` | `feat(ui)`: mobile shell, labelled rows, `src/ui/format.js`, mute-aware `publicIndex()` |
+| `c8dfc31` | `feat(account)`: overview / requests / notifications / settings, explicit read state |
+| `a39962c` | `feat(admin)`: console (dashboard, requests, packages, reports, users, audit), SQLite roles/states/audit, suspend/ban enforcement |
+| `5bc9f51` | `feat(publish-guide)`: `/publish` from git with fallback, PUBLISHING.md rewrite, template tag trigger + guard, issue-template removal |
+
+Verification evidence: `npm test` 229/229, `npm run test:e2e` 20/20, mobile
+(390x844, DPR 2) and desktop (1280x900) screenshot pass with
+`scrollWidth <= innerWidth + 1` on every changed surface, and a
+production-like boot smoke on Node 24 (`/health` 2.1.0, `/publish` 200 with
+the bundled fallback, `/help/publishing` 301, anonymous `/admin` 302 to
+`/login`, `/whats-new` shows 2.1.0).
+
+Remaining, blocked on host access: push the commits and run the DEPLOY.md
+staging sequence, smoke it, then promote the identical commit to production
+(data continues to go straight to production per the section 19 policy). This
+session has no SSH credentials for the VPS, so the deploy has to run where the
+containers live. No protocol change is involved: `/index.json` was not touched
+and the e2e protocol checks passed.
+
