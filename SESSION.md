@@ -2017,6 +2017,32 @@ Coverage: `decisionStack` replay tests, badge-art resolver tests with and
 without decision assets, console chip assertions, explicit muted-search tests,
 and the undo-chain HTTP test; 239 unit tests and 20 e2e checks pass.
 
+**21.3 Stage badge audit (owner report, 2026-09-26).** The owner reported
+packages with status incubating showing the wrong icon. Findings from the
+live indexes and the publisher repo (`xiom-packages/packages`):
+
+- The registry renders the incubator art correctly when the published entry
+  carries `stage: "incubating"`: staging `xiom.algo@0.1.0` serves
+  `pgk_incubator_official.webp` / "Incubating first-party package" today.
+- The publisher workflow injects the STATUS.json stage into `package.xi`
+  before publishing (awk step, workflow lines ~270-277), but entries published
+  before that step existed carry **no stage at all**: staging
+  `xiom.canary-oidc` has `STATUS.json` stage `incubating` while its registry
+  entry has no stage, so it shows the derived (trust) art -- exactly the
+  reported symptom. `xiom.arrow` (STATUS incubating) is not published yet.
+  Counts: production 38 / staging 83 entries with no stage; zero entries have
+  stage only at the version level.
+- Versions are immutable, so an existing entry's stage cannot be patched; the
+  fix is to re-publish at a new version (or re-run the badge canary for
+  `xiom.canary-oidc`), which then publishes with the current workflow.
+
+Registry-side hardening from the audit: per-version `stage` now survives
+reloads (it was silently stripped by `normalizeVersionEntry`, which would have
+changed a badge after a restart), and the badge resolver falls back to the
+latest version's stage when the package-level stage is missing. Tests cover
+both; 240 unit tests pass.
+
+
 
 
 ### Track B -- publishing DX (client + registry, section 20.7)

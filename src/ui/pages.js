@@ -125,7 +125,8 @@ function packageBadgeState(name, pkg) {
   const track = isFirstPartyNamespace(name) ? 'official' : 'community';
   const latest = pkg && pkg.latest ? pkg.versions[pkg.latest] : null;
   const versionCount = pkg && pkg.versions ? Object.keys(pkg.versions).length : 0;
-  const stage = pkg && typeof pkg.stage === 'string' ? pkg.stage : '';
+  const stage = (pkg && typeof pkg.stage === 'string' && pkg.stage)
+    || (latest && typeof latest.stage === 'string' ? latest.stage : '');
   const official = track === 'official';
   const signed = Boolean(latest && latest.signature && latest.publicKey);
   const oidcTrusted = Boolean(latest && latest.publisher

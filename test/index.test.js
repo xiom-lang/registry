@@ -142,6 +142,23 @@ test('normalizeIndex upgrades legacy shapes', () => {
   assert.equal(index.packages.legacy.stage, '', 'missing stage normalizes to empty');
 });
 
+test('per-version stage survives a reload so badges can fall back to it', () => {
+  const store = tmpStore();
+  store.publishVersion('my-pkg', versionEntry('0.1.0', { stage: 'incubating' }));
+  const reloaded = new IndexStore({
+    indexPath: store.indexPath,
+    registryUrl: REGISTRY_URL,
+    maxIndexPackages: 100,
+    maxIndexBytes: 1024 * 1024,
+    maxVersionsPerPackage: 10,
+  });
+  assert.equal(
+    reloaded.requireVersion('my-pkg', '0.1.0').stage,
+    'incubating',
+    'the publish-time stage is not stripped on load',
+  );
+});
+
 test('computeLatest ignores invalid semver', () => {
   assert.equal(computeLatest({ bad: { version: 'not-semver' } }), '');
   assert.equal(computeLatest({ a: { version: '1.0.0' }, b: { version: '2.0.0' } }), '2.0.0');

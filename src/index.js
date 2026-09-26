@@ -381,6 +381,13 @@ function normalizeVersionEntry(fallbackVersion, raw) {
   if (typeof raw.yankedAt === 'string') entry.yankedAt = raw.yankedAt;
   if (typeof raw.yankReason === 'string' && raw.yankReason) entry.yankReason = raw.yankReason;
   if (typeof raw.compiler === 'string' && raw.compiler) entry.compiler = raw.compiler;
+  // Per-version stage is written by the publish path (and injected by the
+  // publisher workflow). Keep it across reloads: the UI falls back to it when
+  // the package-level stage is missing, and dropping it here silently changed
+  // a package's badge after a restart (owner audit, 2026-09-26).
+  if (typeof raw.stage === 'string' && raw.stage.trim() !== '') {
+    entry.stage = raw.stage.trim().toLowerCase().slice(0, 32);
+  }
   const publisher = normalizePublisher(raw.publisher);
   if (publisher) entry.publisher = publisher;
   if (typeof raw.download_url === 'string' && raw.download_url) {

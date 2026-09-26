@@ -558,8 +558,14 @@ test('packageBadgeState precedence and track selection', () => {
   assert.equal(stateOf(incubatingTrusted), 'incubator');
   assert.deepEqual(incubatingTrusted.pills, ['trusted', 'signed']);
 
-  // Decision art is optional. When the owner drops pgk_reviewed_* or
-  // pgk_muted_* into the asset set the resolver picks it up; without it the
+  // A package whose stage lives only on the latest version entry (older
+  // publishes, before package-level merge) still gets the right stage art.
+  const versionStage = packageBadgeState('demo-pkg', make('demo-pkg', '0.1.0', { stage: 'incubating' }));
+  assert.equal(stateOf(versionStage), 'incubator');
+  const versionStable = packageBadgeState('demo-pkg', make('demo-pkg', '0.1.0', { stage: 'stable' }));
+  assert.equal(stateOf(versionStable), 'unsigned', 'an explicit stable stage still shows the trust art');
+
+  // Decision art is optional. When the owner drops pgk_reviewed_* or  // pgk_muted_* into the asset set the resolver picks it up; without it the
   // derived art (signed/trusted/unsigned) stays, so an <img> never 404s and a
   // cleared package always shows its real trust state.
   const { badgeArtFor, pickBadgeFile, packageTrustChips } = require('../src/ui/pages');
