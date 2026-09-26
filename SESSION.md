@@ -1614,5 +1614,179 @@ Task, in order:
 Rules: DCO-signed conventional commits, push to main; run npm test (212) and
 npm run test:e2e (20) before claiming anything done; keep the 2.0 guarantees
 (sessions never publish, every approval/decision audited, one-click trusted
-publishers, `/index.json` protocol untouched).
+publishers, /index.json protocol untouched).
 ```
+
+---
+
+## 20. UI/UX audit, admin console, roles, and the publishing guide (2026-09-26, registry lane)
+
+This section is the plan produced by the audit in section 19's next-session
+focus, extended by two owner directions received during the session:
+
+1. **Publishing info must be 100% correct and beginner-friendly** (hobbyists
+   and junior devs): guide, workflow template, tags, and every registry page
+   that talks about publishing. The nav "Publish" button must open a
+   registry-hosted page that renders the guide from git (great markdown
+   visuals) and links to the GitHub source, not jump straight to GitHub.
+2. **Deprecate the GitHub token-request issue template**: the web request flow
+   is the single front door; the issue template goes away (this repository's
+   file now; the ops-repo copies are noted in the roadmap for ops).
+
+Owner decisions of record: staging tests **features**; data goes **directly to
+production** (section 19 policy). The 2.0 guarantees are frozen: a browser
+session never publishes, every approval/decision is audited, trusted
+publishers stay one-click, and `/index.json` keeps the exact protocol shape.
+
+### 20.1 Audit method and evidence
+
+Live staging (v2.0.0, 218 packages) was browsed with `Accept: text/html` and a
+phone user agent at a true **390x844 CSS viewport** (Chrome DevTools Protocol
+`Emulation.setDeviceMetricsOverride`, DPR 2) plus 1280x900 desktop. Public
+surfaces came from staging; `/account`, `/admin/requests`, and `/review` came
+from the real app running locally with fixture data and three signed-in test
+accounts (admin / reviewer / plain), because staging sign-in needs a real
+GitHub round trip. Findings below are reproducible; screenshots were captured
+for every surface.
+
+### 20.2 Findings (what is wrong today)
+
+| # | Surface | Finding | Evidence |
+|---|---|---|---|
+| 1 | Nav (all pages, <=640px) | 8 links scroll horizontally with no affordance; Sign in / @account / Review / Admin sit off-screen (`right=603-744` in a 390px viewport) | home/login/admin screenshots |
+| 2 | Package page mobile | The versions table forces the layout viewport to **504-517px**, so phones render the whole page zoomed out; datetime columns wrap to 3 lines | `innerWidth` 504/517 vs 390 |
+| 3 | Listing / package rows | Every row repeats `2026-09-26 03:33 UTC`; digests and request ids are raw machine values; the 80px badge art makes one-line packages ~178px tall with dead space | home/packages screenshots |
+| 4 | Package page | Trust pill duplicated (title row + art row); full SHA-256 printed twice (detail grid + table); repository link wraps mid-path | package screenshot |
+| 5 | Banner (<=520px) | Search input overlays the XIOM wordmark and the placeholder is clipped ("Search packages by name or") | home screenshot |
+| 6 | `/account` | One 3000px page: request form + requests + notifications + email + sign-out; long prose inside radio labels; request table shows raw `req_...` ids and wrapped UTC dates | fixture screenshot |
+| 7 | `/admin/requests` | Single queue page; mint guidance shows a raw container command with a stale-looking token path; no dashboard, no packages/reports/users/audit surfaces | fixture screenshot |
+| 8 | `/review` | Works, but raw report ids are the headline, dates are raw UTC, and admins have no path to act on packages from the console | fixture screenshot |
+| 9 | Publishing docs | Nav "Publish" exits to GitHub; PUBLISHING.md offers the issue-template fallback, describes token issuance as "maintainer mints" only, and the OIDC sections contradict each other about community trusted publishing being open | layout.js:96, PUBLISHING.md §4/§5 |
+| 10 | Workflow template | Dispatch-only: no tag trigger although tags are the recommended release path; no guard that the tag matches `package.xi`; juniors get no comments about what to change | `src/ui/templates/community-publish.yml` |
+
+### 20.3 Decisions
+
+- **Mobile-first shell.** One code path, CSS-first. The nav collapses into a
+  no-JS `<details>` disclosure at <=640px; all tables live in
+  `overflow-x:auto` wrappers; wide data (versions, requests, reports) becomes
+  labelled rows on phones. Fixing the table min-width removes the layout
+  viewport widening (finding 2), which is the single biggest mobile defect.
+- **Relative time everywhere, exact time on demand.** New
+  `src/ui/format.js` provides `formatWhen` (relative label in a `<time>`
+  element with the ISO value in `title`/`datetime`), `formatBytes`,
+  `shortHash`, `shortId`. No client-side date library, no JS requirement.
+- **Copy buttons are progressive enhancement.** The page works with JS off;
+  a tiny inline script (no framework, no build step) reveals
+  `data-copy` buttons for install commands and digests. Anything that must not
+  depend on JS is a selectable `<code>` field.
+- **Account gets real sub-pages.** `/account` (overview), `/account/requests`,
+  `/account/notifications`, `/account/settings` with a shared tab sub-nav.
+  The POST endpoints keep their paths (`/requests`, `/account/email`) so
+  existing links survive; redirects move to the new pages.
+- **Roles live in SQLite, config stays the bootstrap.** Effective role =
+  `REGISTRY_ADMIN_LOGINS` / `REGISTRY_REVIEWER_LOGINS` **or** a stored grant
+  (`user_roles`). Config-listed admins can never be demoted or suspended from
+  the UI. Effective role/status is resolved **per request**, so a demotion
+  applies to an already-open session immediately (sessions stay in-memory,
+  identity-only).
+- **Suspension is read-only; banning is removal.** Suspended accounts keep
+  browsing but every write (request, report, rating) returns
+  `403 account_suspended` with a banner; banned accounts have all sessions
+  destroyed and sign-in refused with an explanatory message.
+- **"Mute" hides, it does not delete.** A muted package disappears from home,
+  `/packages`, `/search`, and the category counts, but its page still renders
+  with a "muted by the maintainers" notice, its artifacts stay downloadable,
+  and `/index.json` is untouched -- muting is presentation/audit state, like
+  flagged/reviewed, never a protocol change.
+- **Every new console action is audited in `admin_audit`.** Request decisions
+  keep their existing per-request history (the 2.0 audit trail) and are merged
+  into the console feed at render time; role/status/package actions get rows.
+- **The publishing guide is served by the registry.** `/publish` renders the
+  same `PUBLISHING.md` the client-side docs use, fetched from the repository
+  raw URL with a 10-minute in-memory cache and a bundled-copy fallback, then
+  rendered by the existing README markdown pipeline (tables and code fences
+  included). A "View source on GitHub" link keeps git the source of truth.
+  Nav "Publish" and the footer "Publishing" link now point at `/publish`.
+- **The GitHub token-request issue template is deprecated.** The web request
+  flow (signed-in, audited, notifiable) is the only front door in the guide;
+  `.github/ISSUE_TEMPLATE/token-request.yml` is deleted here, and
+  PUBLISHING.md's roadmap records the ops-repo follow-up.
+- **No JS framework, no build step.** The registry UI stays server-rendered;
+  the only client script is a small progressive-enhancement block in the
+  layout (copy buttons + nav details fallback), inlined once.
+
+### 20.4 Route map after this change
+
+```mermaid
+flowchart LR
+  subgraph Public
+    H[/] --> P[/packages] --> PK[/packages/:name]
+    P --> C[/categories]
+    P --> S[/search]
+    PK --> PUB[/publish<br/>guide from git + template]
+  end
+  subgraph Account
+    A[/account<br/>overview] --> AR[/account/requests]
+    A --> AN[/account/notifications]
+    A --> AS[/account/settings]
+    AR -->|POST /requests| Q[(requests.json)]
+    AN -->|POST /account/notifications/read| N[(notifications)]
+    AS -->|POST /account/email| Q
+  end
+  subgraph Console
+    AD[/admin<br/>dashboard] --> ADR[/admin/requests]
+    AD --> ADP[/admin/packages<br/>flag/mute/yank]
+    AD --> ADO[/admin/reports]
+    AD --> ADU[/admin/users]
+    AD --> ADA[/admin/audit]
+    ADU --> ADUD[/admin/users/:githubId]
+  end
+  subgraph Roles
+    R[(user_roles<br/>user_states<br/>admin_audit)] --- ADU
+    R --- M[per-request role<br/>resolution]
+    M --> AD
+    M --> RV[/review]
+  end
+  PK -->|reviewer| RV
+```
+
+### 20.5 Deliverables
+
+| Area | Deliverable |
+|---|---|
+| Foundations | `src/ui/format.js`, mobile shell + nav disclosure, table/card patterns, banner fix, row density, copy enhancement |
+| Account | 4 pages + sub-nav, suspended banner, request-form help, notification read state |
+| Console | `/admin` dashboard, requests, packages (flag/mute/yank), reports, users, audit |
+| Roles | SQLite `user_roles` / `user_states` / `admin_audit`, per-request resolution, suspend/ban enforcement, guards |
+| Publishing | `/publish` + `/help/publishing` redirect, PUBLISHING.md rewrite (beginner quickstart, tags, troubleshooting), workflow template tag trigger + version guard, nav/footer links, issue-template deletion |
+| Docs | this section, `docs/checklists/ui-ux.md`, CHANGELOG entry, refreshed DEPLOY/README references where they touch the changed surfaces |
+| Tests | format helpers, new pages, roles/status enforcement, audits, mute filtering, `/publish` fallback, template guard; keep `npm test` green and `npm run test:e2e` 20/20 |
+
+The step-by-step implementation checklist lives in
+`docs/checklists/ui-ux.md`; it is the execution contract for this section.
+
+### 20.6 Verification and rollout
+
+1. `npm test` (unit/HTTP/UI) and `npm run test:e2e` (real `xiom-pkg` client)
+   must pass before any deploy claim.
+2. Mobile and desktop screenshot pass over every changed surface; assert
+   `document.scrollWidth <= window.innerWidth + 1` at 390px.
+3. DCO-signed conventional commits on `main` (`feat(ui)`, `feat(account)`,
+   `feat(admin)`, `feat(roles)`, `feat(publish-guide)`, `docs:`), pushed.
+4. Staging first: `git pull`, `docker compose build registry`,
+   `docker compose up -d --no-deps registry`, then smoke `/health`,
+   `/publish`, `/account` (fake-provider-independent checks) and one publish
+   canary from the packages lane before promoting the same commit to
+   production. Data continues to go straight to production.
+5. `/index.json` diff check on both instances: shape and packages unchanged by
+   this work (review/mute/role state is not part of the protocol).
+
+### 20.7 Backlog after this section
+
+- Enable the fulfiller worker on the VPS (`FULFILLER_SECRET` + systemd timer)
+  and app email; the console states this dependency explicitly.
+- `xiom pkg publish` packaging guard (ignore file / CI artifacts).
+- Optional `user:email` scope for verified notification addresses.
+- Ops repo: remove the token-request issue template there too and point the
+  org profile at `/publish`.
+- `xiom pkg yank` client subcommand (guide keeps the curl path until then).
