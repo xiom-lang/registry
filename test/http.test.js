@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const fs = require('fs');
+const http = require('node:http');
 const os = require('os');
 const path = require('path');
 
@@ -118,6 +119,7 @@ async function startIsolatedRegistry({ tokens, env = {} }) {
     return {
       url: `http://127.0.0.1:${isolatedServer.address().port}`,
       dir,
+      app: isolatedApp,
       stop: () => {
         isolatedServer.close();
         for (const [key, value] of Object.entries(saved)) {
@@ -532,4 +534,63 @@ test('rate limiting responds 429 with Retry-After', async () => {
   } finally {
     registry.stop();
   }
+});
+
+test('TRUST_PROXY=1 ignores spoofed X-Forwarded-For and never logs the permissive-proxy error', async () => {
+  // Staging/production run behind one nginx hop. `trust proxy = true` would
+  // key the limiter on the leftmost (client-controlled) XFF entry, so every
+  // request could pick a fresh bucket, and express-rate-limit logs
+  // ERR_ERL_PERMISSIVE_TRUST_PROXY on every request. This models nginx
+  // appending the real client address and proves the hop count holds.
+  const registry = await startIsolatedRegistry({
+    tokens: [{ token: OPEN_TOKEN, label: 'open', scopes: ['*'] }],
+    env: { RATE_LIMIT_DISABLED: '0', RATE_LIMIT_MAX: '2', TRUST_PROXY: '1' },
+  });
+  const proxy = http.createServer((req, res) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const headers = {
+      ...req.headers,
+      'x-forwarded-for': forwarded
+        ? `${forwarded}, ${req.socket.remoteAddress}`
+        : String(req.socket.remoteAddress),
+    };
+    const upstream = http.request({
+      host: '127.0.0.1',
+      port: Number(new URL(registry.url).port),
+      path: req.url,
+      method: req.method,
+      headers,
+    }, (response) => {
+      res.writeHead(response.statusCode, response.headers);
+      response.pipe(res);
+    });
+    upstream.on('error', () => res.destroy());
+    req.pipe(upstream);
+  });
+  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+  const proxyUrl = `http://127.0.0.1:${proxy.address().port}`;
+  const logged = [];
+  const originalError = console.error;
+  let statuses = [];
+  try {
+    assert.equal(registry.app.get('trust proxy'), 1, 'a hop count, never a permissive boolean');
+    console.error = (...args) => { logged.push(args.map((arg) => String(arg)).join(' ')); };
+    for (let i = 0; i < 4; i++) {
+      const response = await fetch(`${proxyUrl}/health`, {
+        headers: { 'X-Forwarded-For': `203.0.113.${i}` },
+      });
+      statuses.push(response.status);
+    }
+  } finally {
+    console.error = originalError;
+    proxy.close();
+    registry.stop();
+  }
+  assert.deepEqual(statuses.slice(0, 2), [200, 200]);
+  assert.equal(statuses.at(-1), 429, 'spoofed XFF values must not rotate the bucket');
+  assert.equal(
+    logged.filter((line) => line.includes('ERR_ERL_PERMISSIVE_TRUST_PROXY')).length,
+    0,
+    'the limiter must not flag a permissive trust proxy',
+  );
 });

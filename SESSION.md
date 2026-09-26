@@ -1830,6 +1830,22 @@ image and smoke-tests `/health`, `/publish`, `/whats-new`, `/packages`, and
 `efa7073`; the image was verified locally by building, booting, hitting the
 routes, and confirming `/app/PUBLISHING.md` is present.
 
+**20.8.2 Rate-limit trust-proxy fix (2026-09-26 later).** Ops found production
+logging `ERR_ERL_PERMISSIVE_TRUST_PROXY` on every request: `TRUST_PROXY=1` was
+mapped to Express `trust proxy = true`, so `req.ip` came from the
+client-controlled leftmost `X-Forwarded-For` entry and per-IP limits were
+bypassable by rotating the header (the limiter itself kept answering 200).
+Fix (this section, same day): `TRUST_PROXY` now parses to a hop count or
+allowlist and `true` is coerced to `1` (never a boolean); `src/app.js` sets
+whatever the parser returned; staging can override with
+`XIOM_STAGING_TRUST_PROXY` (falls back to the shared value). Coverage: config
+parsing tests, an HTTP test that models nginx appending the real client and
+proves spoofed XFF values share one bucket and produce no `ERR_ERL` log, and
+the CI image smoke now boots with `TRUST_PROXY=1` and fails on any `ERR_ERL`
+line. DEPLOY.md has the verification recipe (rotate spoofed XFF, watch
+`RateLimit-*`; grep the log).
+
+
 ---
 
 ## 21. Registry feature roadmap (consolidated, 2026-09-26)

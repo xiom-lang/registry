@@ -29,6 +29,30 @@ function boolFromEnv(name, fallback) {
 }
 
 /**
+ * Parse TRUST_PROXY into an Express trust-proxy value (SESSION.md 20.8.2).
+ *
+ * `true` is deliberately never returned: with Express, `trust proxy = true`
+ * takes `req.ip` from the leftmost `X-Forwarded-For` entry, which any client
+ * can spoof, so IP-based rate limiting becomes a per-request no-op and
+ * express-rate-limit logs `ERR_ERL_PERMISSIVE_TRUST_PROXY` on every request.
+ * Accepted values:
+ *   unset / 0 / false / off  -> false (no proxy; socket peer is the client)
+ *   1 / true                 -> 1 hop (one reverse proxy, e.g. nginx)
+ *   N                        -> N hops
+ *   loopback|linklocal|...   -> passed to Express verbatim (CIDR list too)
+ */
+function trustProxyFromEnv() {
+  const raw = typeof process.env.TRUST_PROXY === 'string' ? process.env.TRUST_PROXY.trim() : '';
+  const lower = raw.toLowerCase();
+  if (raw === '' || raw === '0' || lower === 'false' || lower === 'off') return false;
+  if (/^\d+$/.test(raw)) return Math.max(1, Number.parseInt(raw, 10));
+  // Legacy deployments set `TRUST_PROXY=true` behind one nginx hop. Keep them
+  // working, but hand Express a hop count, never a spoofable boolean.
+  if (lower === 'true') return 1;
+  return raw;
+}
+
+/**
  * GitHub OAuth configuration for registry 2.0 sign-in (SESSION.md 15).
  *
  * Fail-fast rule: the client id and secret must be set together. A half-set
@@ -187,7 +211,7 @@ function loadConfig() {
     env: process.env.NODE_ENV || 'development',
     port: intFromEnv('PORT', 3000),
     host: process.env.HOST || '0.0.0.0',
-    trustProxy: boolFromEnv('TRUST_PROXY', false),
+    trustProxy: trustProxyFromEnv(),
     // Base URL advertised in /index.json. The client's RegistryIndex struct
     // requires a root-level `registry` string (no serde default), so this is
     // part of the protocol, not decoration.

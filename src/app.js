@@ -255,7 +255,11 @@ function createApp(config = loadConfig()) {
   const writeLimit = rateLimit(limiterOptions(config.rateLimit.publish));
   const downloadLimit = rateLimit(limiterOptions(config.rateLimit.download));
 
-  if (config.trustProxy) app.set('trust proxy', true);
+  // Hop count or allowlist, never `true`: a blanket trust lets clients spoof
+  // X-Forwarded-For and rotate rate-limit buckets (ERR_ERL_PERMISSIVE_TRUST_PROXY).
+  if (config.trustProxy !== false && config.trustProxy !== undefined) {
+    app.set('trust proxy', config.trustProxy);
+  }
   app.disable('x-powered-by');
 
   app.use(cors({ maxAge: 3600 }));

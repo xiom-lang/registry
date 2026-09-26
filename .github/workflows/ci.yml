@@ -58,7 +58,9 @@ jobs:
       - name: Image smoke (boot the built image)
         run: |
           set -euo pipefail
-          docker run -d --name registry-smoke -p 127.0.0.1:3210:3000 xiom-registry:ci
+          # TRUST_PROXY=1 mirrors production (one nginx hop) and must never
+          # produce ERR_ERL_PERMISSIVE_TRUST_PROXY in the log.
+          docker run -d --name registry-smoke -p 127.0.0.1:3210:3000 -e TRUST_PROXY=1 xiom-registry:ci
           healthy=0
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3210/health >/dev/null 2>&1; then
@@ -88,6 +90,11 @@ jobs:
           done
           if ! curl -fsS -H 'Accept: text/html' http://127.0.0.1:3210/publish | grep -q 'Publishing to XIOM'; then
             echo "::error::/publish did not render the guide"
+            docker logs registry-smoke
+            exit 1
+          fi
+          if docker logs registry-smoke 2>&1 | grep -q 'ERR_ERL'; then
+            echo "::error::rate-limiter validation error in the boot log (trust proxy setting?)"
             docker logs registry-smoke
             exit 1
           fi

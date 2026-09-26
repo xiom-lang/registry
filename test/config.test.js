@@ -181,3 +181,25 @@ test('oauth: a too-short secret fails fast', () => {
     assert.throws(() => loadConfig(), /too short/);
   });
 });
+
+test('TRUST_PROXY is a hop count or allowlist, never a permissive boolean', () => {
+  const cases = [
+    [undefined, false],
+    ['', false],
+    ['0', false],
+    ['false', false],
+    ['off', false],
+    ['1', 1],
+    // Legacy value: keep it working, but never hand Express `true`.
+    ['true', 1],
+    ['2', 2],
+    ['loopback', 'loopback'],
+    ['127.0.0.1', '127.0.0.1'],
+  ];
+  for (const [raw, expected] of cases) {
+    withEnv({ TOKENS_FILE: undefined, API_KEY: 'k', TRUST_PROXY: raw }, () => {
+      const config = loadConfig();
+      assert.deepEqual(config.trustProxy, expected, `TRUST_PROXY=${String(raw)}`);
+    });
+  }
+});

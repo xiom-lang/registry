@@ -127,7 +127,10 @@ services:
       - TOKENS_FILE=/run/secrets/xiom-tokens.json
       - TRUSTED_PUBLISHERS_FILE=${XIOM_STAGING_TRUSTED_PUBLISHERS_FILE:-/etc/xiom-registry/staging/trusted-publishers.json}
       - REGISTRY_URL=${XIOM_STAGING_REGISTRY_URL:-https://staging.registry.xiom-lang.org}
-      - TRUST_PROXY=${TRUST_PROXY:-0}
+      # Behind nginx this must be a hop count (1), never true. Staging can be
+      # tuned independently of production; the shared TRUST_PROXY is the
+      # fallback so an existing .env keeps working.
+      - TRUST_PROXY=${XIOM_STAGING_TRUST_PROXY:-${TRUST_PROXY:-0}}
       # Separate OAuth app per environment; both values or neither.
       - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID:-}
       - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET:-}

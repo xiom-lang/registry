@@ -346,6 +346,30 @@ recreate applies the caps without any application change. Prefer applying a
 production recreate outside an active publish batch window (survivable either
 way -- publishes are atomic -- but a quiet window avoids needless retries).
 
+### Proxy and rate limiting
+
+Behind Hestia nginx set `TRUST_PROXY=1` (one hop). The app maps that to Express
+`trust proxy = 1`, so `req.ip` is the address nginx appended to
+`X-Forwarded-For`, not the client-controlled leftmost entry. `TRUST_PROXY=true`
+is deliberately coerced to 1 hop: a permissive setting lets anyone spoof XFF
+and rotate rate-limit buckets, and express-rate-limit logs
+`ERR_ERL_PERMISSIVE_TRUST_PROXY` on every request while the limiter effectively
+fails open. Accepted values: unset/`0`/`false`/`off` (no proxy), a hop count
+(`1`, `2`, ...), or an Express allowlist (`loopback`, CIDR lists). Staging can
+be tuned independently with `XIOM_STAGING_TRUST_PROXY` (falls back to the
+shared `TRUST_PROXY`).
+
+Verify enforcement after a deploy — the same client with rotating spoofed XFF
+must share one bucket, and the counter must keep falling instead of resetting:
+
+```
+for i in 1 2 3; do
+  curl -sI -H "X-Forwarded-For: 203.0.113.${i}" \
+    https://registry.xiom-lang.org/packages | grep -i '^ratelimit'
+done
+docker logs --tail 200 xiom-registry 2>&1 | grep ERR_ERL   # expect no output
+```
+
 ## Tokens
 
 Generate or append a publish token (never commit the file):
@@ -582,7 +606,8 @@ re-cloned; a `.mailmap` does not fix GitHub attribution.
 - `container_name: xiom-registry` is fixed in the compose file; a second
   instance needs its own compose file with a renamed container and volumes.
 - `REGISTRY_URL` is advertised in `/index.json`; set it per instance.
-- Rate limiting trusts `X-Forwarded-For` because `TRUST_PROXY=1`; keep that
-  set when behind Hestia.
+- Rate limiting trusts `X-Forwarded-For` only for the configured hop count
+  (`TRUST_PROXY=1`); see "Proxy and rate limiting". Never use a permissive
+  trust setting: it is coerced to 1 and flags `ERR_ERL_PERMISSIVE_TRUST_PROXY`.
 - Backups (restic) for the two volumes are not automated yet - see the
   release/infra queue in `xiom-lang/.github`.
