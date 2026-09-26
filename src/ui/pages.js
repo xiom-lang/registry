@@ -57,18 +57,20 @@ function packageBadgeState(name, pkg) {
   const signed = Boolean(latest && latest.signature && latest.publicKey);
   const oidcTrusted = Boolean(latest && latest.publisher
     && typeof latest.publisher.repository === 'string');
-  const badge = (state, communityLabel, officialLabel = communityLabel) => {
-    const pills = state === 'trusted' ? (signed ? ['trusted', 'signed'] : ['trusted'])
-      : (state === 'verified' ? ['signed'] : []);
-    // Human review is a distinct claim alongside publisher claims; a flagged
-    // package shows the flagged art and no claim pills.
-    if (pkg && pkg.reviewed === true && state !== 'flagged') pills.push('reviewed');
-    return {
-      file: `pgk_${state}_${track}.webp`,
-      label: official ? officialLabel : communityLabel,
-      pills,
-    };
-  };
+  // Claim pills are independent of the state art (owner's matrix note): the
+  // art shows state x track, the pills spell out what the registry proved, so
+  // an incubating package still shows trusted/signed/reviewed.
+  const pills = [];
+  if (!(pkg && pkg.flagged === true)) {
+    if (track === 'community' && oidcTrusted) pills.push('trusted');
+    if (signed) pills.push('signed');
+    if (pkg && pkg.reviewed === true) pills.push('reviewed');
+  }
+  const badge = (state, communityLabel, officialLabel = communityLabel) => ({
+    file: `pgk_${state}_${track}.webp`,
+    label: official ? officialLabel : communityLabel,
+    pills,
+  });
 
   if (pkg && pkg.flagged === true) {
     return badge('flagged', 'Flagged by a registry reviewer');

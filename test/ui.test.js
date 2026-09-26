@@ -542,6 +542,21 @@ test('packageBadgeState precedence and track selection', () => {
   const reviewedFlagged = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { reviewed: true, flagged: true }));
   assert.equal(stateOf(reviewedFlagged), 'flagged');
   assert.deepEqual(reviewedFlagged.pills, []);
+
+  // Claim pills are independent of the state art: an incubating package still
+  // shows what the registry proved (trusted/signed/reviewed).
+  const incubating = packageBadgeState('demo-pkg', make('demo-pkg', '0.1.0', signed, { stage: 'incubating' }));
+  assert.equal(stateOf(incubating), 'incubator');
+  assert.deepEqual(incubating.pills, ['signed']);
+
+  const incubatingTrusted = packageBadgeState('demo-pkg', make(
+    'demo-pkg',
+    '0.1.0',
+    { ...signed, publisher: { repository: 'alice/demo' } },
+    { stage: 'incubating' },
+  ));
+  assert.equal(stateOf(incubatingTrusted), 'incubator');
+  assert.deepEqual(incubatingTrusted.pills, ['trusted', 'signed']);
 });
 
 test('readme is served from the stored tarball and rendered safely', async () => {
