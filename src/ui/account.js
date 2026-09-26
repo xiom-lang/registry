@@ -18,6 +18,12 @@ const STATUS_LABELS = {
   fulfilled: 'fulfilled',
 };
 
+const ROLE_LABELS = {
+  admin: 'maintainer (admin)',
+  reviewer: 'reviewer',
+  member: 'member',
+};
+
 function noticeBox(notice, error) {
   const parts = [];
   if (notice) parts.push(`<p class="notice" role="status">${escapeHtml(notice)}</p>`);
@@ -42,6 +48,40 @@ function kindLabel(record) {
   return record.kind === 'publisher' ? 'trusted publisher' : 'token';
 }
 
+/** Shared tabs for the four account pages. */
+function accountTabs(active) {
+  const tab = (href, label, key) => {
+    const current = active === key;
+    return `<a class="account-tab${current ? ' active' : ''}" href="${href}"`
+      + `${current ? ' aria-current="page"' : ''}>${escapeHtml(label)}</a>`;
+  };
+  return `<nav class="account-tabs" aria-label="Account pages">
+  ${tab('/account', 'Overview', 'overview')}
+  ${tab('/account/requests', 'Requests', 'requests')}
+  ${tab('/account/notifications', 'Notifications', 'notifications')}
+  ${tab('/account/settings', 'Settings', 'settings')}
+</nav>`;
+}
+
+function historyLine(record) {
+  if (!Array.isArray(record.history) || record.history.length === 0) return '';
+  const parts = record.history.map((entry) => {
+    const note = entry.note ? ` (${entry.note})` : '';
+    return `${entry.action} by @${entry.actor || '?'}${note}`;
+  });
+  return `<p class="pkg-meta request-history">${escapeHtml(parts.join(' \u00b7 '))}</p>`;
+}
+
+/** Status + suspension banner shared by every account page. */
+function accountBanner({ account, status, notice, error }) {
+  const suspended = status === 'suspended'
+    ? '<p class="notice notice-muted" role="status">This account is suspended: you can browse and '
+      + 'read everything, but requests, reports, and ratings are disabled. Contact '
+      + '<a href="mailto:registry@xiom-lang.org">registry@xiom-lang.org</a> to resolve it.</p>'
+    : '';
+  return `${suspended}\n${noticeBox(notice, error)}`;
+}
+
 /** Sign-in landing page (also the friendly result page for OAuth failures). */
 function loginPage({ enabled, error = '', nav = '' }) {
   const body = enabled
@@ -59,106 +99,100 @@ ${noticeBox('', error ? 'Sign-in failed or was cancelled. Try again.' : '')}
      <a href="https://xiom-lang.org/terms.html">Terms of Use</a> and
      <a href="https://xiom-lang.org/privacy.html">Privacy Policy</a>.</p>
   <p class="pkg-meta">Publishing does not need sign-in:
-     <a href="/packages">browse packages</a> or read
-     <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">PUBLISHING.md</a>.</p>
+     <a href="/packages">browse packages</a> or read the
+     <a href="/publish">publishing guide</a>.</p>
 </div>`
     : `<section class="hero">
   <h1>Sign in</h1>
   <p>GitHub sign-in is not configured on this registry. Publishing is unaffected:
-     tokens and OIDC trusted publishing keep working exactly as documented in
-     <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">PUBLISHING.md</a>.</p>
+     tokens and OIDC trusted publishing keep working exactly as documented in the
+     <a href="/publish">publishing guide</a>.</p>
 </section>`;
   return layout({ title: 'Sign in', body, nav });
 }
 
-/** Self-service request form + the requester's own request list. */
-function accountPage({
-  account,
-  requests,
-  notifications = [],
-  notifyEmail = '',
-  csrf,
-  notice = '',
-  error = '',
-  form = {},
-  nav = '',
-  admin = false,
-}) {
-  const defaults = {
+/** Self-service request form, shared by the requests page (Signed in only). */
+function requestForm({ csrf, defaults = {}, disabled = false }) {
+  const values = {
     kind: 'token',
     scopes: '',
     repository: '',
     workflow: '',
     refs: '',
     note: '',
-    ...form,
+    ...defaults,
   };
-  const formHtml = `<form class="request-form" method="post" action="/requests" id="request">
+  return `<form class="request-form" method="post" action="/requests" id="request">
   <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
   <fieldset>
     <legend>What do you need?</legend>
     <label class="radio-row"><input type="radio" name="kind" value="token"
-      ${defaults.kind === 'token' ? 'checked' : ''}>
-      <span><strong>Publish token</strong> &mdash; you publish from your own machine or CI.
-      A maintainer mints a token scoped to your package on the registry host and sends it
-      to you privately; you sign with your key, so the package shows as <strong>verified</strong>.
-      Choose this when the package is not published from GitHub Actions.</span></label>
+      ${values.kind === 'token' ? 'checked' : ''}${disabled ? ' disabled' : ''}>
+      <span><strong>Publish token</strong> &mdash; for publishing from your own machine,
+      or CI that is not GitHub Actions. A maintainer mints a token scoped to your
+      package and sends it to you privately. You still sign with your own key.</span></label>
     <label class="radio-row"><input type="radio" name="kind" value="publisher"
-      ${defaults.kind === 'publisher' ? 'checked' : ''}>
-      <span><strong>Trusted publisher</strong> &mdash; you publish from a GitHub Actions
-      workflow. <strong>Nothing is minted and no secret exists:</strong> the registry
-      verifies your repository + workflow + ref through GitHub OIDC, so the package shows
-      as <strong>trusted</strong>. Recommended.</span></label>
-    <p class="pkg-meta">The human <strong>reviewed</strong> mark is separate from both:
-       a reviewer sets it after looking at the package, and anyone can report a package
-       for review.</p>
+      ${values.kind === 'publisher' ? 'checked' : ''}${disabled ? ' disabled' : ''}>
+      <span><strong>Trusted publisher</strong> &mdash; for publishing from GitHub Actions.
+      <strong>No secret exists:</strong> the registry verifies your repository, workflow,
+      and ref through GitHub OIDC. One click for maintainers to approve.
+      <strong>Recommended.</strong></span></label>
+    <p class="pkg-meta">Not sure which one? Read the
+       <a href="/publish">5-minute publishing guide</a>; it walks through both paths,
+       tags, and the workflow template.</p>
   </fieldset>
   <div class="form-grid">
     <label class="form-field">
-      <span>Package names or namespaces</span>
-      <input name="scopes" value="${escapeHtml(defaults.scopes)}"
-        placeholder="my-lib, my-namespace" autocomplete="off" required>
+      <span>Package names or namespaces you publish</span>
+      <input name="scopes" value="${escapeHtml(values.scopes)}"
+        placeholder="my-lib, my-namespace" autocomplete="off" required${disabled ? ' disabled' : ''}>
       <small>Comma-separated. A namespace like <code>my-ns</code> covers
       <code>my-ns.*</code>; <code>*</code> is never granted from this form.</small>
     </label>
   </div>
   <fieldset class="publisher-fields">
     <legend>Trusted publisher details (only for a trusted-publisher request)</legend>
-    <p class="pkg-meta">First time? <a href="/ui/templates/community-publish.yml">Download the workflow template</a>,
-       save it as <code>.github/workflows/publish-registry.yml</code> in your repo, then fill these fields.</p>
+    <p class="pkg-meta">First time? <a href="/ui/templates/community-publish.yml">Download the workflow
+       template</a>, save it as <code>.github/workflows/publish-registry.yml</code> in your repo
+       (the <a href="/publish">guide</a> shows exactly where), then fill these fields.</p>
     <div class="form-grid">
       <label class="form-field">
         <span>Repository (owner/repo)</span>
-        <input name="repository" value="${escapeHtml(defaults.repository)}"
-          placeholder="alice/my-lib" autocomplete="off">
+        <input name="repository" value="${escapeHtml(values.repository)}"
+          placeholder="alice/my-lib" autocomplete="off"${disabled ? ' disabled' : ''}>
       </label>
       <label class="form-field">
         <span>Workflow file</span>
-        <input name="workflow" value="${escapeHtml(defaults.workflow)}"
-          placeholder="publish.yml" autocomplete="off">
+        <input name="workflow" value="${escapeHtml(values.workflow)}"
+          placeholder="publish-registry.yml" autocomplete="off"${disabled ? ' disabled' : ''}>
         <small>Path under <code>.github/workflows/</code>.</small>
       </label>
       <label class="form-field">
         <span>Refs</span>
-        <input name="refs" value="${escapeHtml(defaults.refs)}"
-          placeholder="refs/heads/main" autocomplete="off">
-        <small>Comma-separated refs that may publish.</small>
+        <input name="refs" value="${escapeHtml(values.refs)}"
+          placeholder="refs/tags/v*, refs/heads/main" autocomplete="off"${disabled ? ' disabled' : ''}>
+        <small>Comma-separated. For releases, <code>refs/tags/v*</code> is usually what you want.</small>
       </label>
     </div>
   </fieldset>
   <div class="form-grid">
     <label class="form-field">
       <span>Note (optional)</span>
-      <textarea name="note" rows="3" maxlength="500"
-        placeholder="Anything the reviewer should know">${escapeHtml(defaults.note)}</textarea>
+      <textarea name="note" rows="3" maxlength="500"${disabled ? ' disabled' : ''}
+        placeholder="Anything the reviewer should know">${escapeHtml(values.note)}</textarea>
     </label>
   </div>
-  <button class="button primary" type="submit">Submit request</button>
+  <button class="button primary" type="submit"${disabled ? ' disabled' : ''}>Submit request</button>
 </form>`;
+}
 
-  const rows = requests.length === 0
-    ? '<p class="pkg-meta">No requests yet.</p>'
-    : `<table class="versions request-table table-cards">
+/** Full request history table for /account/requests. */
+function requestTable(requests) {
+  if (requests.length === 0) {
+    return '<div class="empty">No requests yet. Fill in the form above and a maintainer '
+      + 'will review it, usually within a day.</div>';
+  }
+  return `<table class="versions request-table table-cards">
   <thead><tr><th>Request</th><th>Kind</th><th>Scope / target</th><th>Status</th><th>Updated</th></tr></thead>
   <tbody>
 ${requests.map((record) => {
@@ -173,74 +207,209 @@ ${requests.map((record) => {
   }).join('\n')}
   </tbody>
 </table>`;
+}
 
-  const avatar = typeof account.avatarUrl === 'string' && account.avatarUrl.startsWith('https://')
-    ? `<img class="account-avatar" src="${escapeHtml(account.avatarUrl)}" alt=""`
-      + ' width="48" height="48" loading="lazy" referrerpolicy="no-referrer">'
-    : '';
-  const notificationRows = notifications.length === 0
-    ? '<p class="pkg-meta">Nothing yet. Approvals, review decisions, and fulfilment notices appear here.</p>'
-    : `<ul class="request-list">
-${notifications.map((entry) => `  <li class="request-card${entry.readAt ? ' closed' : ''}">
+/** Compact "latest requests" list for the overview page. */
+function requestPreview(requests) {
+  if (requests.length === 0) {
+    return '<p class="pkg-meta">No requests yet. '
+      + '<a href="/account/requests">Request a token or a trusted publisher</a> when you are ready to publish.</p>';
+  }
+  return `<ul class="request-list">
+${requests.slice(0, 3).map((record) => `  <li class="request-card">
+    <div class="request-head">
+      <span class="request-id">${shortId(record.id)}</span>
+      ${statusPill(record.status)}
+      <span class="pkg-meta">${escapeHtml(kindLabel(record))} &middot; ${formatWhen(record.createdAt)}</span>
+    </div>
+    <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
+  </li>`).join('\n')}
+</ul>
+<p class="pkg-meta"><a href="/account/requests">All requests and the request form &rarr;</a></p>`;
+}
+
+function notificationCards(notifications, { compact = false } = {}) {
+  const list = compact ? notifications.slice(0, 3) : notifications;
+  if (list.length === 0) {
+    return '<p class="pkg-meta">Nothing yet. Approvals, review decisions, and '
+      + 'fulfilment notices appear here.</p>';
+  }
+  return `<ul class="request-list">
+${list.map((entry) => `  <li class="request-card${entry.readAt ? ' closed' : ''}">
     <div class="request-head">
       <span class="mono">${escapeHtml(entry.kind)}</span>
+      ${entry.readAt ? '' : '<span class="status-pill status-pending">new</span>'}
       <span class="pkg-meta">${formatWhen(entry.createdAt)}</span>
     </div>
     <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
     ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
   </li>`).join('\n')}
 </ul>`;
+}
 
-  const body = `<section class="hero account-hero">
+function accountHero(account, { title, subtitle = '' }) {
+  const avatar = typeof account.avatarUrl === 'string' && account.avatarUrl.startsWith('https://')
+    ? `<img class="account-avatar" src="${escapeHtml(account.avatarUrl)}" alt=""`
+      + ' width="48" height="48" loading="lazy" referrerpolicy="no-referrer">'
+    : '';
+  return `<section class="hero account-hero">
   ${avatar}
   <div>
-    <h1>@${escapeHtml(account.login)}</h1>
+    <h1>${escapeHtml(title || `@${account.login}`)}</h1>
     <div class="meta-row">
       <span><a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">github.com/${escapeHtml(account.login)}</a></span>
-      <span>Signed in ${formatWhen(account.lastLoginAt)}</span>
+      ${subtitle}
     </div>
   </div>
-</section>
-${noticeBox(notice, error)}
+</section>`;
+}
+
+/**
+ * Account overview: who you are, role/status, and the newest activity.
+ * `role` is 'admin' | 'reviewer' | 'member'; `status` is 'active' | 'suspended'.
+ */
+function accountOverviewPage({
+  account,
+  role = 'member',
+  status = 'active',
+  requests = [],
+  notifications = [],
+  csrf,
+  notice = '',
+  error = '',
+  nav = '',
+}) {
+  const unread = notifications.filter((entry) => !entry.readAt).length;
+  const body = `${accountHero(account, {
+    subtitle: `<span>Joined ${formatWhen(account.createdAt)}</span>`
+      + `<span>Last sign-in ${formatWhen(account.lastLoginAt)}</span>`
+      + `<span class="status-pill status-approved">${escapeHtml(ROLE_LABELS[role] || role)}</span>`,
+  })}
+${accountTabs('overview')}
+${accountBanner({ account, status, notice, error })}
 <div class="account-grid">
   <section>
-    <h2>New request</h2>
-    ${formHtml}
+    <h2>Requests</h2>
+    ${requestPreview(requests)}
   </section>
   <section>
-    <h2>My requests</h2>
-    ${rows}
-    ${admin ? '<p class="pkg-meta"><a href="/admin/requests">Open the admin approval queue</a></p>' : ''}
-    <h2>Notifications</h2>
-    ${notificationRows}
+    <h2>Notifications <span class="count">${unread > 0 ? `${unread} new` : ''}</span></h2>
+    ${notificationCards(notifications, { compact: true })}
+    <p class="pkg-meta"><a href="/account/notifications">All notifications${unread > 0 ? ` (${unread} new)` : ''} &rarr;</a></p>
+  </section>
+</div>
+${role === 'admin'
+    ? '<p class="pkg-meta"><a href="/admin">Open the admin console &rarr;</a></p>'
+    : ''}
+${role === 'reviewer'
+    ? '<p class="pkg-meta"><a href="/review">Open the review queue &rarr;</a></p>'
+    : ''}
+<form method="post" action="/logout" class="account-signout">
+  <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+  <button class="button" type="submit">Sign out</button>
+</form>`;
+  return layout({ title: `@${account.login}`, body, nav });
+}
+
+/** Request form + history. */
+function accountRequestsPage({
+  account,
+  requests = [],
+  csrf,
+  notice = '',
+  error = '',
+  form = {},
+  status = 'active',
+  nav = '',
+}) {
+  const body = `${accountHero(account, { title: 'Requests' })}
+${accountTabs('requests')}
+${accountBanner({ account, status, notice, error })}
+<h2>New request</h2>
+${status === 'active'
+    ? requestForm({ csrf, defaults: form })
+    : '<p class="notice notice-muted">Requests are disabled while this account is suspended.</p>'}
+<h2>My requests <span class="count">${requests.length}</span></h2>
+${requestTable(requests)}`;
+  return layout({ title: 'Requests', body, nav });
+}
+
+/** In-app notifications, read state, and the mark-all-read action. */
+function accountNotificationsPage({
+  account,
+  notifications = [],
+  csrf,
+  notice = '',
+  error = '',
+  status = 'active',
+  nav = '',
+}) {
+  const unread = notifications.filter((entry) => !entry.readAt).length;
+  const body = `${accountHero(account, { title: 'Notifications' })}
+${accountTabs('notifications')}
+${accountBanner({ account, status, notice, error })}
+<section>
+  <h2>In-app notices <span class="count">${unread > 0 ? `${unread} new` : notifications.length}</span></h2>
+  ${unread > 0
+    ? `<form method="post" action="/account/notifications/read" class="inline-form">
+    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+    <button class="button" type="submit">Mark all as read</button>
+  </form>`
+    : ''}
+  ${notificationCards(notifications)}
+  <p class="pkg-meta">Email delivery is optional and configured in
+     <a href="/account/settings">Settings</a>.</p>
+</section>`;
+  return layout({ title: 'Notifications', body, nav });
+}
+
+/** Account settings: notification email, session, and account facts. */
+function accountSettingsPage({
+  account,
+  notifyEmail = '',
+  csrf,
+  notice = '',
+  error = '',
+  role = 'member',
+  status = 'active',
+  nav = '',
+}) {
+  const body = `${accountHero(account, { title: 'Settings' })}
+${accountTabs('settings')}
+${accountBanner({ account, status, notice, error })}
+<div class="account-grid">
+  <section>
+    <h2>Notification email</h2>
+    <p class="pkg-meta">Used only for approvals, review decisions, and fulfilment notices.</p>
     <form method="post" action="/account/email" class="email-form" id="email">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <div class="form-grid">
         <label class="form-field">
-          <span>Notification email</span>
+          <span>Email address</span>
           <input name="email" type="email" value="${escapeHtml(notifyEmail)}"
             placeholder="you@example.com" autocomplete="email">
-          <small>Used only for approvals, review decisions, and fulfilment notices; clear it to turn emails off.</small>
+          <small>Clear the field and save to turn email off. In-app notices still appear here.</small>
         </label>
       </div>
-      <button class="button" type="submit">Save email</button>
+      <button class="button primary" type="submit">Save email</button>
     </form>
+  </section>
+  <section>
+    <h2>Account</h2>
+    <dl class="detail-grid review-history-list">
+      <div class="detail"><dt>GitHub account</dt><dd>@${escapeHtml(account.login)}</dd></div>
+      <div class="detail"><dt>Joined</dt><dd>${formatWhen(account.createdAt)}</dd></div>
+      <div class="detail"><dt>Role</dt><dd>${escapeHtml(ROLE_LABELS[role] || role)}</dd></div>
+      <div class="detail"><dt>Status</dt><dd>${status === 'active' ? 'active' : escapeHtml(status)}</dd></div>
+    </dl>
+    <p class="pkg-meta">Roles are granted by maintainers in the admin console and every change is audited.</p>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <button class="button" type="submit">Sign out</button>
     </form>
   </section>
 </div>`;
-  return layout({ title: `@${account.login}`, body, nav });
-}
-
-function historyLine(record) {
-  if (!Array.isArray(record.history) || record.history.length === 0) return '';
-  const parts = record.history.map((entry) => {
-    const note = entry.note ? ` (${entry.note})` : '';
-    return `${entry.action} by @${entry.actor || '?'}${note}`;
-  });
-  return `<p class="pkg-meta request-history">${escapeHtml(parts.join(' Â· '))}</p>`;
+  return layout({ title: 'Settings', body, nav });
 }
 
 function pendingRow(record, csrf) {
@@ -352,4 +521,14 @@ ${section('Closed', closed, 'No closed requests yet.', (record) => closedRow(rec
   return layout({ title: 'Approval queue', body, nav });
 }
 
-module.exports = { loginPage, accountPage, adminPage, requestTarget, kindLabel };
+module.exports = {
+  loginPage,
+  accountOverviewPage,
+  accountRequestsPage,
+  accountNotificationsPage,
+  accountSettingsPage,
+  adminPage,
+  requestForm,
+  requestTarget,
+  kindLabel,
+};

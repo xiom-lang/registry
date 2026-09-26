@@ -194,7 +194,7 @@ test('sign-in round trip, request lifecycle, and admin fulfilment', async () => 
   assert.equal(response.status, 200);
   html = await response.text();
   assert.match(html, /@admin-user/);
-  assert.match(html, /href="\/admin\/requests"/, 'admins get the queue link');
+  assert.match(html, /href="\/admin"/, 'admins get the console link');
   const csrf = csrfFrom(html);
 
   response = await requestAs(jar, '/requests', {
@@ -288,7 +288,7 @@ test('CSRF is enforced and non-admins cannot reach the queue', async () => {
   let response = await requestAs(jar, '/account');
   let html = await response.text();
   assert.match(html, /@user-user/);
-  assert.doesNotMatch(html, /href="\/admin\/requests"/);
+  assert.doesNotMatch(html, /href="\/admin"/);
   const csrf = csrfFrom(html);
 
   response = await requestAs(jar, '/requests', {
@@ -524,7 +524,7 @@ test('accounts set a notification email and see in-app notices', async () => {
   const jar = cookieJar();
   await login(jar, 'user-code');
 
-  let response = await requestAs(jar, '/account', { headers: BROWSER });
+  let response = await requestAs(jar, '/account/settings', { headers: BROWSER });
   let html = await response.text();
   const csrf = csrfFrom(html);
   assert.match(html, /Notification email/);
@@ -534,7 +534,8 @@ test('accounts set a notification email and see in-app notices', async () => {
     body: new URLSearchParams({ csrf, email: 'not-an-email' }),
   });
   assert.equal(response.status, 303);
-  response = await requestAs(jar, '/account#email', { headers: BROWSER });
+  assert.equal(response.headers.get('location'), '/account/settings');
+  response = await requestAs(jar, '/account/settings', { headers: BROWSER });
   html = await response.text();
   assert.match(html, /does not look valid/);
 
@@ -543,6 +544,7 @@ test('accounts set a notification email and see in-app notices', async () => {
     body: new URLSearchParams({ csrf, email: 'dev@example.com' }),
   });
   assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/settings?email=1');
   const accountsData = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.equal(accountsData.accounts['777'].notifyEmail, 'dev@example.com');
 });
@@ -647,6 +649,83 @@ test('OAuth state is verified and single-use', async () => {
 
   response = await requestAs(jar, `/auth/github/callback?code=admin-code&state=${state}`);
   assert.equal(response.status, 403, 'the callback cannot be replayed');
+});
+
+test('account pages split into overview, requests, notifications, and settings', async () => {
+  const jar = cookieJar();
+  await login(jar, 'user-code');
+
+  // Overview: identity, role, and a pointer to the request form.
+  let response = await requestAs(jar, '/account', { headers: BROWSER });
+  assert.equal(response.status, 200);
+  let html = await response.text();
+  assert.match(html, /aria-label="Account pages"/);
+  assert.match(html, /href="\/account\/requests"/);
+  assert.match(html, /href="\/account\/notifications"/);
+  assert.match(html, /href="\/account\/settings"/);
+  assert.match(html, /reviewer/, 'the role is visible');
+  assert.match(html, /Last sign-in/);
+
+  // Requests page: the form plus the history table.
+  response = await requestAs(jar, '/account/requests', { headers: BROWSER });
+  assert.equal(response.status, 200);
+  html = await response.text();
+  assert.match(html, /New request/);
+  assert.match(html, /Publish token/);
+  assert.match(html, /Trusted publisher/);
+  assert.match(html, /href="\/publish"/);
+  assert.match(html, /My requests/);
+
+  // Submitting lands on the requests page with a confirmation.
+  const csrf = csrfFrom(html);
+  response = await requestAs(jar, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, kind: 'token', scopes: 'pages-demo' }),
+  });
+  assert.equal(response.status, 303);
+  const location = new URL(response.headers.get('location'), baseUrl);
+  assert.equal(location.pathname, '/account/requests');
+  const created = location.searchParams.get('created');
+  assert.match(created, /^req_[0-9a-f]{12}$/);
+  response = await requestAs(jar, `${location.pathname}${location.search}`, { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, new RegExp(created));
+  assert.match(html, /submitted for review/);
+
+  // Notifications page: opening it does not mark anything read; the explicit
+  // action does.
+  const { notifications } = app.locals.registry;
+  notifications.enqueue({
+    account: { githubId: '777', login: 'user-user' },
+    kind: 'request',
+    subject: 'Your request needs more detail',
+    body: 'Please list the exact package names.',
+  });
+  response = await requestAs(jar, '/account/notifications', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Your request needs more detail/);
+  assert.match(html, /Mark all as read/);
+  assert.equal(
+    notifications.listFor('777', { limit: 5 }).filter((entry) => !entry.readAt).length,
+    1,
+    'viewing the page does not mark notices read',
+  );
+
+  const noticeCsrf = csrfFrom(html);
+  response = await requestAs(jar, '/account/notifications/read', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: noticeCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/notifications?read=1');
+  assert.equal(notifications.listFor('777', { limit: 5 }).filter((entry) => !entry.readAt).length, 0);
+
+  // Settings page: email form, account facts, sign-out.
+  response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Notification email/);
+  assert.match(html, /action="\/logout"/);
+  assert.match(html, /Signed in as|\@user-user/);
 });
 
 test('a registry without OAuth hides sign-in and refuses account routes', async () => {

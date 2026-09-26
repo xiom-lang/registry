@@ -835,6 +835,29 @@ table.versions tr:hover td { background: var(--panel); }
 }
 .account-card .button { margin-bottom: var(--space-md); }
 
+/* Account sub-pages: Overview / Requests / Notifications / Settings. */
+.account-tabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: var(--space-md);
+  margin: var(--space-md) 0 var(--space-lg);
+  overflow-x: auto;
+}
+.account-tab {
+  border-bottom: 2px solid transparent;
+  color: var(--paper-dim);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 2px;
+  white-space: nowrap;
+}
+.account-tab:hover { color: var(--paper); }
+.account-tab.active { border-bottom-color: var(--signal); color: var(--paper); }
+.account-signout { margin-top: var(--space-xl); }
+.inline-form { margin-bottom: var(--space-md); }
+.mint-details { margin-top: var(--space-md); }
+.mint-details summary { color: var(--paper-dim); cursor: pointer; font-size: 14px; }
+
 .account-hero { align-items: center; display: flex; gap: var(--space-md); }
 .account-avatar {
   border: 1px solid var(--line);
@@ -973,6 +996,7 @@ textarea:focus-visible {
   .button,
   .site-header nav a.nav-button,
   .nav-more summary,
+  .account-tab,
   .chip,
   .page-link {
     align-items: center;

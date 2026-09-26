@@ -68,7 +68,14 @@ const {
   DEFAULT_PER_PAGE,
   MAX_PER_PAGE,
 } = require('./ui/pages');
-const { loginPage, accountPage, adminPage } = require('./ui/account');
+const {
+  loginPage,
+  accountOverviewPage,
+  accountRequestsPage,
+  accountNotificationsPage,
+  accountSettingsPage,
+  adminPage,
+} = require('./ui/account');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
 
@@ -876,34 +883,86 @@ function createApp(config = loadConfig()) {
     }
   });
 
-  app.get('/account', generalLimit, (req, res) => {
-    if (!config.oauth.enabled) return res.redirect(302, '/login');
-    const account = accountOf(req);
-    if (!account) {
-      return res.redirect(302, `/login?returnTo=${encodeURIComponent('/account')}`);
-    }
-    const stored = accounts.get(account.githubId) || account;
+  /** Shared context for the /account* pages (identity, role, flash). */
+  function accountContext(req) {
+    const sessionAccount = accountOf(req);
+    if (!sessionAccount) return null;
+    const stored = accounts.get(sessionAccount.githubId) || sessionAccount;
     const flash = req.session.flash || null;
     if (flash) delete req.session.flash;
-    const created = typeof req.query.created === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.created)
-      ? req.query.created
-      : '';
-    const notificationsList = notifications.listFor(account.githubId, { limit: 20 });
-    notifications.markAllRead(account.githubId);
-    const notice = created
-      ? `Request ${created} submitted for review.`
-      : (req.query.email === '1' ? 'Notification email saved.' : '');
-    res.type('html').send(accountPage({
+    return {
       account: stored,
-      requests: requests.list({ requesterId: account.githubId }),
-      notifications: notificationsList,
-      notifyEmail: stored.notifyEmail || '',
+      role: isAdmin(sessionAccount)
+        ? 'admin'
+        : (isReviewer(sessionAccount) ? 'reviewer' : 'member'),
+      status: 'active',
       csrf: req.session.csrf,
-      notice,
       error: flash && flash.error ? flash.error : '',
       form: flash && flash.form ? flash.form : {},
       nav: accountNav(req),
-      admin: isAdmin(account),
+    };
+  }
+
+  function requireAccount(req, res, next) {
+    if (!config.oauth.enabled) return res.redirect(302, '/login');
+    if (!accountOf(req)) {
+      return res.redirect(302, `/login?returnTo=${encodeURIComponent(req.originalUrl || '/account')}`);
+    }
+    next();
+  }
+
+  app.get('/account', generalLimit, requireAccount, (req, res) => {
+    const context = accountContext(req);
+    const notice = req.query.email === '1' ? 'Notification email saved.' : '';
+    res.type('html').send(accountOverviewPage({
+      ...context,
+      requests: requests.list({ requesterId: context.account.githubId }),
+      notifications: notifications.listFor(context.account.githubId, { limit: 20 }),
+      notice,
+    }));
+  });
+
+  app.get('/account/requests', generalLimit, requireAccount, (req, res) => {
+    const context = accountContext(req);
+    const created = typeof req.query.created === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.created)
+      ? req.query.created
+      : '';
+    res.type('html').send(accountRequestsPage({
+      ...context,
+      requests: requests.list({ requesterId: context.account.githubId }),
+      notice: created ? `Request ${created} submitted for review.` : '',
+    }));
+  });
+
+  app.get('/account/notifications', generalLimit, requireAccount, (req, res) => {
+    const context = accountContext(req);
+    const read = req.query.read === '1' ? 'All notifications marked as read.' : '';
+    res.type('html').send(accountNotificationsPage({
+      ...context,
+      notifications: notifications.listFor(context.account.githubId, { limit: 50 }),
+      notice: read,
+    }));
+  });
+
+  app.post(
+    '/account/notifications/read',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res) => {
+      notifications.markAllRead(accountOf(req).githubId);
+      res.redirect(303, '/account/notifications?read=1');
+    },
+  );
+
+  app.get('/account/settings', generalLimit, requireAccount, (req, res) => {
+    const context = accountContext(req);
+    const notice = req.query.email === '1' ? 'Notification email saved.' : '';
+    res.type('html').send(accountSettingsPage({
+      ...context,
+      notifyEmail: context.account.notifyEmail || '',
+      notice,
     }));
   });
 
@@ -919,9 +978,9 @@ function createApp(config = loadConfig()) {
         const saved = accounts.setNotifyEmail(accountOf(req).githubId, raw);
         if (raw.trim() !== '' && saved === '') {
           req.session.flash = { error: 'that email address does not look valid' };
-          return res.redirect(303, '/account#email');
+          return res.redirect(303, '/account/settings');
         }
-        return res.redirect(303, '/account?email=1');
+        return res.redirect(303, '/account/settings?email=1');
       } catch (err) {
         return next(err);
       }
@@ -945,23 +1004,23 @@ function createApp(config = loadConfig()) {
           refs: String(req.body.refs || ''),
           note: String(req.body.note || ''),
         });
-        res.redirect(303, `/account?created=${encodeURIComponent(created.id)}#request`);
-      } catch (err) {
-        if (err instanceof BadRequestError || err instanceof ConflictError) {
-          // Keep the submission on the round trip so the user can fix it.
-          req.session.flash = {
-            error: err.message,
-            form: {
-              kind: String(req.body.kind || 'token'),
-              scopes: String(req.body.scopes || ''),
-              repository: String(req.body.repository || ''),
-              workflow: String(req.body.workflow || ''),
-              refs: String(req.body.refs || ''),
-              note: String(req.body.note || ''),
-            },
-          };
-          return res.redirect(303, '/account#request');
-        }
+          res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
+        } catch (err) {
+          if (err instanceof BadRequestError || err instanceof ConflictError) {
+            // Keep the submission on the round trip so the user can fix it.
+            req.session.flash = {
+              error: err.message,
+              form: {
+                kind: String(req.body.kind || 'token'),
+                scopes: String(req.body.scopes || ''),
+                repository: String(req.body.repository || ''),
+                workflow: String(req.body.workflow || ''),
+                refs: String(req.body.refs || ''),
+                note: String(req.body.note || ''),
+              },
+            };
+            return res.redirect(303, '/account/requests');
+          }
         return next(err);
       }
     },
