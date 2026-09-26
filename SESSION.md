@@ -1886,6 +1886,26 @@ the packages "batch done" signal), ops' account-tab/admin browser smoke and
 the packages staging canary; `A1` ownership claims stays queued for the
 owner's go.
 
+**20.8.4 Ecosystem batch completion and the OIDC token-lifetime finding
+(2026-09-26 17:35Z).** The packages lane signalled both batches complete:
+`eco-v0.1.1` (run `36240424222`, attempt 3, success 15:02:10Z, 231 packages)
+and `eco-v0.1.2` (run `36251091427`, attempt 4, success 17:23:22Z, 19 new
+names); production stands at **250 packages, 250 artifacts digest-matched**,
+`/health` 2.1.0. The earlier attempts failed on the workflow's 30-minute
+ceiling (registry-unrelated) and on `403 scope_denied` until the publisher
+entry scopes were re-synced; the loop is idempotent and resumed cleanly. The
+live scope ledger is 309 names for `eco-release` (production) and
+`eco-canary` (staging); the wave-33 delta (png, gif, mp3, mp4, mkv, snmp,
+imap, amqp, thrift, avro) is requested and `eco-v0.1.3` cuts on `471c5e3`
+once those scopes are live. `xiom.durable` stays intentionally unscoped until
+it is stable and allowlisted; `xiom.tftp@0.1.0` is an owner decision (accept
+the 2026-09-24 build or ship the rewrite as 0.1.1). Workflow finding relayed
+by the packages lane: `publish-registry.yml` mints a single OIDC token per job
+(~6-minute life), so long loops end in `401 oidc_token_expired`; that is a
+workflow-side re-mint issue, now documented as a troubleshooting row in
+PUBLISHING.md ("one publish per job" is the template's pattern). `D5` is
+satisfied from the registry side: ops restores `PUBLISH_RATE_MAX=20` now that
+the completion signal has arrived.
 
 
 
@@ -1904,7 +1924,7 @@ packages, every decision audited, `/index.json` immutable in shape).
 
 | Order | Feature | Notes / source | Size |
 |---|---|---|---|
-| A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. | M |
+| A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **AGREED by the owner 2026-09-26; implementation in progress.** | M |
 | A2 | **Notification coverage** | 18.1: review decisions and ratings writes as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |

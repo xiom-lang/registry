@@ -350,6 +350,7 @@ ping the community channels below.
 |---|---|---|
 | `401 invalid_token` | The token is unknown or was revoked | Re-check the value; request a new token if it was rotated |
 | `401 no bearer token` | `XIOM_REGISTRY_TOKEN` is not set in this shell/job | Export it, or add the repo secret and reference it |
+| `401 oidc_token_expired` | The workflow minted one OIDC token and reused it past its ~6-minute lifetime (long loops over many packages) | Re-mint per publish (or on a 401); the template publishes one package per job, so copy that pattern |
 | `403 scope_denied` | The token is not scoped to this package name | Request a token that includes the name; namespaces cover `ns.*` |
 | `403 publisher_not_mapped` | The OIDC claims do not match an approved entry | Check repo, workflow file name, and ref in your request |
 | `403 oidc_not_configured` | The registry has no OIDC publishers configured | Use the token lane and contact the maintainers |
