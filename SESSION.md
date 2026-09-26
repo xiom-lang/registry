@@ -1818,3 +1818,16 @@ session has no SSH credentials for the VPS, so the deploy has to run where the
 containers live. No protocol change is involved: `/index.json` was not touched
 and the e2e protocol checks passed.
 
+**20.8.1 Staging deploy fix (2026-09-26 later).** The first staging deploy of
+2.1 crash-looped: `src/app.js` read the root `PUBLISHING.md` at module load for
+the `/publish` fallback and the Dockerfile `COPY` line omitted it, so the
+container exited `ENOENT` before listening. Unit/e2e tests could not catch it
+because they run from the checkout. Fixed in `efa7073`: the Dockerfile copies
+`PUBLISHING.md`, the bundled read is lazy and tolerant, `/publish` degrades to
+a GitHub signpost when both sources are missing, and CI now boots the built
+image and smoke-tests `/health`, `/publish`, `/whats-new`, `/packages`, and
+`/index.json` (green run 36245588916). Ops can drop the VPS hot-patch and pull
+`efa7073`; the image was verified locally by building, booting, hitting the
+routes, and confirming `/app/PUBLISHING.md` is present.
+
+
