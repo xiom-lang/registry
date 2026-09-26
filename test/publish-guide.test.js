@@ -138,7 +138,7 @@ test('the Dockerfile copies every root file the service reads at runtime', () =>
   const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf-8');
   const copyLine = dockerfile.split('\n').find((line) => line.startsWith('COPY seed.js'));
   assert.ok(copyLine, 'the root-level COPY line exists');
-  for (const file of ['CHANGELOG.md', 'PUBLISHING.md']) {
+  for (const file of ['CHANGELOG.md', 'PUBLISHING.md', 'stage-overrides.json']) {
     assert.match(copyLine, new RegExp(`(^|\\s)${file.replace('.', '\\.')}(\\s|$)`),
       `${file} is copied into the image`);
   }

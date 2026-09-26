@@ -410,6 +410,38 @@ Remove test values and recreate afterwards. When adding any new operator knob
 to `src/config.js`, declare it in the matching service block; the
 rate-limit family is guarded by `test/compose-env.test.js` in CI.
 
+### Stage overrides (display badges)
+
+Entries published before the publisher workflow stamped `stage:` in the
+manifest have no stage, so their badge falls back to the trust art. The
+generated, PR-reviewed `stage-overrides.json` at the repo root fills that gap
+without burning versions:
+
+```
+# in the publisher clone, then commit the result here for review
+node scripts/generate-stage-overrides.js \
+  --packages-dir ../xiom-packages/packages/packages \
+  --repository xiom-packages/packages \
+  --commit "$(git -C ../xiom-packages/packages rev-parse HEAD)" \
+  --why "badge backfill from STATUS.json" \
+  --index https://registry.xiom-lang.org/index.json \
+  --out stage-overrides.json
+```
+
+Rules baked into the loader (`src/stage-overrides.js`):
+
+- **Display-only.** Nothing in the file can affect publish authorization,
+  OIDC/publisher matching, scopes, readiness, or `/index.json`.
+- **Published data wins.** Package stage, then version stage, then override.
+- **Exclusions**: `xiom.staging-e2e-probe` (e2e fixture) and `xiom.std`
+  (stdlib-owned) are ignored even if listed; unknown stages and unsafe names
+  are dropped. A missing, corrupt, oversized, or stale file never blocks boot.
+- **Audit**: each source revision writes one `stage.override.applied` row
+  (actor `system`, commit, entry count, why) visible in `/admin/audit`.
+
+The file ships in the image (Dockerfile COPY); a deploy picks up a new
+revision. No service restart dance beyond the normal recreate.
+
 ## Tokens
 
 Generate or append a publish token (never commit the file):

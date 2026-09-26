@@ -42,6 +42,7 @@ package canary {
   description: "OIDC trusted-publishing canary";
   categories: ["tooling"];
   license: "MIT OR Apache-2.0";
+  stage: "incubating";
 }
 `;
 }

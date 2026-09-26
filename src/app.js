@@ -65,6 +65,7 @@ const {
   whatsNewPage,
   notFoundPage,
   paginatePackages,
+  setStageOverrides,
   DEFAULT_PER_PAGE,
   MAX_PER_PAGE,
 } = require('./ui/pages');
@@ -85,6 +86,7 @@ const {
   adminAuditPage,
 } = require('./ui/admin');
 const { AdminStore } = require('./admin');
+const { loadStageOverrides } = require('./stage-overrides');
 const { OwnershipStore, maintainerView } = require('./ownership');
 const { publishGuidePage } = require('./ui/publish');
 const { reviewPage } = require('./ui/review');
@@ -212,6 +214,33 @@ function createApp(config = loadConfig()) {
   const admin = new AdminStore({ db });
   const configAdminLogins = new Set(config.oauth.adminLogins.map((login) => String(login).toLowerCase()));
   const configReviewerLogins = new Set(config.oauth.reviewerLogins.map((login) => String(login).toLowerCase()));
+
+  // Audited display-stage overrides (SESSION.md 21.4): generated from the
+  // publisher repo's STATUS.json files at a pinned commit and reviewed as a
+  // PR, then applied here. Display-only -- never publish authorization,
+  // scopes, readiness, or the index protocol. A real published stage always
+  // wins; the override only fills entries that have none.
+  const stageOverrideFile = loadStageOverrides({ path: config.stageOverridesPath });
+  setStageOverrides(stageOverrideFile.overrides);
+  for (const warning of stageOverrideFile.warnings) {
+    console.warn(`xiom-registry: ${warning}`);
+  }
+  if (stageOverrideFile.overrides.size > 0) {
+    const source = stageOverrideFile.source || {};
+    const summary = `commit=${source.commit || 'unknown'} entries=${stageOverrideFile.overrides.size}`;
+    const lastApplied = admin.recentAudit(50)
+      .find((row) => row.action === 'stage.override.applied');
+    if (!lastApplied || !String(lastApplied.detail).startsWith(summary)) {
+      admin.audit({
+        actor: { githubId: '0', login: 'system' },
+        action: 'stage.override.applied',
+        subjectType: 'config',
+        subjectId: 'stage-overrides.json',
+        detail: `${summary}${source.why ? ` - ${source.why}` : ''}`,
+      });
+    }
+    console.log(`xiom-registry: stage overrides applied: ${summary}`);
+  }
   const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
   const outbox = startOutbox({ notifications, mailer });
 

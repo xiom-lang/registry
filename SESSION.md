@@ -2042,6 +2042,43 @@ changed a badge after a restart), and the badge resolver falls back to the
 latest version's stage when the package-level stage is missing. Tests cover
 both; 240 unit tests pass.
 
+**21.4 Audited stage overrides (packages-lane request, 2026-09-26).** Entries
+published before the publisher workflow stamped the manifests carry no stage,
+so their badges fall back to trust art (`xiom.hello` etc. on production; 36
+such names). Re-publishing stable packages at new versions purely for a badge
+would burn immutable versions, so the agreed tool is an audited display-stage
+override:
+
+- **`stage-overrides.json`** (repo root, shipped in the image) maps dotted
+  names to stages. It is generated from the publisher repo's `STATUS.json`
+  files at a pinned commit and reviewed as a PR -- never hand-edited per
+  entry. The initial file was generated at `xiom-packages/packages@9da3143`
+  against the production index: **36 entries (35 stable, 1 incubating --
+  `xiom.hello`)**; `scripts/generate-stage-overrides.js` regenerates it
+  (`--packages-dir`, `--commit`, `--why`, optional `--index` filter,
+  `--dry-run`, `--out`).
+- **Display-only, enforced in code**: `src/stage-overrides.js` is read by the
+  badge resolver and nothing else. It never affects publish authorization,
+  OIDC/publisher matching, token scopes, readiness, or the index protocol.
+- **Published data always wins**: the package stage wins, then the latest
+  version's stage, and only then the override. `xiom.staging-e2e-probe` and
+  `xiom.std` are excluded server-side even if a file lists them; unknown
+  stages, unsafe names, oversized files, and corrupt JSON are dropped with a
+  warning and the service still boots.
+- **Audited**: boot writes one `stage.override.applied` row (actor `system`,
+  `commit=<sha> entries=<n> - <why>`) and does not duplicate it for the same
+  source revision; it shows in `/admin/audit`.
+- The packages lane's badge canary is confirmed end to end: staging
+  `xiom.algo@0.1.1` (STATUS incubating, published 21:29Z) renders
+  `pgk_incubator_official.webp`. The OIDC canary fixture
+  (`scripts/oidc-canary.js`) now stamps `stage: "incubating"` too, so the
+  canary package carries the badge without the override.
+
+Coverage: loader validation/exclusions, generator on a temp STATUS tree, badge
+precedence (override vs package vs version stage), and a boot-audit test;
+245 unit tests and 20 e2e checks pass.
+
+
 
 
 

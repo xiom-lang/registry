@@ -226,6 +226,11 @@ function loadConfig() {
     reviewsPath: process.env.REVIEWS_FILE || path.join(dataDir, 'reviews.json'),
     // Package ownership claims (display-only maintainer identity).
     ownershipPath: process.env.OWNERSHIP_FILE || path.join(dataDir, 'ownership.json'),
+    // Audited display-stage overrides, generated from the publisher repo's
+    // STATUS.json files and reviewed as a PR (SESSION.md 21.4). Missing or
+    // malformed is fine: the UI just shows the published stage.
+    stageOverridesPath: process.env.STAGE_OVERRIDES_FILE
+      || path.join(__dirname, '..', 'stage-overrides.json'),
     // App-managed trusted-publisher entries (approved requests); the
     // read-only TRUSTED_PUBLISHERS_FILE stays the operator channel.
     storedPublishersPath: process.env.PUBLISHERS_STATE_FILE || path.join(dataDir, 'publishers.json'),

@@ -36,6 +36,28 @@ const HOME_STRIP_SIZE = 6;
 // resolver falls through to the derived state art so no <img> ever 404s.
 const BADGE_ASSETS = new Set(fs.readdirSync(path.join(__dirname, 'assets')));
 
+// Audited display-stage overrides (SESSION.md 21.4), installed at boot by
+// app.js. Display-only: used by the badge resolver and nothing else. A real
+// published stage always wins over an override.
+let stageOverrides = new Map();
+
+/** Install the audited display-stage overrides. Pass an empty Map to clear. */
+function setStageOverrides(map) {
+  stageOverrides = map instanceof Map ? map : new Map();
+}
+
+/**
+ * Effective stage for display: the published package stage, else the latest
+ * version's stage, else the audited override (published data always wins).
+ */
+function effectiveStage(name, pkg, latest = null) {
+  const fromPackage = pkg && typeof pkg.stage === 'string' && pkg.stage ? pkg.stage : '';
+  if (fromPackage) return fromPackage;
+  const fromVersion = latest && typeof latest.stage === 'string' ? latest.stage : '';
+  if (fromVersion) return fromVersion;
+  return stageOverrides.get(String(name)) || '';
+}
+
 /** Filename for a state x track when that art exists in this build, else ''. */
 function pickBadgeFile(state, track, available = BADGE_ASSETS) {
   const file = `pgk_${state}_${track}.webp`;
@@ -125,8 +147,7 @@ function packageBadgeState(name, pkg) {
   const track = isFirstPartyNamespace(name) ? 'official' : 'community';
   const latest = pkg && pkg.latest ? pkg.versions[pkg.latest] : null;
   const versionCount = pkg && pkg.versions ? Object.keys(pkg.versions).length : 0;
-  const stage = (pkg && typeof pkg.stage === 'string' && pkg.stage)
-    || (latest && typeof latest.stage === 'string' ? latest.stage : '');
+  const stage = effectiveStage(name, pkg, latest);
   const official = track === 'official';
   const signed = Boolean(latest && latest.signature && latest.publicKey);
   const oidcTrusted = Boolean(latest && latest.publisher
@@ -841,6 +862,8 @@ module.exports = {
   badgeArtFor,
   pickBadgeFile,
   packageTrustChips,
+  setStageOverrides,
+  effectiveStage,
   paginatePackages,
   searchPackages,
   DEFAULT_PER_PAGE,
