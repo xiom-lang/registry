@@ -264,25 +264,39 @@ function createApp(config = loadConfig()) {
     && (isAdmin(account)
       || config.oauth.reviewerLogins.includes(String(account.login).toLowerCase()));
 
-  /** Sign-in state for the nav bar; '' when the feature is off. */
+  /**
+   * Sign-in state for the nav bar. Returns `{ primary, menu }`: the primary
+   * action stays visible on phones, while role links (Review/Admin) render in
+   * the mobile menu so they are never pushed off-screen. `''` when the
+   * feature is off.
+   */
   function accountNav(req) {
-    if (!config.oauth.enabled) return '';
+    if (!config.oauth.enabled) return { primary: '', menu: '' };
     const account = accountOf(req);
     if (!account) {
       // No self-link on the sign-in page: it reloads the same page and reads
       // as a dead control.
-      if (req.path === '/login') return '';
-      return '<a class="nav-account nav-button nav-button-primary" href="/login">Sign in</a>';
+      if (req.path === '/login') return { primary: '', menu: '' };
+      return {
+        primary: '<a class="nav-account nav-button nav-button-primary" href="/login">Sign in</a>',
+        menu: '',
+      };
     }
-    const review = isReviewer(account)
-      ? `<a class="nav-account" href="/review"${req.path.startsWith('/review') ? ' aria-current="page"' : ''}>Review</a>`
+    const menu = [
+      isReviewer(account)
+        ? `<a href="/review"${req.path.startsWith('/review') ? ' aria-current="page"' : ''}>Review queue</a>`
+        : '',
+      isAdmin(account)
+        ? `<a href="/admin"${req.path.startsWith('/admin') ? ' aria-current="page"' : ''}>Admin console</a>`
+        : '',
+    ].filter(Boolean).join('\n        ');
+    const current = req.path === '/account' || req.path.startsWith('/account/')
+      ? ' aria-current="page"'
       : '';
-    const admin = isAdmin(account)
-      ? '<a class="nav-account" href="/admin/requests"'
-        + `${req.path.startsWith('/admin/') ? ' aria-current="page"' : ''}>Admin</a>`
-      : '';
-    const current = req.path === '/account' ? ' aria-current="page"' : '';
-    return `${review}${admin}<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`;
+    return {
+      primary: `<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`,
+      menu,
+    };
   }
 
   function setSessionCookie(res, id) {
@@ -511,8 +525,8 @@ function createApp(config = loadConfig()) {
 
   /**
    * Index view for HTML rendering with reviewer decisions overlaid
-   * (`flagged` / `reviewed` marks). `/index.json` stays raw: review state is
-   * display/audit data, not part of the publish protocol.
+   * (`flagged` / `reviewed` / `muted` marks). `/index.json` stays raw: review
+   * state is display/audit data, not part of the publish protocol.
    */
   function reviewedIndex() {
     const index = indexStore.snapshot();
@@ -524,18 +538,36 @@ function createApp(config = loadConfig()) {
       if (!status || !packages[name]) continue;
       packages[name] = {
         ...packages[name],
-        ...(status === 'flagged' ? { flagged: true } : { reviewed: true }),
+        ...(status === 'flagged' ? { flagged: true } : {}),
+        ...(status === 'muted' ? { muted: true } : {}),
+        ...(status === 'reviewed' ? { reviewed: true } : {}),
       };
       changed = true;
     }
     return changed ? { ...index, packages } : index;
   }
 
+  /**
+   * Listing view: like `reviewedIndex()`, but muted packages are removed
+   * entirely. Muting only affects discovery (home, listing, search,
+   * categories); the package page still resolves with a notice, downloads
+   * keep working, and `/index.json` is untouched.
+   */
+  function publicIndex() {
+    const index = reviewedIndex();
+    const muted = Object.keys(index.packages)
+      .filter((name) => index.packages[name].muted === true);
+    if (muted.length === 0) return index;
+    const packages = { ...index.packages };
+    for (const name of muted) delete packages[name];
+    return { ...index, packages };
+  }
+
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(reviewedIndex(), { nav: accountNav(req) }));
+        .send(homePage(publicIndex(), { nav: accountNav(req) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -613,11 +645,11 @@ function createApp(config = loadConfig()) {
   // consumers. `?page=` / `?per_page=` paginate both surfaces (defaults 1/50,
   // page size capped at 200); `/index.json` stays whole for the client.
   app.get('/packages', generalLimit, (req, res) => {
-    const index = indexStore.snapshot();
+    const index = publicIndex();
     const listing = listingFromQuery(req.query);
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(packagesPage(reviewedIndex(), { nav: accountNav(req), ...listing }));
+        .send(packagesPage(index, { nav: accountNav(req), ...listing }));
     }
     const paged = paginatePackages(index, listing);
     res.json({
@@ -648,7 +680,7 @@ function createApp(config = loadConfig()) {
   // Category vocabulary with package counts: the browse/facet surface for
   // humans and agents (category names are registry-owned).
   app.get('/categories', generalLimit, (req, res) => {
-    const index = indexStore.snapshot();
+    const index = publicIndex();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
         .send(categoriesPage(index, { nav: accountNav(req) }));
@@ -750,10 +782,10 @@ function createApp(config = loadConfig()) {
   app.get('/search', generalLimit, (req, res) => {
     const rawQuery = String(req.query.q || '');
     const category = String(req.query.category || '').trim().toLowerCase();
-    const index = indexStore.snapshot();
+    const index = publicIndex();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(searchPage(reviewedIndex(), rawQuery, category, { nav: accountNav(req) }));
+        .send(searchPage(index, rawQuery, category, { nav: accountNav(req) }));
     }
     const results = searchPackages(index, rawQuery, category).map(({ name, pkg }) => ({
       name,

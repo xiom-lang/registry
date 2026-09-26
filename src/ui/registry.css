@@ -104,7 +104,8 @@ code {
 }
 
 /* The masthead lives in the page banner (wordmark link + global search), so
-   the sticky bar is navigation only. */
+   the sticky bar is navigation only. On phones the link row collapses into a
+   no-JS "Menu" disclosure; the account action always stays visible. */
 .site-header nav {
   display: flex;
   gap: var(--space-lg);
@@ -112,6 +113,61 @@ code {
 }
 .site-header nav a { color: var(--paper-dim); }
 .site-header nav a:hover { color: var(--paper); }
+
+.nav-links { margin-right: auto; }
+.nav-brand {
+  color: var(--paper);
+  display: none;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nav-more { display: none; position: relative; }
+.nav-more summary {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--paper-dim);
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+  padding: 9px 16px;
+}
+.nav-more summary::-webkit-details-marker { display: none; }
+.nav-more summary::after { content: ' \25be'; }
+.nav-more[open] summary { border-color: var(--signal); color: var(--paper); }
+.nav-more-panel {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  display: none;
+  gap: 2px;
+  min-width: 220px;
+  padding: var(--space-sm);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 30;
+}
+.nav-more[open] .nav-more-panel { display: grid; }
+.nav-more-panel a {
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+}
+.nav-more-panel a:hover { background: var(--panel-raised); }
+
+.skip-link {
+  background: var(--signal);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  color: #fff;
+  left: var(--space-md);
+  padding: 8px 14px;
+  position: fixed;
+  top: -60px;
+  transition: top 0.15s ease-out;
+  z-index: 100;
+}
+.skip-link:focus { color: #fff; top: 0; }
 
 /* ---------- Main / hero ---------- */
 
@@ -166,6 +222,7 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .package-list {
   display: grid;
   gap: var(--space-md);
+  grid-template-columns: minmax(0, 1fr);
   list-style: none;
   margin-top: var(--space-lg);
 }
@@ -245,14 +302,27 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .browse-all { margin-top: var(--space-lg); text-align: center; }
 
 @media (max-width: 640px) {
-  .pkg-row { grid-template-columns: auto minmax(0, 1fr); }
-  .pkg-row-meta { grid-column: 2; }
+  .pkg-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 8px var(--space-md);
+  }
+  .pkg-row .pkg-badge { border-radius: 8px; height: 44px; width: 44px; }
+  .pkg-row-meta {
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    grid-column: 2;
+    white-space: normal;
+  }
+  .package-card { padding: var(--space-md); }
+  .package-card .pkg-badge { border-radius: 10px; height: 48px; width: 48px; }
+  .package-card .pkg-badge-group { gap: var(--space-xs); }
 }
 
 .package-card {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  min-width: 0;
   padding: var(--space-md) var(--space-lg);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -270,8 +340,11 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 .pkg-badge-group {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-sm);
   margin-left: auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .pkg-badge {
@@ -290,7 +363,7 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
 
 /* ---------- Package page ---------- */
 
-.pkg-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-md); }
+.pkg-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-md); min-width: 0; }
 .pkg-title .version { color: var(--muted); font-family: var(--font-mono); font-size: 15px; }
 
 .badges { display: inline-flex; gap: var(--space-sm); }
@@ -343,6 +416,74 @@ table.versions th { color: var(--muted); font-weight: 600; }
 table.versions td.mono { font-family: var(--font-mono); }
 table.versions tr:hover td { background: var(--panel); }
 
+/* Wide data never widens the page on a phone: the wrapper scrolls instead. */
+.table-wrap { margin-top: var(--space-md); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap table.versions { margin-top: 0; min-width: 640px; }
+
+/* Progressive-enhancement copy control (hidden until the layout script runs). */
+.copy-button {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  margin-left: var(--space-sm);
+  padding: 4px 10px;
+}
+.copy-button:hover { border-color: var(--signal); color: var(--paper); }
+
+/* Full digests, keys, and signatures: available, never shouted. */
+.integrity {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+}
+.integrity summary { color: var(--paper-dim); cursor: pointer; font-weight: 600; }
+.integrity .detail-grid { margin-bottom: var(--space-sm); }
+.overflow-wrap { overflow-wrap: anywhere; }
+
+/* On phones a data table becomes labelled rows; no pinch-zoom, no clipping. */
+@media (max-width: 640px) {
+  .table-wrap { overflow: visible; }
+  .table-wrap table.versions { min-width: 0; }
+  table.table-cards { border-collapse: separate; }
+  table.table-cards thead { display: none; }
+  table.table-cards, table.table-cards tbody, table.table-cards tr, table.table-cards td {
+    display: block;
+    width: 100%;
+  }
+  table.table-cards tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+  }
+  table.table-cards tr:hover td { background: transparent; }
+  table.table-cards td {
+    border: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: 4px 0;
+    text-align: left;
+  }
+  table.table-cards td > * { min-width: 0; }
+  table.table-cards td,
+  table.table-cards td .mono { overflow-wrap: anywhere; }
+  table.table-cards td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    flex: 0 0 92px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    padding-top: 1px;
+    text-transform: uppercase;
+  }
+}
+
 .empty {
   border: 1px dashed var(--line);
   border-radius: var(--radius);
@@ -357,8 +498,15 @@ table.versions tr:hover td { background: var(--panel); }
   color: var(--paper-dim);
   font-size: 14px;
   margin-top: var(--space-lg);
+  overflow-wrap: anywhere;
   padding: var(--space-sm) var(--space-md);
 }
+
+/* Long commands and digests wrap instead of widening the page. */
+.install code,
+.note code,
+.integrity code,
+.detail dd code { overflow-wrap: anywhere; }
 
 /* ---------- Categories ---------- */
 
@@ -374,7 +522,7 @@ table.versions tr:hover td { background: var(--panel); }
 .chip:hover { border-color: var(--signal-dim); color: var(--paper); }
 .chip-active { border-color: var(--signal); color: var(--paper); }
 .chip-empty { opacity: 0.5; }
-.chip-count { color: var(--muted); font-size: 11px; }
+.chip-count { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .category-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-md); }
 .category-list {
   display: grid;
@@ -611,33 +759,43 @@ table.versions tr:hover td { background: var(--panel); }
 }
 
 @media (max-width: 640px) {
-  .page-banner { min-height: 240px; }
-  .page-banner img { height: 240px; object-fit: cover; object-position: 78% center; }
-  .banner-search { bottom: 8%; width: 92%; }
-  .banner-search button { padding: 10px 14px; }
   .site-header .container {
     height: auto;
     min-height: var(--nav-height);
     padding-top: 6px;
     padding-bottom: 6px;
   }
-  .site-header nav {
-    gap: var(--space-md);
-    font-size: 13px;
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  /* Keep the account area in flow while the nav scrolls; margin-left:auto
-     would push it past the scroll edge on narrow screens. */
-  .site-header nav .nav-right { gap: var(--space-md); margin-left: 0; }
-}
+  /* One visible row: brand + account action + Menu. Everything else lives in
+     the disclosure, so no link is ever scrolled off-screen. (The nav element
+     selector in the base rules outranks a bare class, hence the pairing.) */
+  .site-header nav.nav-links { display: none; }
+  .nav-brand { display: inline-block; }
+  .nav-more { display: block; }
+  .nav-more summary { padding: 8px 14px; }
+  .nav-right { margin-left: auto; }
+  .site-header nav .nav-more-panel { gap: 0; margin-left: 0; }
 
-@media (max-width: 640px) {
   h1 { font-size: 26px; }
-  .site-header nav { gap: var(--space-md); font-size: 13px; }
   .container { padding: 0 var(--space-md); }
-  table.versions th:nth-child(4), table.versions td:nth-child(4) { display: none; }
+
+  /* Banner: art on top, search below it. The search never covers the
+     wordmark and the placeholder is never clipped. */
+  .page-banner {
+    display: block;
+    min-height: 0;
+    padding-bottom: var(--space-md);
+  }
+  .page-banner img { height: 170px; object-fit: cover; object-position: 62% center; }
+  .xiom-banner-text { animation: none; left: 6%; top: 42%; }
+  .banner-search {
+    bottom: auto;
+    left: auto;
+    margin: 0 var(--space-md);
+    position: static;
+    transform: none;
+    width: auto;
+  }
+  .banner-search button { padding: 11px 16px; }
 }
 
 /* ---------- Accounts and requests (registry 2.0) ----------
@@ -793,6 +951,37 @@ textarea:focus-visible {
 .status-approved { border-color: var(--verified-dim); color: var(--verified); }
 .status-denied { border-color: var(--error); color: var(--error); }
 .status-fulfilled { border-color: var(--signal-dim); color: var(--signal); }
+.status-muted { border-color: rgba(148, 151, 163, 0.6); color: var(--muted); }
+
+.request-id { color: var(--paper-dim); font-family: var(--font-mono); font-size: 13px; }
+.notice-muted { border-color: var(--line); border-left: 3px solid var(--muted); color: var(--paper-dim); }
+
+.visually-hidden {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* Phones get touch-sized controls and full-width decision inputs. */
+@media (max-width: 640px) {
+  .button,
+  .site-header nav a.nav-button,
+  .nav-more summary,
+  .chip,
+  .page-link {
+    align-items: center;
+    display: inline-flex;
+    min-height: 44px;
+  }
+  .decision-form input { min-width: 0; width: 100%; }
+  .decision-form .button { flex: 1; justify-content: center; }
+}
 
 .request-list {
   display: grid;

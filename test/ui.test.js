@@ -183,7 +183,7 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /<title>XIOM Registry<\/title>/);
   assert.match(body, /demo-pkg/);
   assert.match(body, /href="\/ui\/registry\.css"/);
-  assert.match(body, /PUBLISHING\.md/);   // community guides are linked
+  assert.match(body, /href="\/publish"/);  // publishing guide is registry-hosted
   assert.match(body, /USING\.md/);
   assert.match(body, /rel="icon"/);       // brand marks
   assert.match(body, /\/ui\/registry\.webp/);
@@ -297,7 +297,7 @@ test('package page shows install command, versions, digest, and signature', asyn
   assert.match(body, /0\.9\.0/);
   assert.match(body, /yanked/);
   assert.match(body, /badge signed/);            // 0.9.0 carries a signature
-  assert.match(body, /[0-9a-f]{16}\.\.\./);      // truncated digest in the table
+  assert.match(body, /[0-9a-f]{12}&hellip;/); // truncated digest in the table
   // JSON stays the protocol contract.
   const json = await fetch(`${baseUrl}/packages/demo-pkg`, { headers: API });
   assert.match(json.headers.get('content-type'), /application\/json/);

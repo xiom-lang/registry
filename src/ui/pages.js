@@ -11,11 +11,11 @@
 const {
   escapeHtml,
   formatBytes,
-  formatDate,
-  shortHex,
-  fingerprint,
-  layout,
-} = require('./layout');
+  formatWhen,
+  shortDigest,
+  repoLabel,
+} = require('./format');
+const { fingerprint, layout } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts } = require('../categories');
 const { renderMarkdown } = require('./markdown');
@@ -96,9 +96,10 @@ function packageBadgeState(name, pkg) {
   return badge('unsigned', 'Community package, unsigned', 'Official package, unsigned');
 }
 
-function packageBadge(name, pkg) {
+function packageBadge(name, pkg, omitPills = []) {
   const badge = packageBadgeState(name, pkg);
   const pills = badge.pills
+    .filter((pill) => !omitPills.includes(pill))
     .map((pill) => `<span class="badge ${pill}">${pill}</span>`)
     .join('');
   return `<span class="pkg-badge-group"><img class="pkg-badge" src="/ui/${badge.file}"`
@@ -296,13 +297,20 @@ function truncate(text, max = 110) {
   return value.length <= max ? value : `${value.slice(0, max - 1)}\u2026`;
 }
 
+/** Progressive-enhancement copy control (hidden until the layout script runs). */
+function copyButton(value, label = 'Copy') {
+  return `<button type="button" class="copy-button" data-copy="${escapeHtml(value)}" hidden>${escapeHtml(label)}</button>`;
+}
+
 /** One compact listing row: badge, name/description, version/updated/size. */
 function packageRow(name, pkg) {
   const latest = latestEntry(pkg);
   const version = pkg.latest
     ? `<span class="pkg-version mono">${escapeHtml(pkg.latest)}</span>`
     : '<span class="badge yanked">none</span>';
-  const updated = latest && latest.published ? formatDate(latest.published) : '--';
+  const updated = latest && latest.published
+    ? `<span class="pkg-row-updated">${formatWhen(latest.published)}</span>`
+    : '<span class="pkg-row-updated">--</span>';
   const size = latest && latest.size ? formatBytes(latest.size) : '--';
   const description = pkg.description ? truncate(pkg.description) : '';
   return `<li class="pkg-row">
@@ -314,8 +322,8 @@ function packageRow(name, pkg) {
   </div>
   <div class="pkg-row-meta">
     ${version}
-    <span>${escapeHtml(updated)}</span>
-    <span>${escapeHtml(size)}</span>
+    ${updated}
+    <span class="pkg-row-size">${escapeHtml(size)}</span>
   </div>
 </li>`;
 }
@@ -336,7 +344,9 @@ function packageRows(index, options = {}) {
 function homePage(index, options = {}) {
   const names = recentlyUpdated(index);
   const total = Object.keys(index.packages).length;
-  const lastUpdated = index.updated_at ? `Updated ${formatDate(index.updated_at)}` : 'No publishes yet';
+  const lastUpdated = index.updated_at
+    ? `<span>Updated ${formatWhen(index.updated_at)}</span>`
+    : '<span>No publishes yet</span>';
   const strip = total === 0
     ? '<div class="empty">No packages yet. Publish with <code>xiom pkg publish</code>.</div>'
     : `<ul class="package-list featured">\n${names
@@ -351,7 +361,7 @@ function homePage(index, options = {}) {
   <div class="meta-row">
     <span>${total} package${total === 1 ? '' : 's'}</span>
     <span>Protocol ${escapeHtml(index.version)}</span>
-    <span>${escapeHtml(lastUpdated)}</span>
+    ${lastUpdated}
   </div>
   ${categoryStrip(index)}
 </section>
@@ -526,27 +536,42 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const latestBadge = pkg.latest
     ? `<span class="badge">latest ${escapeHtml(pkg.latest)}</span>`
     : '<span class="badge yanked">no installable version</span>';
-  const signedBadge = detail && detail.publicKey
-    ? '<span class="badge signed">signed</span>'
-    : '';
 
   const installTarget = pkg.latest ? name : `${name}@${detailVersion}`;
+  const installCommand = `xiom pkg install ${installTarget}`;
   const installNode = pkg.latest
-    ? `<code>xiom pkg install ${escapeHtml(name)}</code>`
-    : `<code>xiom pkg install ${escapeHtml(installTarget)}</code>`;
+    ? `<code>xiom pkg install ${escapeHtml(name)}</code>${copyButton(installCommand)}`
+    : `<code>xiom pkg install ${escapeHtml(installTarget)}</code>${copyButton(installCommand)}`;
 
   const detailGrid = detail ? `<dl class="detail-grid">
   <div class="detail"><dt>Version</dt><dd>${escapeHtml(detailVersion)}</dd></div>
-  <div class="detail"><dt>Published</dt><dd>${escapeHtml(formatDate(detail.published))}</dd></div>
+  <div class="detail"><dt>Published</dt><dd>${formatWhen(detail.published)}</dd></div>
   <div class="detail"><dt>Size</dt><dd>${escapeHtml(formatBytes(detail.size))}</dd></div>
-  <div class="detail"><dt>SHA-256</dt><dd title="${escapeHtml(detail.sha256)}">${escapeHtml(detail.sha256 || '--')}</dd></div>
+  <div class="detail"><dt>SHA-256</dt><dd>${shortDigest(detail.sha256)}</dd></div>
   <div class="detail"><dt>Signature</dt><dd>${signatureCell(detail)}</dd></div>
   ${publisherCell(detail.publisher)}
   ${pkg.categories && pkg.categories.length > 0 ? `<div class="detail"><dt>Categories</dt><dd>${categoryChips(pkg.categories)}</dd></div>` : ''}
   ${pkg.keywords && pkg.keywords.length > 0 ? `<div class="detail"><dt>Keywords</dt><dd>${escapeHtml(pkg.keywords.join(', '))}</dd></div>` : ''}
   ${pkg.license ? `<div class="detail"><dt>License</dt><dd>${escapeHtml(pkg.license)}</dd></div>` : ''}
-  ${pkg.repository ? `<div class="detail"><dt>Repository</dt><dd><a href="${escapeHtml(pkg.repository)}" rel="noopener">${escapeHtml(pkg.repository)}</a></dd></div>` : ''}
+  ${pkg.repository ? `<div class="detail"><dt>Repository</dt><dd><a href="${escapeHtml(pkg.repository)}" rel="noopener" title="${escapeHtml(pkg.repository)}">${escapeHtml(repoLabel(pkg.repository))}</a></dd></div>` : ''}
 </dl>` : '';
+
+  // The full digests nobody reads line-by-line but everyone occasionally
+  // needs (verifying a download, pinning a key) stay one disclosure away.
+  const integrityBlock = detail ? `<details class="integrity">
+  <summary>Integrity details</summary>
+  <dl class="detail-grid">
+    <div class="detail"><dt>SHA-256 (${escapeHtml(detailVersion)})</dt>
+      <dd class="mono overflow-wrap">${escapeHtml(detail.sha256 || '--')}${detail.sha256 ? ` ${copyButton(detail.sha256)}` : ''}</dd></div>
+    ${detail.publicKey ? `<div class="detail"><dt>Ed25519 public key</dt>
+      <dd class="mono overflow-wrap">${escapeHtml(detail.publicKey)} ${copyButton(detail.publicKey)}</dd></div>` : ''}
+    ${detail.signature ? `<div class="detail"><dt>Signature</dt>
+      <dd class="mono overflow-wrap">${escapeHtml(detail.signature)}</dd></div>` : ''}
+  </dl>
+  <p class="pkg-meta">${detail.publicKey
+    ? 'Verify a downloaded tarball with <code>sha256sum</code>, or pin this registry\u2019s signing key with <code>xiom pkg trust</code>.'
+    : 'Verify a downloaded tarball against the digest above with <code>sha256sum</code>.'}</p>
+</details>` : '';
 
   const deps = detail && Object.keys(detail.dependencies || {}).length > 0
     ? `<h3>Dependencies</h3>
@@ -570,12 +595,12 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
       const yanked = entry.yanked ? ' <span class="badge yanked">yanked</span>' : '';
       const selected = version === detailVersion ? ' style="outline: 1px solid var(--line)"' : '';
       return `<tr id="v-${escapeHtml(version)}"${selected}>
-  <td class="mono"><a href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}">${escapeHtml(version)}</a>${yanked}</td>
-  <td>${escapeHtml(formatDate(entry.published))}</td>
-  <td>${escapeHtml(formatBytes(entry.size))}</td>
-  <td class="mono" title="${escapeHtml(entry.sha256)}">${escapeHtml(shortHex(entry.sha256, 16))}</td>
-  <td>${signatureCell(entry)}</td>
-  <td><a href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}/package.tar.gz">download</a></td>
+  <td class="mono" data-label="Version"><a href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}">${escapeHtml(version)}</a>${yanked}</td>
+  <td data-label="Published">${formatWhen(entry.published)}</td>
+  <td data-label="Size">${escapeHtml(formatBytes(entry.size))}</td>
+  <td class="mono" data-label="SHA-256">${shortDigest(entry.sha256)}</td>
+  <td data-label="Signature">${signatureCell(entry)}</td>
+  <td data-label="Download"><a class="download-link" href="/packages/${encodeURIComponent(name)}/${encodeURIComponent(version)}/package.tar.gz" aria-label="Download ${escapeHtml(name)} ${escapeHtml(version)}">Download</a></td>
 </tr>`;
     })
     .join('\n');
@@ -629,6 +654,14 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 </div>`
     : '';
 
+  const mutedNotice = pkg.muted === true
+    ? `<p class="notice notice-muted" role="status">Hidden from listings and search by the
+  registry maintainers. Files are unchanged and pinned installs still work.</p>`
+    : '';
+
+  // The decision pill already says "reviewed by a reviewer"; do not repeat
+  // the same claim in the badge pill row.
+  const reviewedByDecision = Boolean(review && review.decision && review.decision.status === 'reviewed');
   return layout({
     title: name,
     description: pkg.description || `Versions of ${name}`,
@@ -638,25 +671,28 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
     <h1>${escapeHtml(name)}</h1>
     ${officialBadge(name)}
     ${latestBadge}
-    ${signedBadge}
     ${review ? decisionPill(review.decision) : ''}
-    ${packageBadge(name, pkg)}
+    ${packageBadge(name, pkg, reviewedByDecision ? ['reviewed'] : [])}
   </div>
+  ${mutedNotice}
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}
   <div class="install">${installNode}</div>
   ${detailGrid}
+  ${integrityBlock}
   ${trustNote}
   ${readmeBlock}
   ${ratingsBlock}
   ${reviewBlock}
 </section>
 <h2>Versions</h2>
-<table class="versions">
-  <thead><tr><th>Version</th><th>Published</th><th>Size</th><th>SHA-256</th><th>Signature</th><th></th></tr></thead>
+<div class="table-wrap">
+<table class="versions table-cards">
+  <thead><tr><th>Version</th><th>Published</th><th>Size</th><th>SHA-256</th><th>Signature</th><th><span class="visually-hidden">Download</span></th></tr></thead>
   <tbody>
 ${rows}
   </tbody>
 </table>
+</div>
 ${deps}`,
   });
 }

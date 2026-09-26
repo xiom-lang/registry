@@ -8,7 +8,8 @@
 
 'use strict';
 
-const { escapeHtml, formatDate, layout } = require('./layout');
+const { escapeHtml, formatWhen, shortId } = require('./format');
+const { layout } = require('./layout');
 
 const REASON_LABELS = {
   malware: 'malware or unsafe code',
@@ -48,11 +49,11 @@ function reasonLabel(reason) {
 function openReportRow(report, csrf) {
   return `<li class="request-card">
   <div class="request-head">
-    <span class="mono">${escapeHtml(report.id)}</span>
+    <span class="request-id">${shortId(report.id)}</span>
     <span class="status-pill status-pending">${escapeHtml(reasonLabel(report.reason))}</span>
     <span class="pkg-meta"><a href="/packages/${encodeURIComponent(report.package)}">${escapeHtml(report.package)}</a>
       by <a href="https://github.com/${encodeURIComponent(report.reporter.login)}" rel="noopener">@${escapeHtml(report.reporter.login)}</a>
-      &middot; ${escapeHtml(formatDate(report.createdAt))}</span>
+      &middot; ${formatWhen(report.createdAt)}</span>
   </div>
   <p class="pkg-desc">${escapeHtml(report.note)}</p>
   <form class="decision-form" method="post" action="/review/reports/${encodeURIComponent(report.id)}/resolve">
@@ -67,11 +68,11 @@ function openReportRow(report, csrf) {
 function closedReportRow(report) {
   return `<li class="request-card closed">
   <div class="request-head">
-    <span class="mono">${escapeHtml(report.id)}</span>
+    <span class="request-id">${shortId(report.id)}</span>
     <span class="status-pill status-${report.status === 'dismissed' ? 'denied' : 'approved'}">${escapeHtml(report.status)}</span>
     <span class="pkg-meta"><a href="/packages/${encodeURIComponent(report.package)}">${escapeHtml(report.package)}</a>
       &middot; ${escapeHtml(reasonLabel(report.reason))}
-      &middot; @${escapeHtml(report.resolvedBy || '?')} ${escapeHtml(formatDate(report.resolvedAt || ''))}</span>
+      &middot; @${escapeHtml(report.resolvedBy || '?')} ${formatWhen(report.resolvedAt || '')}</span>
   </div>
   <p class="pkg-desc">${escapeHtml(report.note)}</p>
   ${report.resolution ? `<p class="pkg-meta">Resolution: ${escapeHtml(report.resolution)}</p>` : ''}
@@ -81,9 +82,13 @@ function closedReportRow(report) {
 /** Human-review claims shown next to the publisher claims. */
 function decisionPill(decision) {
   if (!decision || !decision.status) return '';
-  const flagged = decision.status === 'flagged';
-  const label = flagged ? 'flagged by a reviewer' : 'reviewed by a reviewer';
-  return `<span class="status-pill status-${flagged ? 'denied' : 'approved'}">${escapeHtml(label)}</span>`;
+  const styles = {
+    flagged: ['denied', 'flagged by a reviewer'],
+    reviewed: ['approved', 'reviewed by a reviewer'],
+    muted: ['muted', 'muted by the maintainers'],
+  };
+  const [style, label] = styles[decision.status] || ['', decision.status];
+  return `<span class="status-pill status-${style}">${escapeHtml(label)}</span>`;
 }
 
 /** Public review history for a package (audit trail of decisions). */
@@ -92,7 +97,7 @@ function reviewHistory(history) {
   const items = history.map((entry) => {
     const note = entry.note ? ` \u2014 ${escapeHtml(entry.note)}` : '';
     return `<li><span class="mono">${escapeHtml(entry.action)}</span> by @${escapeHtml(entry.actor || '?')}`
-      + ` &middot; ${escapeHtml(formatDate(entry.at))}${note}</li>`;
+      + ` &middot; ${formatWhen(entry.at)}${note}</li>`;
   }).join('\n');
   return `<details class="review-history">
   <summary>Review history <span class="count">${history.length}</span></summary>
@@ -125,7 +130,7 @@ function ratingsSection({ name, ratings = [], summary = { count: 0, average: 0 }
 ${ratings.map((entry) => `  <li class="rating-item">
     <span class="mono">@${escapeHtml(entry.login)}</span>
     <span class="rating-stars" title="${entry.stars} of 5">${stars(entry.stars)}</span>
-    <span class="pkg-meta">${escapeHtml(formatDate(entry.at))}</span>
+    <span class="pkg-meta">${formatWhen(entry.at)}</span>
     ${entry.review ? `<p class="pkg-desc">${escapeHtml(entry.review)}</p>` : ''}
   </li>`).join('\n')}
 </ul>`;
@@ -174,7 +179,7 @@ function reviewPage({ account, reports, decisions = [], csrf, notice = '', error
     return `<li class="review-decision-row">
   <a class="pkg-name" href="/packages/${encodeURIComponent(entry.name)}">${escapeHtml(entry.name)}</a>
   ${decisionPill(entry)}
-  <span class="pkg-meta">@${escapeHtml(last.actor || '?')} &middot; ${escapeHtml(formatDate(last.at || ''))}</span>
+  <span class="pkg-meta">@${escapeHtml(last.actor || '?')} &middot; ${formatWhen(last.at || '')}</span>
 </li>`;
   };
   const body = `<section class="hero">

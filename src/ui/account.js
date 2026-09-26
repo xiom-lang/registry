@@ -1,4 +1,4 @@
-// XIOM Package Registry -- account, request, and admin pages (registry 2.0).
+﻿// XIOM Package Registry -- account, request, and admin pages (registry 2.0).
 // Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -8,7 +8,8 @@
 
 'use strict';
 
-const { escapeHtml, formatDate, layout } = require('./layout');
+const { escapeHtml, formatWhen, shortId } = require('./format');
+const { layout } = require('./layout');
 
 const STATUS_LABELS = {
   pending: 'pending review',
@@ -157,17 +158,17 @@ function accountPage({
 
   const rows = requests.length === 0
     ? '<p class="pkg-meta">No requests yet.</p>'
-    : `<table class="versions request-table">
+    : `<table class="versions request-table table-cards">
   <thead><tr><th>Request</th><th>Kind</th><th>Scope / target</th><th>Status</th><th>Updated</th></tr></thead>
   <tbody>
 ${requests.map((record) => {
     const updated = record.fulfilledAt || record.decidedAt || record.createdAt;
     return `    <tr>
-      <td class="mono">${escapeHtml(record.id)}</td>
-      <td>${escapeHtml(kindLabel(record))}</td>
-      <td class="mono">${escapeHtml(requestTarget(record))}</td>
-      <td>${statusPill(record.status)}${historyLine(record)}</td>
-      <td>${escapeHtml(formatDate(updated))}</td>
+      <td class="mono" data-label="Request">${shortId(record.id)}</td>
+      <td data-label="Kind">${escapeHtml(kindLabel(record))}</td>
+      <td class="mono" data-label="Scope / target">${escapeHtml(requestTarget(record))}</td>
+      <td data-label="Status">${statusPill(record.status)}${historyLine(record)}</td>
+      <td data-label="Updated">${formatWhen(updated)}</td>
     </tr>`;
   }).join('\n')}
   </tbody>
@@ -183,7 +184,7 @@ ${requests.map((record) => {
 ${notifications.map((entry) => `  <li class="request-card${entry.readAt ? ' closed' : ''}">
     <div class="request-head">
       <span class="mono">${escapeHtml(entry.kind)}</span>
-      <span class="pkg-meta">${escapeHtml(formatDate(entry.createdAt))}</span>
+      <span class="pkg-meta">${formatWhen(entry.createdAt)}</span>
     </div>
     <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
     ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
@@ -196,7 +197,7 @@ ${notifications.map((entry) => `  <li class="request-card${entry.readAt ? ' clos
     <h1>@${escapeHtml(account.login)}</h1>
     <div class="meta-row">
       <span><a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">github.com/${escapeHtml(account.login)}</a></span>
-      <span>Signed in ${escapeHtml(formatDate(account.lastLoginAt))}</span>
+      <span>Signed in ${formatWhen(account.lastLoginAt)}</span>
     </div>
   </div>
 </section>
@@ -239,7 +240,7 @@ function historyLine(record) {
     const note = entry.note ? ` (${entry.note})` : '';
     return `${entry.action} by @${entry.actor || '?'}${note}`;
   });
-  return `<p class="pkg-meta request-history">${escapeHtml(parts.join(' · '))}</p>`;
+  return `<p class="pkg-meta request-history">${escapeHtml(parts.join(' Â· '))}</p>`;
 }
 
 function pendingRow(record, csrf) {
@@ -248,11 +249,11 @@ function pendingRow(record, csrf) {
     : 'Approving queues the host mint (the app never mints); record the fulfilment reference here.';
   return `<li class="request-card">
   <div class="request-head">
-    <span class="mono">${escapeHtml(record.id)}</span>
+    <span class="request-id">${shortId(record.id)}</span>
     ${statusPill(record.status)}
     <span class="pkg-meta">${escapeHtml(kindLabel(record))} by
       <a href="https://github.com/${encodeURIComponent(record.requester.login)}" rel="noopener">@${escapeHtml(record.requester.login)}</a>
-      &middot; ${escapeHtml(formatDate(record.createdAt))}</span>
+      &middot; ${formatWhen(record.createdAt)}</span>
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
   ${record.scopes ? `<p class="pkg-meta">Scopes: <span class="mono">${escapeHtml(record.scopes.join(', '))}</span></p>` : ''}
@@ -269,24 +270,28 @@ function pendingRow(record, csrf) {
 }
 
 function approvedRow(record, csrf) {
-  const mint = '# production uses --file tokens.json; staging uses --file tokens.staging.json\n'
-    + 'docker run --rm -v "$PWD:/w" -w /w node:24-alpine node scripts/tokens.js add \\\n'
-    + `  --file <tokens.json | tokens.staging.json> --label ${record.requester.login}-${record.id} \\\n`
-    + `  --scopes "${record.scopes.join(',')}"\n`
-    + '# then copy the line starting "token:" (not the public key) and force-recreate the\n'
-    + '# service so it reloads the file (docker compose ... up -d --force-recreate --no-deps <service>)';
   return `<li class="request-card">
   <div class="request-head">
-    <span class="mono">${escapeHtml(record.id)}</span>
+    <span class="request-id">${shortId(record.id)}</span>
     ${statusPill(record.status)}
     <span class="pkg-meta">${escapeHtml(kindLabel(record))} by
       <a href="https://github.com/${encodeURIComponent(record.requester.login)}" rel="noopener">@${escapeHtml(record.requester.login)}</a>
-      &middot; approved by @${escapeHtml(record.decidedBy || '?')} ${escapeHtml(formatDate(record.decidedAt))}</span>
+      &middot; approved by @${escapeHtml(record.decidedBy || '?')} ${formatWhen(record.decidedAt)}</span>
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
   <p class="pkg-meta">Scopes: <span class="mono">${escapeHtml(record.scopes.join(', '))}</span></p>
-  <p class="pkg-meta">Mint on the host, deliver privately, then record the reference:</p>
-  <pre class="mint-command">${escapeHtml(mint)}</pre>
+  <p class="pkg-meta"><strong>Preferred:</strong> let the fulfilment worker mint and mail the
+     token (approve, then wait for the request to close itself). If the worker is off, use the
+     operators&rsquo; <code>issue-token.sh</code> runbook; <code>scripts/tokens.js</code> is the
+     last-resort manual fallback. Never paste a token into a browser form or an issue.</p>
+  <details class="mint-details">
+    <summary>Manual fallback command (operators only)</summary>
+    <pre class="mint-command"># only if the worker is unavailable; see DEPLOY.md "Token fulfilment worker"
+docker compose exec registry node scripts/tokens.js add \\
+  --file tokens.json --label ${escapeHtml(record.requester.login)}-${escapeHtml(record.id.slice(-8))} \\
+  --scopes "${escapeHtml(record.scopes.join(','))}"
+# then deliver the token line privately and record the reference below</pre>
+  </details>
   <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/fulfil">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
     <input name="reference" placeholder="Fulfilment reference (e.g. label, mail date)" maxlength="500" required aria-label="Fulfilment reference">
@@ -312,9 +317,9 @@ function closedRow(record, csrf, publisherLive) {
   }
   return `<li class="request-card closed">
   <div class="request-head">
-    <span class="mono">${escapeHtml(record.id)}</span>
+    <span class="request-id">${shortId(record.id)}</span>
     ${statusPill(record.status)}
-    <span class="pkg-meta">@${escapeHtml(record.requester.login)} &middot; ${escapeHtml(formatDate(when))}${detail}</span>
+    <span class="pkg-meta">@${escapeHtml(record.requester.login)} &middot; ${formatWhen(when)}${detail}</span>
   </div>
   <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
   ${publisherState}

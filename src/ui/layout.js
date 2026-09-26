@@ -71,9 +71,25 @@ function fingerprint(publicKeyHex) {
 /**
  * Full HTML document. `body` is trusted markup built by the page builders;
  * every value interpolated into it must pass through escapeHtml first.
+ *
+ * `nav` is either a plain HTML string (legacy) or `{ primary, menu }`:
+ *   - `primary` renders on the right of the bar (Sign in / @account);
+ *   - `menu` renders inside the mobile-only "Menu" disclosure (Review/Admin),
+ *     so role links are never pushed off-screen on a phone.
  */
 function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '', nav = '' }) {
   const pageTitle = title ? `${escapeHtml(title)} -- ${SITE_NAME}` : SITE_NAME;
+  const navPrimary = typeof nav === 'string' ? nav : ((nav && nav.primary) || '');
+  const navMenu = typeof nav === 'object' && nav ? (nav.menu || '') : '';
+  const menuLinks = `
+        <a href="/packages">Packages</a>
+        <a href="/categories">Categories</a>
+        <a href="/search">Search</a>
+        <a href="/publish">Publish a package</a>
+        <a href="/whats-new">What&rsquo;s new</a>
+        <a href="https://xiom-lang.org/docs/">Docs</a>
+        <a href="https://xiom-lang.org">xiom-lang.org</a>
+        <a href="https://github.com/xiom-lang/registry">GitHub</a>${navMenu}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -87,18 +103,25 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
 <link rel="stylesheet" href="/ui/registry.css">
 </head>
 <body>
+<a class="skip-link" href="#content">Skip to content</a>
 <header class="site-header">
-  <div class="container">
-    <nav aria-label="Primary">
+  <div class="container nav-shell">
+    <a class="nav-brand" href="/" aria-label="XIOM Registry home">XIOM Registry</a>
+    <nav class="nav-links" aria-label="Primary">
       <a href="/packages">Packages</a>
       <a href="/categories">Categories</a>
       <a href="/search">Search</a>
-      <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publish</a>
+      <a href="/publish">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>
       <a href="https://xiom-lang.org">xiom-lang.org</a>
       <a class="nav-button" href="https://github.com/xiom-lang/registry">GitHub</a>
-      ${nav ? `<span class="nav-right">${nav}</span>` : ''}
     </nav>
+    ${navPrimary ? `<span class="nav-right">${navPrimary}</span>` : ''}
+    <details class="nav-more">
+      <summary>Menu</summary>
+      <nav class="nav-more-panel" aria-label="More navigation">${menuLinks}
+      </nav>
+    </details>
   </div>
 </header>
 <header class="page-banner">
@@ -111,11 +134,12 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
   </div>
   <form class="banner-search" action="/search" method="get" role="search">
     <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
-           placeholder="Search packages by name or description" aria-label="Search packages" autocomplete="off">
+           placeholder="Search packages" aria-label="Search packages by name or description"
+           enterkeyhint="search" autocomplete="off">
     <button type="submit">Search</button>
   </form>
 </header>
-<main>
+<main id="content">
   <div class="container">
 ${body}
   </div>
@@ -125,7 +149,7 @@ ${body}
     <span>${SITE_NAME} -- MIT OR Apache-2.0 -- The XIOM Authors</span>
     <span class="spacer"></span>
     <a href="https://github.com/xiom-lang/registry/blob/main/USING.md">Using the registry</a>
-    <a href="https://github.com/xiom-lang/registry/blob/main/PUBLISHING.md">Publishing</a>
+    <a href="/publish">Publishing</a>
       <a href="/index.json">index.json</a>
       <a href="/health">health</a>
       <a href="/whats-new">What&rsquo;s new</a>
@@ -143,6 +167,24 @@ ${body}
     <span><a href="mailto:support@xiom-lang.org">support@xiom-lang.org</a></span>
   </div>
 </footer>
+<script>
+// Progressive enhancement only: copy buttons stay hidden without JS, and the
+// command/digest they copy is always visible as selectable text.
+(function () {
+  var buttons = document.querySelectorAll('[data-copy]');
+  if (!buttons.length || !navigator.clipboard) return;
+  Array.prototype.forEach.call(buttons, function (button) {
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      navigator.clipboard.writeText(button.getAttribute('data-copy') || '').then(function () {
+        var label = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(function () { button.textContent = label; }, 1500);
+      });
+    });
+  });
+})();
+</script>
 </body>
 </html>
 `;
