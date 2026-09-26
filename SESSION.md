@@ -1957,12 +1957,36 @@ packages, every decision audited, `/index.json` immutable in shape).
 
 | Order | Feature | Notes / source | Size |
 |---|---|---|---|
-| A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **AGREED by the owner 2026-09-26; implementation in progress.** | M |
+| A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
 | A2 | **Notification coverage** | 18.1: review decisions and ratings writes as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
+
+**21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
+`Maintainers` section built from data the registry already holds -- repository
+owners from published-version provenance, plus owners and requesters of
+approved trusted-publisher entries and fulfilled token requests whose scopes
+cover the package (`deriveMaintainers`) -- and from stored claims. Any
+signed-in account can claim a package; a reviewer verifies or rejects it from
+`/review#ownership` with a required reason on rejection; only verified claims
+are public, pending ones are visible to the claimant and reviewers, and the
+package-page copy states that claiming grants no publishing rights. Claims
+live in `ownership.json` on the data volume (allowlist-normalized on load,
+atomic writes, 2MB cap; `OWNERSHIP_FILE` overrides) with full history, and the
+admin dashboard counts pending claims. No protocol change: `/index.json`,
+artifacts, and scopes are untouched. Coverage: 4 store/derivation tests plus
+an HTTP lifecycle test (claim -> duplicate refusal -> reviewer rejection
+reason -> verify -> public attribution); 239 unit tests and 20 e2e checks
+pass, CI green (`36260421894`). Mobile decision forms now stack full-width
+(the note input used to clip under the buttons).
+
+Deploy: a feature change, so staging first -- `git pull`, rebuild, recreate
+staging, then walk claim -> verify on staging with a real account; promote the
+same commit to production afterwards. First claim creates
+`ownership.json`; nothing to migrate.
+
 
 ### Track B -- publishing DX (client + registry, section 20.7)
 
