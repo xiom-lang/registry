@@ -525,6 +525,69 @@ function publisherCell(publisher) {
 }
 
 /** Package detail: metadata, install command, trust instructions, versions. */
+/**
+ * Maintainer identity block (SESSION.md 21 A1). Derived rows come from
+ * provenance and approved requests; verified claims add names. Nothing here
+ * grants publishing power, and the copy says so.
+ */
+function maintainersBlock({ name, ownership, signedIn = false, csrf = '' }) {
+  if (!ownership) return '';
+  const sourceLabel = (entry) => {
+    const parts = [];
+    const repository = entry.repositories[0] ? escapeHtml(entry.repositories[0]) : '';
+    if (entry.sources.includes('provenance')) {
+      parts.push(repository ? `publishes from <span class="mono">${repository}</span>` : 'published with provenance');
+    }
+    if (entry.sources.includes('trusted-publisher')) parts.push('approved trusted publisher');
+    if (entry.sources.includes('token')) parts.push('approved publish token');
+    if (entry.sources.includes('verified-claim')) parts.push('verified maintainer');
+    return parts.join(' &middot; ');
+  };
+  const rows = ownership.maintainers.map((entry) => `<li class="maintainer-row">
+  <a class="pkg-name" href="https://github.com/${encodeURIComponent(entry.login)}" rel="noopener">@${escapeHtml(entry.login)}</a>
+  <span class="pkg-meta">${sourceLabel(entry)}</span>
+  ${entry.claim && entry.claim.decidedBy
+    ? `<span class="pkg-meta">verified by @${escapeHtml(entry.claim.decidedBy)}`
+      + ` ${formatWhen(entry.claim.decidedAt || '')}</span>`
+    : ''}
+</li>`).join('\n');
+  const empty = ownership.maintainers.length === 0
+    ? '<p class="pkg-meta">No maintainer is listed yet: no OIDC provenance and no approved '
+      + 'access request is on record. If you maintain it, claim it below.</p>'
+    : '';
+  const own = [];
+  if (ownership.viewerClaim && ownership.viewerClaim.status === 'pending') {
+    own.push('<p class="pkg-meta">Your maintainer claim is awaiting verification.</p>');
+  }
+  if (ownership.viewerClaim && ownership.viewerClaim.status === 'rejected') {
+    own.push('<p class="pkg-meta">Your maintainer claim was rejected'
+      + `${ownership.viewerClaim.note ? `: ${escapeHtml(ownership.viewerClaim.note)}` : '.'}</p>`);
+  }
+  const reviewerNote = ownership.pending.length > 0
+    && (!ownership.viewerClaim || ownership.pending.length > 1)
+    ? `<p class="pkg-meta">${ownership.pending.length} maintainer claim`
+      + `${ownership.pending.length === 1 ? '' : 's'} awaiting verification &middot; `
+      + '<a href="/review#ownership">open the review queue</a>.</p>'
+    : '';
+  const claimCta = ownership.canClaim
+    ? `<form class="claim-form" method="post" action="/packages/${encodeURIComponent(name)}/claim">
+  <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+  <button class="button" type="submit">I maintain this package</button>
+  <span class="pkg-meta">A reviewer verifies claims. Claiming grants no publishing rights.</span>
+</form>`
+    : (!signedIn
+      ? `<p class="pkg-meta"><a href="/login?returnTo=${encodeURIComponent(`/packages/${name}`)}">Sign in</a> to claim maintainership.</p>`
+      : '');
+  return `<section class="maintainers" id="maintainers">
+  <h2>Maintainers</h2>
+  ${rows ? `<ul class="maintainer-list">\n${rows}\n</ul>` : ''}
+  ${empty}
+  ${own.join('\n')}
+  ${reviewerNote}
+  ${claimCta}
+</section>`;
+}
+
 function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const name = pkg.name;
   const names = Object.keys(pkg.versions);
@@ -678,6 +741,12 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}
   <div class="install">${installNode}</div>
   ${detailGrid}
+  ${maintainersBlock({
+    name,
+    ownership: options.ownership || null,
+    signedIn: Boolean(review && review.canReport),
+    csrf: review ? review.csrf : '',
+  })}
   ${integrityBlock}
   ${trustNote}
   ${readmeBlock}

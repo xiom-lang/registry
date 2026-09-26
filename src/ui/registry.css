@@ -907,6 +907,23 @@ table.versions tr:hover td { background: var(--panel); }
 }
 .user-actions input { min-width: 0; }
 
+/* Maintainer identity (ownership claims, SESSION.md 21 A1). */
+.maintainers { margin-top: var(--space-lg); }
+.maintainer-list { display: grid; gap: var(--space-sm); list-style: none; margin-top: var(--space-sm); }
+.maintainer-row {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+.claim-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-top: var(--space-md);
+}
+
 /* Publishing guide: quick links above the rendered markdown. */
 .quick-links { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
 .guide-source { margin: var(--space-md) 0; }
@@ -1058,8 +1075,14 @@ textarea:focus-visible {
     display: inline-flex;
     min-height: 44px;
   }
-  .decision-form input { min-width: 0; width: 100%; }
-  .decision-form .button { flex: 1; justify-content: center; }
+  /* Stack decision controls on phones: side-by-side, the note input clips
+     under the buttons (flex: 1 fights the width), which reads as broken. */
+  .decision-form { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .decision-form input,
+  .decision-form select,
+  .decision-form textarea,
+  .decision-form .button { flex: none; min-width: 0; width: 100%; }
+  .decision-form .button { justify-content: center; }
 }
 
 .request-list {

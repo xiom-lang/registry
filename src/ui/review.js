@@ -161,8 +161,30 @@ ${ratings.map((entry) => `  <li class="rating-item">
 </section>`;
 }
 
+/** Pending maintainer claims with verify/reject controls (SESSION.md 21 A1). */
+function claimRow(claim, csrf) {
+  return `<li class="request-card">
+  <div class="request-head">
+    <a class="pkg-name" href="/packages/${encodeURIComponent(claim.package)}#maintainers">${escapeHtml(claim.package)}</a>
+    <span class="status-pill status-pending">claim</span>
+    <span class="pkg-meta">claimed by
+      <a href="https://github.com/${encodeURIComponent(claim.login)}" rel="noopener">@${escapeHtml(claim.login)}</a>
+      &middot; ${formatWhen(claim.claimedAt)}</span>
+  </div>
+  <p class="pkg-meta">Verifying adds this account to the package&apos;s Maintainers list.
+     It grants no publishing rights; scopes stay with tokens and OIDC entries.</p>
+  <form class="decision-form" method="post"
+    action="/review/claims/${encodeURIComponent(claim.package)}/${encodeURIComponent(claim.githubId)}/decision">
+    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+    <input name="note" placeholder="Reason (required to reject)" maxlength="500" aria-label="Claim decision note">
+    <button class="button primary" type="submit" name="status" value="verified">Verify</button>
+    <button class="button danger" type="submit" name="status" value="rejected">Reject</button>
+  </form>
+</li>`;
+}
+
 /** Reviewer queue: open reports first, then decisions and the closed record. */
-function reviewPage({ account, reports, decisions = [], csrf, notice = '', error = '', nav = '' }) {
+function reviewPage({ account, reports, decisions = [], claims = [], csrf, notice = '', error = '', nav = '' }) {
   const open = reports.filter((report) => report.status === 'open');
   const closed = reports.filter((report) => report.status !== 'open');
   const noticeBlock = [
@@ -191,6 +213,12 @@ function reviewPage({ account, reports, decisions = [], csrf, notice = '', error
 </section>
 ${noticeBlock}
 ${section('Open reports', open, 'Nothing waiting for review.', (report) => openReportRow(report, csrf))}
+<section id="ownership">
+  <h2>Ownership claims <span class="count">${claims.length}</span></h2>
+  ${claims.length === 0
+    ? '<p class="pkg-meta">No maintainer claims are waiting.</p>'
+    : `<ul class="request-list">\n${claims.map((claim) => claimRow(claim, csrf)).join('\n')}\n</ul>`}
+</section>
 ${section('Package decisions', actioned, 'No package has a review decision yet.', decisionRow)}
 ${section('Closed', closed, 'No closed reports yet.', closedReportRow)}`;
   return layout({ title: 'Review queue', body, nav });

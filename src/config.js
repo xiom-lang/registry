@@ -224,6 +224,8 @@ function loadConfig() {
     accountsPath: process.env.ACCOUNTS_FILE || path.join(dataDir, 'accounts.json'),
     requestsPath: process.env.REQUESTS_FILE || path.join(dataDir, 'requests.json'),
     reviewsPath: process.env.REVIEWS_FILE || path.join(dataDir, 'reviews.json'),
+    // Package ownership claims (display-only maintainer identity).
+    ownershipPath: process.env.OWNERSHIP_FILE || path.join(dataDir, 'ownership.json'),
     // App-managed trusted-publisher entries (approved requests); the
     // read-only TRUSTED_PUBLISHERS_FILE stays the operator channel.
     storedPublishersPath: process.env.PUBLISHERS_STATE_FILE || path.join(dataDir, 'publishers.json'),

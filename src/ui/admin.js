@@ -80,6 +80,7 @@ ${adminTabs('overview')}
   ${card('/admin/packages?filter=flagged', 'Flagged packages', counts.flagged, 'visible warning on the page')}
   ${card('/admin/packages?filter=muted', 'Muted packages', counts.muted, 'hidden from listings and search')}
   ${card('/admin/users', 'Accounts', counts.users, 'roles and restrictions')}
+  ${card('/review#ownership', 'Ownership claims', counts.ownershipClaims, 'awaiting verification')}
 </div>
 <section>
   <h2>Recent admin activity</h2>

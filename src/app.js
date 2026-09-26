@@ -85,6 +85,7 @@ const {
   adminAuditPage,
 } = require('./ui/admin');
 const { AdminStore } = require('./admin');
+const { OwnershipStore, maintainerView } = require('./ownership');
 const { publishGuidePage } = require('./ui/publish');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
@@ -188,6 +189,9 @@ function createApp(config = loadConfig()) {
     path: config.storedPublishersPath,
     maxBytes: config.maxPublishersBytes,
   });
+  // Package ownership claims: display-only maintainer identity derived from
+  // provenance/approved requests plus verified claims (SESSION.md 21 A1).
+  const ownership = new OwnershipStore({ path: config.ownershipPath });
   // Approved trusted-publisher requests activate from boot; the read-only
   // operator file wins if the same repository+workflow is granted there.
   const filePublisherKeys = new Set(
@@ -429,8 +433,7 @@ function createApp(config = loadConfig()) {
   }
 
   /** View-model for the report controls on a package page. */
-  function packageReviewContext(req, name) {
-    const account = accountOf(req);
+  function packageReviewContext(req, name) {    const account = accountOf(req);
     const flash = req.session && req.session.flash ? req.session.flash : null;
     if (flash) delete req.session.flash;
     const decision = reviews.decision(name);
@@ -451,9 +454,33 @@ function createApp(config = loadConfig()) {
         ? 'Report submitted; a reviewer will take a look.'
         : (typeof req.query.decided === 'string'
           ? 'Review decision recorded.'
-          : (typeof req.query.rated === 'string' ? 'Rating saved.' : '')),
+          : (typeof req.query.rated === 'string'
+            ? 'Rating saved.'
+            : (typeof req.query.claimed === 'string'
+              ? 'Maintainer claim submitted; a reviewer will verify it.'
+              : ''))),
       error: flash && flash.error ? flash.error : '',
     };
+  }
+
+  /**
+   * View-model for the maintainers block on a package page. Derived entries
+   * come from provenance and approved requests; stored claims add verified
+   * names and (to the claimant/reviewers) pending ones. Display only: nothing
+   * here can publish.
+   */
+  function packageOwnershipContext(req, name) {
+    const account = accountOf(req);
+    const pkg = indexStore.getPackage(name) || { versions: {} };
+    return maintainerView({
+      packageName: name,
+      pkg,
+      requests: requests.list(),
+      publishers: publisherStore.list(),
+      claims: ownership.claimsFor(name),
+      viewer: account,
+      reviewer: isReviewer(account),
+    });
   }
 
   /** Double-submit CSRF check against the session's per-session token. */
@@ -826,6 +853,7 @@ function createApp(config = loadConfig()) {
           nav: accountNav(req),
           readme: readmeFor(pkg),
           review: packageReviewContext(req, pkg.name),
+          ownership: packageOwnershipContext(req, pkg.name),
         }));
     }
     res.json(pkg);
@@ -846,6 +874,7 @@ function createApp(config = loadConfig()) {
           nav: accountNav(req),
           readme: readmeFor(pkg),
           review: packageReviewContext(req, pkg.name),
+          ownership: packageOwnershipContext(req, pkg.name),
         }));
     }
     res.json(indexStore.requireVersion(name, version));
@@ -1225,6 +1254,7 @@ function createApp(config = loadConfig()) {
         flagged: decisions.filter((entry) => entry.status === 'flagged').length,
         muted: decisions.filter((entry) => entry.status === 'muted').length,
         users: accounts.list().length,
+        ownershipClaims: ownership.pendingCount(),
       },
       recentAudit: admin.recentAudit(8),
     }));
@@ -1705,6 +1735,34 @@ function createApp(config = loadConfig()) {
     },
   );
 
+  // Maintainer claim: identity for display only; a reviewer verifies or
+  // rejects it from the review queue. Never grants publish power.
+  app.post(
+    '/packages/:name/claim',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const { name } = req.params;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const claim = ownership.claim(name, { user: accountOf(req) });
+        console.log(`Ownership claim on ${name} by ${claim.login}`);
+        res.redirect(303, `/packages/${encodeURIComponent(name)}?claimed=1#maintainers`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/packages/${encodeURIComponent(name)}#maintainers`);
+        }
+        return next(err);
+      }
+    },
+  );
+
   app.get('/review', generalLimit, (req, res, next) => {
     if (!config.oauth.enabled) return res.redirect(302, '/login');
     const account = accountOf(req);
@@ -1723,6 +1781,7 @@ function createApp(config = loadConfig()) {
       account,
       reports: reviews.listReports(),
       decisions: reviews.listDecisions(),
+      claims: ownership.listClaims({ status: 'pending' }),
       csrf: req.session.csrf,
       notice: updated ? `Report ${updated} updated.` : '',
       error: flash && flash.error ? flash.error : '',
@@ -1783,6 +1842,32 @@ function createApp(config = loadConfig()) {
         if (err instanceof BadRequestError || err instanceof ConflictError) {
           req.session.flash = { error: err.message };
           return res.redirect(303, '/review');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // Reviewer decision on a maintainer claim (verify or reject with a reason).
+  app.post(
+    '/review/claims/:name/:githubId/decision',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireReviewer,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const claim = ownership.decide(req.params.name, req.params.githubId, {
+          actor: accountOf(req).login,
+          status: String(req.body.status || ''),
+          note: String(req.body.note || ''),
+        });
+        console.log(`Ownership claim for ${req.params.name} ${claim.status} by ${claim.decidedBy}`);
+        res.redirect(303, `/review?claim=${encodeURIComponent(req.params.githubId)}#ownership`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/review#ownership');
         }
         return next(err);
       }
@@ -2013,6 +2098,7 @@ function createApp(config = loadConfig()) {
     db,
     notifications,
     admin,
+    ownership,
   };
   return app;
 }

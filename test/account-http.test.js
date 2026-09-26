@@ -992,6 +992,81 @@ test('the admin audit feed records role and status changes newest first', async 
   assert.ok(actions.includes('user.restore'));
 });
 
+test('maintainer claims are filed, verified by reviewers, and shown publicly', async () => {
+  // A member claims a package: the section renders, the claim is queued, and
+  // the claimant sees its state without it becoming public yet.
+  const plain = cookieJar();
+  await login(plain, 'plain-code');
+  let response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  assert.equal(response.status, 200);
+  let html = await response.text();
+  assert.match(html, /<section class="maintainers" id="maintainers">/);
+  assert.match(html, /I maintain this package/);
+  const csrf = csrfFrom(html);
+
+  response = await requestAs(plain, '/packages/readme-pkg/claim', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get('location'), /^\/packages\/readme-pkg\?claimed=1#maintainers$/);
+  response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /awaiting verification/);
+  assert.doesNotMatch(html, /verified maintainer/, 'pending claims are not public');
+
+  // Duplicate claims are refused with a readable error.
+  response = await requestAs(plain, '/packages/readme-pkg/claim', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /already have a maintainer claim/);
+
+  // Signed-out browsers cannot claim at all.
+  const anonymous = cookieJar();
+  response = await requestAs(anonymous, '/packages/readme-pkg/claim', {
+    method: 'POST',
+    body: new URLSearchParams({}),
+  });
+  assert.equal(response.status, 401);
+
+  // The reviewer sees the claim, must give a reason to reject, and verifies.
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code');
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Ownership claims/);
+  assert.match(html, /@plain-user/);
+  const reviewCsrf = csrfFrom(html);
+
+  response = await requestAs(reviewer, '/review/claims/readme-pkg/888/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'rejected' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  assert.match(await response.text(), /reason is required/);
+
+  response = await requestAs(reviewer, '/review/claims/readme-pkg/888/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'verified', note: 'owns the repo' }),
+  });
+  assert.equal(response.status, 303);
+
+  // The verified maintainer is public and attributed to the decision.
+  response = await requestAs(anonymous, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /@plain-user/);
+  assert.match(html, /verified maintainer/);
+  assert.match(html, /verified by @user-user/);
+
+  const claims = app.locals.registry.ownership.listClaims({ packageName: 'readme-pkg' });
+  assert.equal(claims.length, 1);
+  assert.deepEqual(claims[0].history.map((entry) => entry.action), ['claimed', 'verified']);
+});
+
 test('a registry without OAuth hides sign-in and refuses account routes', async () => {
   const config = loadConfig();
   config.oauth = {
