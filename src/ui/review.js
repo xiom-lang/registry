@@ -79,16 +79,30 @@ function closedReportRow(report) {
 </li>`;
 }
 
-/** Human-review claims shown next to the publisher claims. */
+/** Human-review state pills: flag and mute are independent properties. */
 function decisionPill(decision) {
-  if (!decision || !decision.status) return '';
-  const styles = {
-    flagged: ['denied', 'flagged by a reviewer'],
-    reviewed: ['approved', 'reviewed by a reviewer'],
-    muted: ['muted', 'muted by the maintainers'],
-  };
-  const [style, label] = styles[decision.status] || ['', decision.status];
-  return `<span class="status-pill status-${style}">${escapeHtml(label)}</span>`;
+  if (!decision) return '';
+  const pills = [];
+  if (decision.flagged === true) {
+    pills.push('<span class="status-pill status-denied">flagged by a reviewer</span>');
+  }
+  if (decision.muted === true) {
+    pills.push('<span class="status-pill status-muted">muted by the maintainers</span>');
+  }
+  if (decision.reviewed === true && decision.flagged !== true) {
+    pills.push('<span class="status-pill status-approved">reviewed by a reviewer</span>');
+  }
+  // Records are normalized to booleans on load; the legacy single-status form
+  // is kept as a safety net for anything built by hand.
+  if (pills.length === 0 && typeof decision.status === 'string' && decision.status) {
+    const legacy = {
+      flagged: ['denied', 'flagged by a reviewer'],
+      muted: ['muted', 'muted by the maintainers'],
+      reviewed: ['approved', 'reviewed by a reviewer'],
+    }[decision.status];
+    if (legacy) pills.push(`<span class="status-pill status-${legacy[0]}">${legacy[1]}</span>`);
+  }
+  return pills.join('');
 }
 
 /** Public review history for a package (audit trail of decisions). */
@@ -107,14 +121,29 @@ ${items}
 </details>`;
 }
 
-/** Reviewer controls for the current package. */
-function decisionControls({ name, csrf }) {
+/**
+ * Reviewer controls with explicit toggles: flag and mute are independent, so
+ * each has its own on/off button; review is its own toggle. Every button
+ * reflects the current state -- nothing needs an "undo" (owner UX,
+ * 2026-09-26).
+ */
+function decisionControls({ name, csrf, decision = null }) {
+  const record = decision || {};
+  const reviewButton = record.reviewed === true
+    ? '<button class="button" type="submit" name="action" value="unreview">Clear review</button>'
+    : '<button class="button primary" type="submit" name="action" value="review">Mark reviewed</button>';
+  const flagButton = record.flagged === true
+    ? '<button class="button" type="submit" name="action" value="unflag">Unflag</button>'
+    : '<button class="button danger" type="submit" name="action" value="flag">Flag</button>';
+  const muteButton = record.muted === true
+    ? '<button class="button" type="submit" name="action" value="unmute">Unmute</button>'
+    : '<button class="button" type="submit" name="action" value="mute">Mute</button>';
   return `<form class="decision-form" method="post" action="/review/packages/${encodeURIComponent(name)}/decision">
   <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-  <input name="note" placeholder="Decision note (required to flag)" maxlength="500" aria-label="Decision note">
-  <button class="button primary" type="submit" name="action" value="review">Mark reviewed</button>
-  <button class="button danger" type="submit" name="action" value="flag">Flag</button>
-  <button class="button" type="submit" name="action" value="clear">Undo last decision</button>
+  <input name="note" placeholder="Reason (required to flag or mute)" maxlength="500" aria-label="Decision note">
+  ${reviewButton}
+  ${flagButton}
+  ${muteButton}
 </form>`;
 }
 

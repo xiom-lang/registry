@@ -174,7 +174,28 @@ function packageBadgeState(name, pkg) {
   // misleading (owner report, 2026-09-26).
   const labelState = requested && requested !== state && BADGE_LABELS[requested] ? requested : state;
   const [communityLabel, officialLabel = communityLabel] = BADGE_LABELS[labelState] || BADGE_LABELS.unsigned;
-  return { file, label: official ? officialLabel : communityLabel, pills, state, requested };
+  // A muted package whose muted art is not the one shown (no muted art, or a
+  // flag outranks it) still carries the small MUTED tag so both properties
+  // stay visible on the icon.
+  const mutedTag = Boolean(pkg && pkg.muted === true) && state !== 'muted';
+  return { file, label: official ? officialLabel : communityLabel, pills, state, requested, mutedTag };
+}
+
+/** Fallback classes for a badge: the dimmed/tagged treatment of a decision
+ * whose own art is missing, and whether the MUTED tag belongs on the group. */
+function badgeModifier(badge) {
+  const fallback = badge.requested && badge.requested !== badge.state ? badge.requested : '';
+  return {
+    fallback,
+    groupMuted: badge.mutedTag === true || fallback === 'muted',
+  };
+}
+
+function badgeImage(badge, size = 80) {
+  const { fallback } = badgeModifier(badge);
+  return `<img class="pkg-badge${fallback ? ` pkg-badge--${fallback}` : ''}" src="/ui/${badge.file}"`
+    + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
+    + ` width="${size}" height="${size}" loading="lazy" decoding="async">`;
 }
 
 function packageBadge(name, pkg, omitPills = []) {
@@ -183,11 +204,17 @@ function packageBadge(name, pkg, omitPills = []) {
     .filter((pill) => !omitPills.includes(pill))
     .map((pill) => `<span class="badge ${pill}">${pill}</span>`)
     .join('');
-  const fallback = badge.requested && badge.requested !== badge.state ? badge.requested : '';
-  return `<span class="pkg-badge-group${fallback ? ` pkg-badge-group--${fallback}` : ''}">`
-    + `<img class="pkg-badge${fallback ? ` pkg-badge--${fallback}` : ''}" src="/ui/${badge.file}"`
-    + ` alt="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}"`
-    + ` width="80" height="80" loading="lazy" decoding="async">${pills}</span>`;
+  const { groupMuted } = badgeModifier(badge);
+  return `<span class="pkg-badge-group${groupMuted ? ' pkg-badge-group--muted' : ''}">`
+    + `${badgeImage(badge)}${pills}</span>`;
+}
+
+/** Icon-only badge for dense rows (admin console): same state, no pills. */
+function packageIcon(name, pkg, size = 44) {
+  const badge = packageBadgeState(name, pkg);
+  const { groupMuted } = badgeModifier(badge);
+  return `<span class="pkg-badge-group pkg-badge-group--compact`
+    + `${groupMuted ? ' pkg-badge-group--muted' : ''}">${badgeImage(badge, size)}</span>`;
 }
 
 /** Clickable category chips (registry-owned vocabulary, so always safe). */
@@ -792,7 +819,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
       ? `${review.openReports} open report${review.openReports === 1 ? '' : 's'} on this package \u00b7 `
       : ''}<a href="/review">Open the review queue</a></p>`
     : ''}
-  ${review.canReview ? decisionControls({ name, csrf: review.csrf }) : ''}
+  ${review.canReview ? decisionControls({ name, csrf: review.csrf, decision: review.decision }) : ''}
   ${reviewHistory(review.history)}
   ${review.canReport
     ? `<details class="report-form-box"><summary>Report this package</summary>${reportForm({ name, csrf: review.csrf })}</details>`
@@ -807,7 +834,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
 
   // The decision pill already says "reviewed by a reviewer"; do not repeat
   // the same claim in the badge pill row.
-  const reviewedByDecision = Boolean(review && review.decision && review.decision.status === 'reviewed');
+  const reviewedByDecision = Boolean(review && review.decision && review.decision.reviewed === true);
   return layout({
     title: name,
     description: pkg.description || `Versions of ${name}`,
@@ -872,6 +899,8 @@ module.exports = {
   packageBadgeState,
   badgeArtFor,
   pickBadgeFile,
+  packageBadge,
+  packageIcon,
   packageTrustChips,
   setStageOverrides,
   effectiveStage,

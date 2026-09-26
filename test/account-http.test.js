@@ -400,7 +400,7 @@ test('reporting needs sign-in and the queue is reviewer-only', async () => {
   assert.doesNotMatch(html, /href="\/review"/, 'plain accounts get no reviewer link');
 });
 
-test('reviewers can flag, review, and clear a package with a public history', async () => {
+test('reviewers toggle flag, mute, and review independently with a public history', async () => {
   const jar = cookieJar();
   await login(jar, 'user-code');
 
@@ -420,6 +420,7 @@ test('reviewers can flag, review, and clear a package with a public history', as
   html = await response.text();
   assert.match(html, /reviewed by a reviewer/);
   assert.match(html, /pkg-badge--reviewed/);
+  assert.match(html, /Clear review/, 'the review toggle reflects the current state');
 
   // Flagging needs a reason; the error comes back on the package page.
   response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
@@ -432,6 +433,7 @@ test('reviewers can flag, review, and clear a package with a public history', as
   assert.match(html, /a reason is required when flagging/);
   assert.doesNotMatch(html, /flagged by a reviewer/);
 
+  // Flagging supersedes the clean verdict; the flag art shows.
   response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
     method: 'POST',
     body: new URLSearchParams({ csrf, action: 'flag', note: 'confirmed unsafe' }),
@@ -440,28 +442,52 @@ test('reviewers can flag, review, and clear a package with a public history', as
   response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
   html = await response.text();
   assert.match(html, /flagged by a reviewer/);
+  assert.doesNotMatch(html, /reviewed by a reviewer/, 'a flag clears the reviewed mark');
   assert.match(html, /confirmed unsafe/);
 
   // The listing overlay shows the flagged community art.
   response = await requestAs(jar, '/packages', { headers: BROWSER });
   assert.match(await response.text(), /src="\/ui\/pgk_flagged_community\.webp"/);
 
-  // Clearing restores the state; the history stays public.
+  // Muting is independent: it coexists with the flag, and unflagging leaves
+  // the mute in place. No undo required.
   response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, action: 'clear' }),
+    body: new URLSearchParams({ csrf, action: 'mute', note: 'metadata spam' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /flagged by a reviewer/);
+  assert.match(html, /muted by the maintainers/);
+  assert.match(html, /pkg-badge-group--muted/, 'the muted tag stays visible next to the flagged art');
+
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'unflag', note: 'appeal accepted' }),
   });
   assert.equal(response.status, 303);
   response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
   html = await response.text();
   assert.doesNotMatch(html, /flagged by a reviewer/);
-  assert.match(html, /reviewed by a reviewer/, 'undo restored the prior reviewed decision');
-  assert.match(html, /cleared<\/span> by @user-user/);
+  assert.match(html, /muted by the maintainers/, 'unflagging does not clear the mute');
+  assert.match(html, /Unmute/);
+
+  response = await requestAs(jar, '/review/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'unmute' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.doesNotMatch(html, /muted by the maintainers/);
+  assert.doesNotMatch(html, /flagged by a reviewer/);
+  assert.match(html, /Mark reviewed/, 'the toggles read back to their neutral state');
 
   const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'reviews.json'), 'utf-8'));
   assert.deepEqual(
     data.packages['readme-pkg'].history.map((entry) => entry.action),
-    ['reviewed', 'flagged', 'cleared'],
+    ['review', 'flag', 'mute', 'unflag', 'unmute'],
   );
 
   // A plain account sees the history but no controls.
@@ -821,40 +847,46 @@ test('package moderation flags, mutes, hides from discovery, and stays audited',
   const home = await requestAs(jar, '/', { headers: BROWSER });
   assert.doesNotMatch(await home.text(), /readme-pkg/);
 
-  // Flag then undo: the public pill follows the decision, and undo restores
-  // the state the package had before the overlay (here: the mute).
+  // Flag on top of the mute: both properties are independent, so both pills
+  // show and the muted tag stays next to the flagged art.
   response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
     method: 'POST',
     body: new URLSearchParams({ csrf, action: 'flag', note: 'unsafe install script' }),
   });
   assert.equal(response.status, 303);
   const flaggedPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
-  assert.match(await flaggedPage.text(), /flagged by a reviewer/);
+  const flaggedHtml = await flaggedPage.text();
+  assert.match(flaggedHtml, /flagged by a reviewer/);
+  assert.match(flaggedHtml, /muted by the maintainers/);
+  assert.match(flaggedHtml, /src="\/ui\/pgk_flagged_community\.webp"/);
+  assert.match(flaggedHtml, /pkg-badge-group--muted/);
+  assert.equal(app.locals.registry.admin.recentAudit(5)[0].action, 'package.flag');
+
+  // Unflag removes only the flag; the mute (and its discovery masking) stays.
   response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, action: 'clear' }),
+    body: new URLSearchParams({ csrf, action: 'unflag', note: 'appeal accepted' }),
   });
   assert.equal(response.status, 303);
-  assert.equal(
-    app.locals.registry.reviews.decision('readme-pkg').status,
-    'muted',
-    'undo returned to the decision before the flag',
-  );
+  assert.equal(app.locals.registry.admin.recentAudit(5)[0].action, 'package.unflag');
+  assert.equal(app.locals.registry.reviews.decision('readme-pkg').flagged, false);
+  assert.equal(app.locals.registry.reviews.decision('readme-pkg').muted, true);
   const restoredPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
   const restoredHtml = await restoredPage.text();
   assert.doesNotMatch(restoredHtml, /flagged by a reviewer/);
   assert.match(restoredHtml, /Hidden from listings and search/);
 
-  // Keep unwinding so the tests after this one start from a clean decision.
-  let guard = 0;
-  while (app.locals.registry.reviews.decision('readme-pkg').status && guard < 6) {
-    await requestAs(jar, '/admin/packages/readme-pkg/decision', {
-      method: 'POST',
-      body: new URLSearchParams({ csrf, action: 'clear' }),
-    });
-    guard += 1;
-  }
-  assert.equal(app.locals.registry.reviews.decision('readme-pkg').status, '');
+  // Unmute returns the package to discovery.
+  response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'unmute' }),
+  });
+  assert.equal(response.status, 303);
+  const clean = app.locals.registry.reviews.decision('readme-pkg');
+  assert.equal(clean.muted, false);
+  assert.equal(clean.flagged, false);
+  const cleanListing = await requestAs(jar, '/packages', { headers: BROWSER });
+  assert.match(await cleanListing.text(), /readme-pkg/);
 });
 
 test('admins yank a version from the console and the decision is recorded', async () => {

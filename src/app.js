@@ -654,14 +654,14 @@ function createApp(config = loadConfig()) {
     if (decisions.length === 0) return index;
     const packages = { ...index.packages };
     let changed = false;
-    for (const { name, status } of decisions) {
-      if (!status || !packages[name]) continue;
-      packages[name] = {
-        ...packages[name],
-        ...(status === 'flagged' ? { flagged: true } : {}),
-        ...(status === 'muted' ? { muted: true } : {}),
-        ...(status === 'reviewed' ? { reviewed: true } : {}),
-      };
+    for (const { name, reviewed, flagged, muted } of decisions) {
+      if (!packages[name]) continue;
+      const flags = {};
+      if (flagged === true) flags.flagged = true;
+      if (muted === true) flags.muted = true;
+      if (reviewed === true && flagged !== true) flags.reviewed = true;
+      if (Object.keys(flags).length === 0) continue;
+      packages[name] = { ...packages[name], ...flags };
       changed = true;
     }
     return changed ? { ...index, packages } : index;
@@ -1326,7 +1326,10 @@ function createApp(config = loadConfig()) {
       .filter(({ pkg, decision }) => {
         if (filter === 'flagged') return pkg.flagged === true;
         if (filter === 'muted') return pkg.muted === true;
-        if (filter === 'undecided') return !decision || !decision.status;
+        if (filter === 'undecided') {
+          return !decision
+            || (decision.reviewed !== true && decision.flagged !== true && decision.muted !== true);
+        }
         if (filter === 'yanked') {
           return Object.values(pkg.versions || {}).some((entry) => entry.yanked === true);
         }
@@ -1352,13 +1355,9 @@ function createApp(config = loadConfig()) {
     (req, res, next) => {
       try {
         const action = String(req.body.action || '');
-        const status = { review: 'reviewed', flag: 'flagged', mute: 'muted', clear: '' }[action];
-        if (status === undefined) {
-          throw new BadRequestError('action must be review, flag, mute, or clear', 'invalid_action');
-        }
         const name = String(req.params.name).toLowerCase();
         reviews.setDecision(name, {
-          status,
+          action,
           actor: accountOf(req).login,
           note: String(req.body.note || ''),
         });
@@ -1831,16 +1830,12 @@ function createApp(config = loadConfig()) {
           throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
         }
         const action = String(req.body.action || '');
-        const status = action === 'review' ? 'reviewed' : (action === 'flag' ? 'flagged' : (action === 'clear' ? '' : null));
-        if (status === null) {
-          throw new BadRequestError('action must be "review", "flag", or "clear"', 'invalid_action');
-        }
         const record = reviews.setDecision(name, {
-          status,
+          action,
           actor: accountOf(req).login,
           note: String(req.body.note || ''),
         });
-        console.log(`Package ${name} review decision: ${record.status || 'cleared'} by ${accountOf(req).login}`);
+        console.log(`Package ${name} decision: ${action} by ${accountOf(req).login}`);
         res.redirect(303, `/packages/${encodeURIComponent(name)}?decided=1#review`);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError) {

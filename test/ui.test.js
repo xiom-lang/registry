@@ -599,6 +599,14 @@ test('packageBadgeState precedence and track selection', () => {
   assert.equal(pickBadgeFile('muted', 'official'), '', 'no official muted art in this build');
   assert.equal(pickBadgeFile('flagged', 'community'), 'pgk_flagged_community.webp');
 
+  // The MUTED tag stays visible whenever the shown art is not the muted art:
+  // both flag and mute can be active at once, and each must be legible.
+  const mutedOnly = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { muted: true }));
+  assert.equal(mutedOnly.mutedTag, true, 'no muted art: dim + tag');
+  const mutedAndFlagged = packageBadgeState('demo-pkg', make('demo-pkg', '1.0.0', signed, { muted: true, flagged: true }));
+  assert.equal(stateOf(mutedAndFlagged), 'flagged');
+  assert.equal(mutedAndFlagged.mutedTag, true, 'flagged art still carries the MUTED tag');
+
   // Console rows get decision-independent trust chips, so a cleared decision
   // never reads as "the package is undecided".
   const chips = packageTrustChips('xiom.core', make('xiom.core', '1.0.0', signed, { reviewed: true }));

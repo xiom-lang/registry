@@ -2099,6 +2099,33 @@ override, staging `xiom.algo@0.1.1` shows incubator art from its published
 stage, and the muted fixture renders dimmed art + tag + truthful alt. 245 unit
 tests and 20 e2e checks pass.
 
+**21.6 Independent flag/mute toggles and console icons (owner UX report,
+2026-09-26).** The owner retired "undo last decision": unflagging required an
+undo that also stripped the mute, and there was no way to unmute back to the
+original state. Flag and mute are now independent properties on a decision
+record (`{ reviewed, flagged, muted, history }`), each with its own explicit
+toggle:
+
+- **Mark reviewed / Clear review**, **Flag / Unflag**, **Mute / Unmute** --
+  buttons always reflect the current state, on the package page and in the
+  console; flagging clears the reviewed mark and marking reviewed clears the
+  flag (a clean verdict and a warning cannot coexist), while unflagging never
+  touches the mute and vice versa. `clear` remains a reset-all API action but
+  is no longer surfaced.
+- Records written before this model (single `status`) normalize on load; a
+  record with no active property and no recognizable action is dropped.
+- **Both pills show** when both properties are active, and the MUTED tag
+  stays visible even when the flagged art outranks it.
+- **The admin console rows now carry the state icon** (`packageIcon`, 44px
+  compact) next to the trust chips and decision pills, so flag/mute/review
+  state is legible from the icon alone -- the owner's "badges but not the
+  icon" report.
+
+Coverage: store toggle/normalization tests, HTTP flow (review -> flag ->
+mute -> unflag -> unmute with pill/art/tag assertions), and badge
+`mutedTag`/icon assertions; 246 unit tests and 20 e2e checks pass.
+
+
 
 
 

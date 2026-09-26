@@ -52,7 +52,8 @@ trusted -> verified -> unsigned.
 **Fallback treatments (no art required, 2026-09-26):** until the decision art
 exists, the icon still reflects the decision: `muted` renders the derived art
 dimmed (grayscale, reduced opacity) with a small "MUTED" tag under it, and
-`reviewed` adds a signal-coloured ring. The image `alt`/`title` always
-announces the decision, so a muted package never claims "Signed by the
-publisher" again. Both treatments disappear automatically once the dedicated
-files are added.
+`reviewed` adds a signal-coloured ring. Flag and mute are independent, so a
+flagged package that is also muted keeps the flagged art and still carries the
+MUTED tag. The image `alt`/`title` always announces the decision, so a muted
+package never claims "Signed by the publisher" again. Both treatments
+disappear automatically once the dedicated files are added.

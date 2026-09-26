@@ -97,54 +97,101 @@ test('resolve and dismiss require a note and are one-way', () => {
   assert.throws(() => reviews.resolveReport('rep_000000000000', { actor: 'root', resolution: 'x' }), /not found/);
 });
 
-test('reviewer decisions are audited and flagging needs a reason', () => {
+test('reviewer decisions are independent toggles with a full history', () => {
   const reviews = store();
   assert.throws(
-    () => reviews.setDecision('demo-pkg', { status: 'flagged', actor: 'root' }),
+    () => reviews.setDecision('demo-pkg', { action: 'flag', actor: 'root' }),
     /reason is required/,
   );
   assert.throws(
-    () => reviews.setDecision('Bad Name', { status: 'reviewed', actor: 'root' }),
+    () => reviews.setDecision('demo-pkg', { action: 'mute', actor: 'root' }),
+    /reason is required/,
+  );
+  assert.throws(
+    () => reviews.setDecision('Bad Name', { action: 'review', actor: 'root' }),
     /not a package name/,
   );
   assert.throws(
-    () => reviews.setDecision('demo-pkg', { status: 'nope', actor: 'root' }),
-    /decision must be/,
+    () => reviews.setDecision('demo-pkg', { action: 'nope', actor: 'root' }),
+    /action must be one of/,
   );
 
-  const reviewed = reviews.setDecision('demo-pkg', { status: 'reviewed', actor: 'root', note: 'looks clean' });
-  assert.equal(reviewed.status, 'reviewed');
-  const flagged = reviews.setDecision('demo-pkg', { status: 'flagged', actor: 'root', note: 'malware report confirmed' });
-  assert.equal(flagged.status, 'flagged');
-  assert.deepEqual(flagged.history.map((entry) => entry.action), ['reviewed', 'flagged']);
+  const reviewed = reviews.setDecision('demo-pkg', { action: 'review', actor: 'root', note: 'looks clean' });
+  assert.deepEqual(
+    { reviewed: reviewed.reviewed, flagged: reviewed.flagged, muted: reviewed.muted },
+    { reviewed: true, flagged: false, muted: false },
+  );
 
-  // Clearing undoes the flag and restores the prior reviewed decision: an
-  // official/signed package never reads as "undecided" after an overlay is
-  // removed. The history keeps the whole trail.
-  const cleared = reviews.setDecision('demo-pkg', { status: '', actor: 'root' });
-  assert.equal(cleared.status, 'reviewed');
-  assert.deepEqual(cleared.history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
+  // Flagging supersedes the clean verdict; muting is an independent overlay
+  // and can coexist with a flag.
+  const flagged = reviews.setDecision('demo-pkg', { action: 'flag', actor: 'root', note: 'malware report confirmed' });
+  assert.deepEqual(
+    { reviewed: flagged.reviewed, flagged: flagged.flagged, muted: flagged.muted },
+    { reviewed: false, flagged: true, muted: false },
+  );
+  const both = reviews.setDecision('demo-pkg', { action: 'mute', actor: 'root', note: 'metadata spam' });
+  assert.deepEqual(
+    { reviewed: both.reviewed, flagged: both.flagged, muted: both.muted },
+    { reviewed: false, flagged: true, muted: true },
+  );
+  assert.deepEqual(both.history.map((entry) => entry.action), ['review', 'flag', 'mute']);
   assert.deepEqual(reviews.listDecisions().map((entry) => entry.name), ['demo-pkg']);
   assert.equal(reviews.decision('other-pkg'), null);
 
+  // Unflagging leaves the mute untouched, and vice versa: each property has
+  // its own toggle, so nothing needs an undo.
+  const unflagged = reviews.setDecision('demo-pkg', { action: 'unflag', actor: 'root' });
+  assert.equal(unflagged.flagged, false);
+  assert.equal(unflagged.muted, true);
+  const unmuted = reviews.setDecision('demo-pkg', { action: 'unmute', actor: 'root' });
+  assert.deepEqual(
+    { reviewed: unmuted.reviewed, flagged: unmuted.flagged, muted: unmuted.muted },
+    { reviewed: false, flagged: false, muted: false },
+  );
+  const reReviewed = reviews.setDecision('demo-pkg', { action: 'review', actor: 'root' });
+  assert.equal(reReviewed.reviewed, true);
+  const clearedReview = reviews.setDecision('demo-pkg', { action: 'unreview', actor: 'root' });
+  assert.equal(clearedReview.reviewed, false);
+
+  // The record round-trips through the file in the boolean model.
   const reloaded = new ReviewStore({ path: reviews.path });
-  assert.equal(reloaded.decision('demo-pkg').status, 'reviewed');
-  assert.deepEqual(reloaded.decision('demo-pkg').history.map((entry) => entry.action), ['reviewed', 'flagged', 'cleared']);
+  const persisted = reloaded.decision('demo-pkg');
+  assert.equal(persisted.reviewed, false);
+  assert.equal(persisted.flagged, false);
+  assert.equal(persisted.muted, false);
+  assert.deepEqual(
+    persisted.history.map((entry) => entry.action),
+    ['review', 'flag', 'mute', 'unflag', 'unmute', 'review', 'unreview'],
+  );
+});
 
-  // Undo is a stack: [reviewed, flagged, muted] unwinds to muted, then
-  // reviewed, then undecided -- no ping-pong between overlays.
-  reloaded.setDecision('demo-pkg', { status: 'flagged', actor: 'root', note: 'x' });
-  reloaded.setDecision('demo-pkg', { status: 'muted', actor: 'root', note: 'y' });
-  assert.equal(reloaded.decision('demo-pkg').status, 'muted');
-  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, 'flagged');
-  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, 'reviewed');
-  assert.equal(reloaded.setDecision('demo-pkg', { status: '', actor: 'root' }).status, '');
-
-  // With nothing before the current decision, undo clears to undecided.
-  reloaded.setDecision('other-pkg', { status: 'flagged', actor: 'root', note: 'x' });
-  const undone = reloaded.setDecision('other-pkg', { status: '', actor: 'root' });
-  assert.equal(undone.status, '');
-  assert.deepEqual(undone.history.map((entry) => entry.action), ['flagged', 'cleared']);
+test('legacy single-status decision records normalize on load', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-reviews-legacy-'));
+  const file = path.join(dir, 'reviews.json');
+  fs.writeFileSync(file, JSON.stringify({
+    version: '1.1.0',
+    packages: {
+      'demo-pkg': {
+        status: 'flagged',
+        history: [{ at: '2026-09-25T00:00:00.000Z', actor: 'root', action: 'flagged' }],
+      },
+      'muted-pkg': {
+        status: 'muted',
+        history: [{ at: '2026-09-25T00:00:00.000Z', actor: 'root', action: 'muted' }],
+      },
+      'reviewed-pkg': {
+        status: 'reviewed',
+        history: [{ at: '2026-09-25T00:00:00.000Z', actor: 'root', action: 'reviewed' }],
+      },
+    },
+  }));
+  const store = new ReviewStore({ path: file });
+  assert.deepEqual(
+    { reviewed: store.decision('demo-pkg').reviewed, flagged: store.decision('demo-pkg').flagged, muted: store.decision('demo-pkg').muted },
+    { reviewed: false, flagged: true, muted: false },
+  );
+  assert.equal(store.decision('muted-pkg').muted, true);
+  assert.equal(store.decision('reviewed-pkg').reviewed, true);
 });
 
 test('reports and decisions coexist in one file', () => {
@@ -152,10 +199,10 @@ test('reports and decisions coexist in one file', () => {
   const report = reviews.createReport({
     packageName: 'demo-pkg', reporter: REPORTER, reason: 'other', note: 'x',
   });
-  reviews.setDecision('demo-pkg', { status: 'reviewed', actor: 'root' });
+  reviews.setDecision('demo-pkg', { action: 'review', actor: 'root' });
   const reloaded = new ReviewStore({ path: reviews.path });
   assert.equal(reloaded.getReport(report.id).status, 'open');
-  assert.equal(reloaded.decision('demo-pkg').status, 'reviewed');
+  assert.equal(reloaded.decision('demo-pkg').reviewed, true);
   assert.equal(reloaded.openReportCount('demo-pkg'), 1);
 });
 

@@ -354,6 +354,13 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
    replaces these automatically (owner report, 2026-09-26). */
 .pkg-badge--muted { filter: grayscale(1) opacity(0.55); }
 .pkg-badge--reviewed { outline: 2px solid var(--signal-dim); outline-offset: 2px; border-radius: 14px; }
+
+/* Dense icon-only rows (admin console): same state, compact art. */
+.pkg-badge-group--compact { margin-left: 0; }
+.pkg-badge-group--compact .pkg-badge { border-radius: 10px; height: 44px; width: 44px; }
+@media (max-width: 640px) {
+  .pkg-badge-group--compact .pkg-badge { height: 36px; width: 36px; }
+}
 .pkg-badge-group--muted::after {
   background: var(--ink);
   border: 1px solid var(--muted);

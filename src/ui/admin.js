@@ -12,7 +12,7 @@
 
 const { escapeHtml, formatWhen, shortId } = require('./format');
 const { layout } = require('./layout');
-const { packageTrustChips } = require('./pages');
+const { packageIcon, packageTrustChips } = require('./pages');
 const {
   noticeBox,
   statusPill,
@@ -20,7 +20,7 @@ const {
   requestTarget,
   historyLine,
 } = require('./account');
-const { REASON_LABELS } = require('./review');
+const { REASON_LABELS, decisionPill } = require('./review');
 
 const ADMIN_SECTIONS = [
   ['/admin', 'Overview', 'overview'],
@@ -47,16 +47,6 @@ function filterChips(base, filters, active) {
       + `${active === value ? ' aria-current="page"' : ''}>${escapeHtml(label)}</a>`;
   }).join('\n  ');
   return `<nav class="facet-row" aria-label="Filters">\n  ${chips}\n</nav>`;
-}
-
-function decisionLabel(status) {
-  return { flagged: 'flagged', muted: 'muted', reviewed: 'reviewed' }[status] || 'no decision';
-}
-
-function decisionPill(status) {
-  if (!status) return '<span class="status-pill">no decision</span>';
-  const style = status === 'flagged' ? 'denied' : (status === 'muted' ? 'muted' : 'approved');
-  return `<span class="status-pill status-${style}">${escapeHtml(decisionLabel(status))}</span>`;
 }
 
 /** Console dashboard: what needs attention, with links into each queue. */
@@ -235,7 +225,7 @@ ${rendered}`;
 // ─── Packages ───────────────────────────────────────────────────────────────
 
 function packageModerationCard({ name, pkg, decision, csrf }) {
-  const status = decision ? decision.status : '';
+  const record = decision || {};
   const yanked = Object.entries(pkg.versions || {})
     .filter(([, entry]) => entry.yanked === true)
     .map(([version]) => version);
@@ -252,21 +242,32 @@ function packageModerationCard({ name, pkg, decision, csrf }) {
       return `${entry.action} by @${entry.actor || '?'}${note}`;
     }).join(' \u00b7 '))}</p>`
     : '';
+  // Explicit toggles: flag and mute are independent properties, so each has
+  // its own on/off button; review is its own toggle. No undo needed.
+  const reviewButton = record.reviewed === true
+    ? '<button class="button" type="submit" name="action" value="unreview">Clear review</button>'
+    : '<button class="button primary" type="submit" name="action" value="review">Mark reviewed</button>';
+  const flagButton = record.flagged === true
+    ? '<button class="button" type="submit" name="action" value="unflag">Unflag</button>'
+    : '<button class="button danger" type="submit" name="action" value="flag">Flag</button>';
+  const muteButton = record.muted === true
+    ? '<button class="button" type="submit" name="action" value="unmute">Unmute</button>'
+    : '<button class="button" type="submit" name="action" value="mute">Mute</button>';
   return `<li class="request-card">
   <div class="request-head">
+    ${packageIcon(name, pkg, 44)}
     <a class="pkg-name" href="/packages/${encodeURIComponent(name)}">${escapeHtml(name)}</a>
     ${packageTrustChips(name, pkg)}
-    ${decisionPill(status)}
+    ${decisionPill(decision) || '<span class="status-pill">no decision</span>'}
     <span class="pkg-meta">latest ${latest}${yanked.length > 0 ? ` &middot; yanked: ${escapeHtml(yanked.join(', '))}` : ''}</span>
   </div>
   ${history}
   <form class="decision-form" method="post" action="/admin/packages/${encodeURIComponent(name)}/decision">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
     <input name="note" placeholder="Reason (required to flag or mute)" maxlength="500" aria-label="Moderation reason">
-    <button class="button" type="submit" name="action" value="review">Mark reviewed</button>
-    <button class="button danger" type="submit" name="action" value="flag">Flag</button>
-    <button class="button" type="submit" name="action" value="mute">Mute</button>
-    ${status ? '<button class="button" type="submit" name="action" value="clear">Undo last decision</button>' : ''}
+    ${reviewButton}
+    ${flagButton}
+    ${muteButton}
   </form>
   ${versions.length > 0 ? `<details class="mint-details">
     <summary>Yank a version</summary>

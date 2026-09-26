@@ -23,6 +23,7 @@ const MAX_RATING_TEXT = 280;
 const REPORT_REASONS = Object.freeze(['malware', 'spam', 'impersonation', 'license', 'abandoned', 'other']);
 const REPORT_STATUSES = new Set(['open', 'resolved', 'dismissed']);
 const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged', 'muted']);
+const DECISION_ACTIONS = new Set(['review', 'unreview', 'flag', 'unflag', 'mute', 'unmute', 'clear']);
 const MAX_OPEN_REPORTS_PER_REPORTER = 3;
 const SAFE_PACKAGE_NAME = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
 
@@ -215,50 +216,64 @@ class ReviewStore {
   }
 
   /**
-   * Record a reviewer decision: mark reviewed, flag, mute, or clear. Flagging
-   * and muting require a reason; clearing keeps the history (the record is the
-   * audit). Muting only hides a package from discovery: its page, artifacts,
-   * and `/index.json` entry are untouched (SESSION.md section 20).
+   * Apply a moderation action. `flagged` (public warning) and `muted`
+   * (hidden from discovery) are independent properties: a package can be
+   * either, both, or neither, and each has its own toggle so removing one
+   * never disturbs the other (owner UX report, 2026-09-26). Marking reviewed
+   * clears a flag (a clean verdict and a warning cannot coexist) and flagging
+   * clears the reviewed mark. History keeps every transition (the audit).
    *
    * @param {string} packageName
-   * @param {{ status: 'reviewed'|'flagged'|'muted'|'', actor: string, note?: string }} input
+   * @param {{ action: 'review'|'unreview'|'flag'|'unflag'|'mute'|'unmute'|'clear',
+   *           actor: string, note?: string }} input
    */
-  setDecision(packageName, { status, actor, note = '' }) {
+  setDecision(packageName, { action, actor, note = '' }) {
     const name = clean(packageName, 128).toLowerCase();
     if (!SAFE_PACKAGE_NAME.test(name)) {
       throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
     }
-    if (!DECISION_STATUSES.has(status)) {
+    if (!DECISION_ACTIONS.has(action)) {
       throw new BadRequestError(
-        'decision must be "reviewed", "flagged", "muted", or empty',
-        'invalid_decision',
+        `action must be one of: ${[...DECISION_ACTIONS].join(', ')}`,
+        'invalid_action',
       );
     }
     const decisionNote = clean(note, MAX_NOTE);
-    if ((status === 'flagged' || status === 'muted') && !decisionNote) {
+    if ((action === 'flag' || action === 'mute') && !decisionNote) {
       throw new BadRequestError(
-        `a reason is required when ${status === 'muted' ? 'muting' : 'flagging'} a package`,
-        status === 'muted' ? 'mute_reason_required' : 'flag_reason_required',
+        `a reason is required when ${action === 'mute' ? 'muting' : 'flagging'} a package`,
+        action === 'mute' ? 'mute_reason_required' : 'flag_reason_required',
       );
     }
-    const prior = this.packages[name];
-    // Decision history is a stack: reviewed/flagged/muted push a state and
-    // 'cleared' pops the latest one (undo). The visible status is the top of
-    // the stack, so undoing a flag after a mute returns to muted, undoing that
-    // returns to the previous state, and so on -- a package that was reviewed
-    // before an overlay never reads as "undecided" (owner audit,
-    // 2026-09-26). With nothing to undo it clears. On load the stored `status`
-    // stays authoritative, so records written before this change keep their
-    // displayed state.
-    const entry = {
+    const prior = this.packages[name]
+      || { reviewed: false, flagged: false, muted: false, history: [] };
+    const next = { reviewed: prior.reviewed, flagged: prior.flagged, muted: prior.muted };
+    if (action === 'review') {
+      next.reviewed = true;
+      next.flagged = false;
+    } else if (action === 'unreview') {
+      next.reviewed = false;
+    } else if (action === 'flag') {
+      next.flagged = true;
+      next.reviewed = false;
+    } else if (action === 'unflag') {
+      next.flagged = false;
+    } else if (action === 'mute') {
+      next.muted = true;
+    } else if (action === 'unmute') {
+      next.muted = false;
+    } else if (action === 'clear') {
+      next.reviewed = false;
+      next.flagged = false;
+      next.muted = false;
+    }
+    const history = [...prior.history, {
       at: new Date().toISOString(),
       actor: clean(actor, 64),
-      action: status === '' ? 'cleared' : status,
+      action,
       ...(decisionNote ? { note: decisionNote } : {}),
-    };
-    const history = [...(prior ? prior.history : []), entry];
-    const nextStatus = status === '' ? (decisionStack(history).at(-1) || '') : status;
-    const record = { status: nextStatus, history };
+    }];
+    const record = { ...next, history };
     this.#commit({ ...this.packages, [name]: record }, this.reports, this.ratings);
     return record;
   }
@@ -341,27 +356,18 @@ function normalizeReport(id, entry) {
 }
 
 /**
- * Replay a decision history into a state stack: reviewed/flagged/muted push a
- * state, 'cleared' pops the latest one (undo), anything else is ignored. The
- * top is the visible status; '' when nothing is left.
+ * Normalize one on-disk decision record. New records keep independent
+ * `reviewed`/`flagged`/`muted` booleans; records written before that model
+ * carry a single `status` and are mapped over on load (history is kept).
  */
-function decisionStack(history) {
-  const stack = [];
-  for (const item of Array.isArray(history) ? history : []) {
-    if (!item || typeof item.action !== 'string') continue;
-    if (item.action === 'reviewed' || item.action === 'flagged' || item.action === 'muted') {
-      stack.push(item.action);
-    } else if (item.action === 'cleared') {
-      stack.pop();
-    }
-  }
-  return stack;
-}
-
-/** Allowlist-normalize one on-disk decision record; malformed entries drop. */
 function normalizeDecision(name, entry) {
   if (!SAFE_PACKAGE_NAME.test(name) || !entry || typeof entry !== 'object') return null;
-  if (!DECISION_STATUSES.has(entry.status)) return null;
+  const legacy = typeof entry.status === 'string' && DECISION_STATUSES.has(entry.status)
+    ? entry.status
+    : '';
+  const flagged = entry.flagged === true || legacy === 'flagged';
+  const muted = entry.muted === true || legacy === 'muted';
+  const reviewed = (entry.reviewed === true || legacy === 'reviewed') && !flagged;
   const history = Array.isArray(entry.history)
     ? entry.history
       .filter((item) => item && typeof item === 'object' && typeof item.action === 'string')
@@ -373,7 +379,16 @@ function normalizeDecision(name, entry) {
       }))
     : [];
   if (history.length === 0) return null;
-  return { status: entry.status, history };
+  // A record with no active property and no recognizable decision action is
+  // noise (e.g. a hand-edited file); drop it.
+  const knownHistory = new Set([
+    'review', 'unreview', 'flag', 'unflag', 'mute', 'unmute', 'clear',
+    'reviewed', 'flagged', 'muted', 'cleared',
+  ]);
+  if (!reviewed && !flagged && !muted && !history.some((item) => knownHistory.has(item.action))) {
+    return null;
+  }
+  return { reviewed, flagged, muted, history };
 }
 
 /** Allowlist-normalize one on-disk rating; malformed entries are dropped. */
@@ -399,5 +414,5 @@ module.exports = {
   MAX_RATING_TEXT,
   REPORT_REASONS,
   DECISION_STATUSES,
-  decisionStack,
+  DECISION_ACTIONS,
 };
