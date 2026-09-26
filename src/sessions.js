@@ -96,6 +96,19 @@ class SessionStore {
     this.sessions.delete(id);
   }
 
+  /** Drop every session belonging to an account (used when banning). */
+  destroyForAccount(githubId) {
+    const target = String(githubId);
+    let removed = 0;
+    for (const [id, session] of this.sessions) {
+      if (session.account && String(session.account.githubId) === target) {
+        this.sessions.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
   /** Cookie payload: `<id>.<hmac>`, so a forged id cannot select a session. */
   cookieValue(id) {
     const mac = crypto.createHmac('sha256', this.key).update(id).digest('hex');

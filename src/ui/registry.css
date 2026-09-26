@@ -774,6 +774,8 @@ table.versions tr:hover td { background: var(--panel); }
   .nav-more summary { padding: 8px 14px; }
   .nav-right { margin-left: auto; }
   .site-header nav .nav-more-panel { gap: 0; margin-left: 0; }
+  .account-tab { font-size: 13px; }
+  .account-tabs { gap: var(--space-md); }
 
   h1 { font-size: 26px; }
   .container { padding: 0 var(--space-md); }
@@ -857,6 +859,53 @@ table.versions tr:hover td { background: var(--panel); }
 .inline-form { margin-bottom: var(--space-md); }
 .mint-details { margin-top: var(--space-md); }
 .mint-details summary { color: var(--paper-dim); cursor: pointer; font-size: 14px; }
+
+/* Admin console: dashboard cards, audit feed, user actions. */
+.console-grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-bottom: var(--space-xl);
+}
+.console-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-md) var(--space-lg);
+}
+.console-card:hover { border-color: var(--signal-dim); }
+.console-card-value { color: var(--paper); font-size: 28px; font-weight: 600; }
+.console-card-label { color: var(--paper-dim); font-size: 14px; font-weight: 600; }
+.console-search {
+  display: flex;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  max-width: 520px;
+}
+.console-search input { flex: 1; min-width: 0; }
+.audit-list { display: grid; gap: var(--space-xs); list-style: none; margin-top: var(--space-md); }
+.audit-row {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  padding: 8px 0;
+}
+.audit-action { color: var(--paper); }
+.audit-detail { overflow-wrap: anywhere; }
+.user-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
+.user-actions form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  max-width: 100%;
+}
+.user-actions input { min-width: 0; }
 
 .account-hero { align-items: center; display: flex; gap: var(--space-md); }
 .account-avatar {

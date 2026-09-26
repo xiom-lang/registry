@@ -22,7 +22,7 @@ const MAX_NOTE = 500;
 const MAX_RATING_TEXT = 280;
 const REPORT_REASONS = Object.freeze(['malware', 'spam', 'impersonation', 'license', 'abandoned', 'other']);
 const REPORT_STATUSES = new Set(['open', 'resolved', 'dismissed']);
-const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged']);
+const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged', 'muted']);
 const MAX_OPEN_REPORTS_PER_REPORTER = 3;
 const SAFE_PACKAGE_NAME = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
 
@@ -215,11 +215,13 @@ class ReviewStore {
   }
 
   /**
-   * Record a reviewer decision: mark reviewed, flag, or clear. Flagging
-   * requires a reason; clearing keeps the history (the record is the audit).
+   * Record a reviewer decision: mark reviewed, flag, mute, or clear. Flagging
+   * and muting require a reason; clearing keeps the history (the record is the
+   * audit). Muting only hides a package from discovery: its page, artifacts,
+   * and `/index.json` entry are untouched (SESSION.md section 20).
    *
    * @param {string} packageName
-   * @param {{ status: 'reviewed'|'flagged'|'', actor: string, note?: string }} input
+   * @param {{ status: 'reviewed'|'flagged'|'muted'|'', actor: string, note?: string }} input
    */
   setDecision(packageName, { status, actor, note = '' }) {
     const name = clean(packageName, 128).toLowerCase();
@@ -227,11 +229,17 @@ class ReviewStore {
       throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
     }
     if (!DECISION_STATUSES.has(status)) {
-      throw new BadRequestError('decision must be "reviewed", "flagged", or empty', 'invalid_decision');
+      throw new BadRequestError(
+        'decision must be "reviewed", "flagged", "muted", or empty',
+        'invalid_decision',
+      );
     }
     const decisionNote = clean(note, MAX_NOTE);
-    if (status === 'flagged' && !decisionNote) {
-      throw new BadRequestError('a reason is required when flagging a package', 'flag_reason_required');
+    if ((status === 'flagged' || status === 'muted') && !decisionNote) {
+      throw new BadRequestError(
+        `a reason is required when ${status === 'muted' ? 'muting' : 'flagging'} a package`,
+        status === 'muted' ? 'mute_reason_required' : 'flag_reason_required',
+      );
     }
     const prior = this.packages[name];
     const history = [...(prior ? prior.history : []), {

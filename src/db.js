@@ -38,6 +38,41 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '002-user-administration',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_roles (
+          github_id TEXT PRIMARY KEY,
+          login TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('reviewer', 'admin')),
+          granted_by TEXT NOT NULL,
+          granted_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS user_states (
+          github_id TEXT PRIMARY KEY,
+          login TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'banned')),
+          reason TEXT NOT NULL DEFAULT '',
+          changed_by TEXT NOT NULL,
+          changed_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS admin_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL,
+          actor_id TEXT NOT NULL,
+          actor_login TEXT NOT NULL,
+          action TEXT NOT NULL,
+          subject_type TEXT NOT NULL,
+          subject_id TEXT NOT NULL,
+          subject_login TEXT NOT NULL DEFAULT '',
+          detail TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS admin_audit_recent ON admin_audit (id DESC);
+        CREATE INDEX IF NOT EXISTS admin_audit_subject ON admin_audit (subject_type, subject_id, id DESC);
+      `);
+    },
+  },
 ];
 
 class Database {

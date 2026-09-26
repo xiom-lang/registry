@@ -74,8 +74,17 @@ const {
   accountRequestsPage,
   accountNotificationsPage,
   accountSettingsPage,
-  adminPage,
 } = require('./ui/account');
+const {
+  adminDashboardPage,
+  adminRequestsPage,
+  adminPackagesPage,
+  adminReportsPage,
+  adminUsersPage,
+  adminUserPage,
+  adminAuditPage,
+} = require('./ui/admin');
+const { AdminStore } = require('./admin');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
 
@@ -178,6 +187,12 @@ function createApp(config = loadConfig()) {
   // (SESSION.md section 18). In-app notices always work; email needs SMTP_URL.
   const db = new Database({ path: config.dbPath });
   const notifications = new NotificationStore({ db });
+  // User administration (roles, suspension, audit) shares the platform
+  // database. Config allowlists stay the bootstrap; stored grants add to them
+  // and can never subtract (SESSION.md section 20).
+  const admin = new AdminStore({ db });
+  const configAdminLogins = new Set(config.oauth.adminLogins.map((login) => String(login).toLowerCase()));
+  const configReviewerLogins = new Set(config.oauth.reviewerLogins.map((login) => String(login).toLowerCase()));
   const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
   const outbox = startOutbox({ notifications, mailer });
 
@@ -257,19 +272,42 @@ function createApp(config = loadConfig()) {
       const value = cookies.get(SESSION_COOKIE);
       const found = value ? sessions.fromCookie(value) : null;
       if (found) {
-        req.sessionId = found.id;
-        req.session = found.session;
+        const sessionAccount = found.session.account;
+        // A ban takes effect on the next request: the session is dropped
+        // before any handler can see it.
+        if (sessionAccount && admin.statusOf(sessionAccount.githubId) === 'banned') {
+          sessions.destroy(found.id);
+        } else {
+          req.sessionId = found.id;
+          req.session = found.session;
+        }
       }
     }
     next();
   });
 
   const accountOf = (req) => (req.session && req.session.account) || null;
+  const isConfigAdmin = (account) => Boolean(account)
+    && configAdminLogins.has(String(account.login).toLowerCase());
+  const isConfigReviewer = (account) => Boolean(account)
+    && configReviewerLogins.has(String(account.login).toLowerCase());
   const isAdmin = (account) => Boolean(account)
-    && config.oauth.adminLogins.includes(String(account.login).toLowerCase());
+    && (isConfigAdmin(account) || admin.roleOf(account.githubId) === 'admin');
   const isReviewer = (account) => Boolean(account)
-    && (isAdmin(account)
-      || config.oauth.reviewerLogins.includes(String(account.login).toLowerCase()));
+    && (isAdmin(account) || isConfigReviewer(account) || admin.roleOf(account.githubId) === 'reviewer');
+  const accountStatus = (account) => (account ? admin.statusOf(account.githubId) : 'active');
+
+  /** Suspended accounts keep browsing but cannot create content. */
+  function requireWriteAccess(req, _res, next) {
+    const sessionAccount = accountOf(req);
+    if (sessionAccount && accountStatus(sessionAccount) !== 'active') {
+      return next(new ForbiddenError(
+        'this account is suspended; requests, reports, and ratings are disabled',
+        'account_suspended',
+      ));
+    }
+    next();
+  }
 
   /**
    * Sign-in state for the nav bar. Returns `{ primary, menu }`: the primary
@@ -867,7 +905,11 @@ function createApp(config = loadConfig()) {
         fetchImpl: config.oauth.fetchImpl,
       });
       const profile = await oauth.fetchUser(config.oauth, accessToken, config.oauth.fetchImpl);
+      if (admin.statusOf(profile.id) === 'banned') {
+        return res.redirect(302, '/login?error=banned');
+      }
       const account = accounts.upsert(profile);
+      admin.touch({ githubId: account.githubId, login: account.login });
       const id = sessions.create({
         account: { githubId: account.githubId, login: account.login },
       });
@@ -895,7 +937,7 @@ function createApp(config = loadConfig()) {
       role: isAdmin(sessionAccount)
         ? 'admin'
         : (isReviewer(sessionAccount) ? 'reviewer' : 'member'),
-      status: 'active',
+      status: accountStatus(sessionAccount),
       csrf: req.session.csrf,
       error: flash && flash.error ? flash.error : '',
       form: flash && flash.form ? flash.form : {},
@@ -992,6 +1034,7 @@ function createApp(config = loadConfig()) {
     writeLimit,
     express.urlencoded({ extended: false, limit: '64kb' }),
     requireLogin,
+    requireWriteAccess,
     requireCsrf,
     (req, res, next) => {
       try {
@@ -1038,28 +1081,355 @@ function createApp(config = loadConfig()) {
     },
   );
 
-  app.get('/admin/requests', generalLimit, (req, res, next) => {
+  // ─── Admin console (registry 2.1) ─────────────────────────────────────────
+  // One console for requests, package moderation, reports, users, and audit.
+  // Every mutation is admin-only, CSRF-checked, and lands an admin_audit row.
+
+  function adminPageContext(req) {
+    const account = accountOf(req);
+    const flash = req.session.flash || null;
+    if (flash) delete req.session.flash;
+    return {
+      account,
+      csrf: req.session.csrf,
+      error: flash && flash.error ? flash.error : '',
+      notice: '',
+      nav: accountNav(req),
+    };
+  }
+
+  function requireAdminPage(req, res, next) {
     if (!config.oauth.enabled) return res.redirect(302, '/login');
     const account = accountOf(req);
     if (!account) {
-      return res.redirect(302, `/login?returnTo=${encodeURIComponent('/admin/requests')}`);
+      return res.redirect(302, `/login?returnTo=${encodeURIComponent(req.originalUrl)}`);
     }
     if (!isAdmin(account)) {
       return next(new ForbiddenError('registry admin required', 'admin_required'));
     }
+    next();
+  }
+
+  function accountUserView(account) {
+    const storedRole = admin.roleOf(account.githubId);
+    const configAdmin = isConfigAdmin(account);
+    const configReviewer = isConfigReviewer(account);
+    const role = configAdmin || storedRole === 'admin'
+      ? 'admin'
+      : ((configReviewer || storedRole === 'reviewer') ? 'reviewer' : 'member');
+    const state = admin.stateRecord(account.githubId);
+    return {
+      githubId: account.githubId,
+      login: account.login,
+      avatarUrl: account.avatarUrl,
+      createdAt: account.createdAt,
+      lastLoginAt: account.lastLoginAt,
+      role,
+      configAdmin,
+      configReviewer,
+      storedRole,
+      status: state ? state.status : 'active',
+      reason: state ? state.reason : '',
+      changedBy: state ? state.changed_by : '',
+      changedAt: state ? state.changed_at : '',
+    };
+  }
+
+  app.get('/admin', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
+    const allRequests = requests.list();
+    const decisions = reviews.listDecisions().filter((entry) => entry.status);
+    res.type('html').send(adminDashboardPage({
+      ...context,
+      counts: {
+        pendingRequests: allRequests.filter((record) => record.status === 'pending').length,
+        awaitingFulfilment: allRequests.filter((record) => record.status === 'approved').length,
+        openReports: reviews.listReports({ status: 'open' }).length,
+        flagged: decisions.filter((entry) => entry.status === 'flagged').length,
+        muted: decisions.filter((entry) => entry.status === 'muted').length,
+        users: accounts.list().length,
+      },
+      recentAudit: admin.recentAudit(8),
+    }));
+  });
+
+  app.get('/admin/requests', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
     const updated = typeof req.query.updated === 'string' && /^req_[0-9a-f]{12}$/.test(req.query.updated)
       ? req.query.updated
       : '';
-    const flash = req.session.flash || null;
-    if (flash) delete req.session.flash;
-    res.type('html').send(adminPage({
-      account,
+    const filter = ['pending', 'approved', 'closed'].includes(String(req.query.filter))
+      ? String(req.query.filter)
+      : '';
+    res.type('html').send(adminRequestsPage({
+      ...context,
       requests: requests.list(),
       activePublishers: publisherStore.list().map((entry) => entry.requestId),
-      csrf: req.session.csrf,
       notice: updated ? `Request ${updated} updated.` : '',
-      error: flash && flash.error ? flash.error : '',
-      nav: accountNav(req),
+      filter,
+    }));
+  });
+
+  app.get('/admin/packages', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const filter = ['flagged', 'muted', 'yanked', 'undecided'].includes(String(req.query.filter))
+      ? String(req.query.filter)
+      : '';
+    const updated = typeof req.query.updated === 'string' && /^[a-z0-9][a-z0-9._-]{0,127}$/.test(req.query.updated)
+      ? req.query.updated
+      : '';
+    const index = reviewedIndex();
+    const entries = Object.entries(index.packages)
+      .filter(([name]) => !q || name.toLowerCase().includes(q))
+      .map(([name, pkg]) => ({
+        name,
+        pkg,
+        decision: reviews.decision(name),
+      }))
+      .filter(({ pkg, decision }) => {
+        if (filter === 'flagged') return pkg.flagged === true;
+        if (filter === 'muted') return pkg.muted === true;
+        if (filter === 'undecided') return !decision || !decision.status;
+        if (filter === 'yanked') {
+          return Object.values(pkg.versions || {}).some((entry) => entry.yanked === true);
+        }
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 200);
+    res.type('html').send(adminPackagesPage({
+      ...context,
+      packages: entries,
+      q,
+      filter,
+      notice: updated ? `Decision recorded for ${updated}.` : '',
+    }));
+  });
+
+  app.post(
+    '/admin/packages/:name/decision',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const action = String(req.body.action || '');
+        const status = { review: 'reviewed', flag: 'flagged', mute: 'muted', clear: '' }[action];
+        if (status === undefined) {
+          throw new BadRequestError('action must be review, flag, mute, or clear', 'invalid_action');
+        }
+        const name = String(req.params.name).toLowerCase();
+        reviews.setDecision(name, {
+          status,
+          actor: accountOf(req).login,
+          note: String(req.body.note || ''),
+        });
+        admin.audit({
+          actor: accountOf(req),
+          action: `package.${action}`,
+          subjectType: 'package',
+          subjectId: name,
+          detail: String(req.body.note || '').slice(0, 500),
+        });
+        res.redirect(303, `/admin/packages?updated=${encodeURIComponent(name)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/packages?updated=${encodeURIComponent(String(req.params.name).toLowerCase())}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/packages/:name/yank',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const name = String(req.params.name).toLowerCase();
+        const version = String(req.body.version || '');
+        const reason = String(req.body.reason || '').trim();
+        if (reason === '') {
+          throw new BadRequestError('a reason is required when yanking a version', 'yank_reason_required');
+        }
+        indexStore.yankVersion(name, version, reason);
+        admin.audit({
+          actor: accountOf(req),
+          action: 'package.yank',
+          subjectType: 'package',
+          subjectId: name,
+          detail: `${version}: ${reason}`,
+        });
+        res.redirect(303, `/admin/packages?updated=${encodeURIComponent(name)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/packages?updated=${encodeURIComponent(String(req.params.name).toLowerCase())}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.get('/admin/reports', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
+    const filter = ['open', 'resolved', 'dismissed'].includes(String(req.query.filter))
+      ? String(req.query.filter)
+      : '';
+    res.type('html').send(adminReportsPage({
+      ...context,
+      reports: reviews.listReports({ status: filter }),
+      filter,
+    }));
+  });
+
+  app.post(
+    '/admin/reports/:id/resolve',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        reviews.resolveReport(String(req.params.id), {
+          actor: accountOf(req).login,
+          status: String(req.body.status || 'resolved'),
+          resolution: String(req.body.resolution || ''),
+        });
+        admin.audit({
+          actor: accountOf(req),
+          action: 'report.resolve',
+          subjectType: 'report',
+          subjectId: String(req.params.id),
+          detail: `${String(req.body.status || 'resolved')}: ${String(req.body.resolution || '').slice(0, 400)}`,
+        });
+        res.redirect(303, '/admin/reports');
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof NotFoundError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/admin/reports');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.get('/admin/users', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
+    res.type('html').send(adminUsersPage({
+      ...context,
+      users: accounts.list().map(accountUserView),
+      q: String(req.query.q || '').trim(),
+    }));
+  });
+
+  app.get('/admin/users/:githubId', generalLimit, requireAdminPage, (req, res, next) => {
+    const account = accounts.get(String(req.params.githubId));
+    if (!account) {
+      return next(new NotFoundError('account not found', 'account_not_found'));
+    }
+    const context = adminPageContext(req);
+    res.type('html').send(adminUserPage({
+      ...context,
+      user: accountUserView(account),
+      audit: admin.auditFor(account.githubId, 30),
+    }));
+  });
+
+  app.post(
+    '/admin/users/:githubId/role',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const target = accounts.get(String(req.params.githubId));
+        if (!target) throw new NotFoundError('account not found', 'account_not_found');
+        const actor = accountOf(req);
+        const role = String(req.body.role || '');
+        if (isConfigAdmin(target) && role === '') {
+          throw new ConflictError(
+            'this admin comes from the deployment config and cannot be demoted here',
+            'config_admin_protected',
+          );
+        }
+        if (isConfigAdmin(target) && role === 'reviewer') {
+          throw new ConflictError(
+            'this account is already a config admin; it cannot be reduced to reviewer here',
+            'config_admin_protected',
+          );
+        }
+        // Last-admin guard: never let the console remove the only admin.
+        if (role === '' && isAdmin(target)) {
+          const remaining = accounts.list()
+            .filter((candidate) => candidate.githubId !== target.githubId)
+            .some((candidate) => isAdmin(candidate));
+          if (!remaining) {
+            throw new ConflictError('at least one admin must remain', 'last_admin');
+          }
+        }
+        admin.setRole({ account: target, role, actor });
+        res.redirect(303, `/admin/users/${encodeURIComponent(target.githubId)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/users/${encodeURIComponent(String(req.params.githubId))}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/users/:githubId/status',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const target = accounts.get(String(req.params.githubId));
+        if (!target) throw new NotFoundError('account not found', 'account_not_found');
+        const actor = accountOf(req);
+        if (isConfigAdmin(target)) {
+          throw new ConflictError(
+            'this admin comes from the deployment config; change the state in the environment',
+            'config_admin_protected',
+          );
+        }
+        const status = String(req.body.status || '');
+        admin.setStatus({
+          account: target,
+          status,
+          reason: String(req.body.reason || ''),
+          actor,
+        });
+        if (status === 'banned' && sessions) {
+          sessions.destroyForAccount(target.githubId);
+        }
+        res.redirect(303, `/admin/users/${encodeURIComponent(target.githubId)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/users/${encodeURIComponent(String(req.params.githubId))}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.get('/admin/audit', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
+    res.type('html').send(adminAuditPage({
+      ...context,
+      entries: admin.recentAudit(100),
     }));
   });
 
@@ -1202,6 +1572,7 @@ function createApp(config = loadConfig()) {
     writeLimit,
     express.urlencoded({ extended: false, limit: '8kb' }),
     requireLogin,
+    requireWriteAccess,
     requireCsrf,
     (req, res, next) => {
       const { name } = req.params;
@@ -1231,6 +1602,7 @@ function createApp(config = loadConfig()) {
     writeLimit,
     express.urlencoded({ extended: false, limit: '16kb' }),
     requireLogin,
+    requireWriteAccess,
     requireCsrf,
     (req, res, next) => {
       const { name } = req.params;
@@ -1563,6 +1935,7 @@ function createApp(config = loadConfig()) {
     publisherStore,
     db,
     notifications,
+    admin,
   };
   return app;
 }

@@ -728,6 +728,270 @@ test('account pages split into overview, requests, notifications, and settings',
   assert.match(html, /Signed in as|\@user-user/);
 });
 
+test('the admin console renders every section for admins and refuses members', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+
+  const sections = [
+    ['/admin', /Admin console/],
+    ['/admin/requests', /Requests/],
+    ['/admin/packages', /Moderate published packages/],
+    ['/admin/reports', /Community reports/],
+    ['/admin/users', /Roles and restrictions/],
+    ['/admin/audit', /Every console action/],
+  ];
+  for (const [target, pattern] of sections) {
+    const response = await requestAs(jar, target, { headers: BROWSER });
+    assert.equal(response.status, 200, `${target} renders`);
+    assert.match(await response.text(), pattern, `${target} shows its content`);
+  }
+
+  const member = cookieJar();
+  await login(member, 'user-code');
+  const refused = await requestAs(member, '/admin', { headers: BROWSER });
+  assert.equal(refused.status, 403);
+
+  const anonymous = cookieJar();
+  const redirected = await requestAs(anonymous, '/admin/packages', { headers: BROWSER });
+  assert.equal(redirected.status, 302);
+  assert.equal(redirected.headers.get('location'), '/login?returnTo=%2Fadmin%2Fpackages');
+});
+
+test('package moderation flags, mutes, hides from discovery, and stays audited', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+  let response = await requestAs(jar, '/admin/packages', { headers: BROWSER });
+  let html = await response.text();
+  const csrf = csrfFrom(html);
+  assert.match(html, /readme-pkg/);
+
+  // A mute requires a reason.
+  response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'mute' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/admin/packages?updated=readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /reason is required when muting/);
+
+  // Mute for real: the listing hides it, the page still resolves, and the raw
+  // index is untouched.
+  response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'mute', note: 'metadata spam' }),
+  });
+  assert.equal(response.status, 303);
+  const listing = await requestAs(jar, '/packages', { headers: BROWSER });
+  assert.doesNotMatch(await listing.text(), /readme-pkg/);
+  const listingJson = await requestAs(jar, '/packages', { headers: { Accept: 'application/json' } });
+  assert.doesNotMatch(JSON.stringify(await listingJson.json()), /readme-pkg/);
+  const page = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Hidden from listings and search/);
+  const rawIndex = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'index.json'), 'utf-8'));
+  assert.ok(rawIndex.packages['readme-pkg'], '/index.json keeps the muted package');
+
+  const audits = app.locals.registry.admin.recentAudit(10);
+  assert.equal(audits[0].action, 'package.mute');
+  assert.equal(audits[0].subject_id, 'readme-pkg');
+  assert.equal(audits[0].detail, 'metadata spam');
+
+  // Flag then clear: the public pill follows the decision.
+  response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'flag', note: 'unsafe install script' }),
+  });
+  assert.equal(response.status, 303);
+  const flaggedPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await flaggedPage.text(), /flagged by a reviewer/);
+  response = await requestAs(jar, '/admin/packages/readme-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'clear' }),
+  });
+  assert.equal(response.status, 303);
+  const clearedPage = await requestAs(jar, '/packages/readme-pkg', { headers: BROWSER });
+  const clearedHtml = await clearedPage.text();
+  assert.doesNotMatch(clearedHtml, /flagged by a reviewer/);
+  assert.doesNotMatch(clearedHtml, /Hidden from listings and search/);
+});
+
+test('admins yank a version from the console and the decision is recorded', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+  let response = await requestAs(jar, '/admin/packages', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+
+  response = await requestAs(jar, '/admin/packages/readme-pkg/yank', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, version: '1.0.0' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/admin/packages?updated=readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /reason is required when yanking/);
+
+  response = await requestAs(jar, '/admin/packages/readme-pkg/yank', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, version: '1.0.0', reason: 'leaked credentials' }),
+  });
+  assert.equal(response.status, 303);
+  const data = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'index.json'), 'utf-8'));
+  assert.equal(data.packages['readme-pkg'].versions['1.0.0'].yanked, true);
+  assert.equal(data.packages['readme-pkg'].versions['1.0.0'].yankReason, 'leaked credentials');
+  const audits = app.locals.registry.admin.recentAudit(5);
+  assert.equal(audits[0].action, 'package.yank');
+  assert.match(audits[0].detail, /leaked credentials/);
+});
+
+test('role grants apply to open sessions; demotion and self-demotion are guarded', async () => {
+  const member = cookieJar();
+  await login(member, 'plain-code');
+  let response = await requestAs(member, '/review', { headers: BROWSER });
+  assert.equal(response.status, 403, 'a member cannot review');
+
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+  response = await requestAs(adminJar, '/admin/users', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(adminJar, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, role: 'reviewer' }),
+  });
+  assert.equal(response.status, 303);
+
+  // The existing member session sees the new role on its next request.
+  response = await requestAs(member, '/review', { headers: BROWSER });
+  assert.equal(response.status, 200);
+
+  // Demote again: the queue closes on the next request.
+  response = await requestAs(adminJar, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(member, '/review', { headers: BROWSER });
+  assert.equal(response.status, 403);
+
+  // Self-demotion is refused with a clear message. (The config admin is
+  // protected even earlier; use a stored admin for the store-level guard.)
+  response = await requestAs(adminJar, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, role: 'admin' }),
+  });
+  assert.equal(response.status, 303);
+  const plainAdmin = cookieJar();
+  await login(plainAdmin, 'plain-code');
+  response = await requestAs(plainAdmin, '/admin', { headers: BROWSER });
+  assert.equal(response.status, 200, 'a stored admin reaches the console');
+  response = await requestAs(plainAdmin, '/admin/users/888', { headers: BROWSER });
+  const plainCsrf = csrfFrom(await response.text());
+  response = await requestAs(plainAdmin, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: plainCsrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(plainAdmin, '/admin/users/888', { headers: BROWSER });
+  assert.match(await response.text(), /cannot demote yourself/);
+
+  // Config admins cannot be demoted from the console at all.
+  response = await requestAs(adminJar, '/admin/users/4242/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(adminJar, '/admin/users/4242', { headers: BROWSER });
+  assert.match(await response.text(), /deployment config/);
+
+  // Clean up the stored grant; the table is empty again.
+  response = await requestAs(adminJar, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(app.locals.registry.admin.roleOf('888'), '');
+  assert.equal(app.locals.registry.admin.listRoles().length, 0);
+});
+
+test('suspension is read-only and a ban closes sessions and sign-in', async () => {
+  const member = cookieJar();
+  await login(member, 'plain-code');
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+
+  let response = await requestAs(member, '/account', { headers: BROWSER });
+  let html = await response.text();
+  const memberCsrf = csrfFrom(html);
+  response = await requestAs(adminJar, '/admin/users/888', { headers: BROWSER });
+  const adminCsrf = csrfFrom(await response.text());
+
+  // Suspend: browsing continues, writes are refused with a typed error.
+  response = await requestAs(adminJar, '/admin/users/888/status', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'suspended', reason: 'spam requests' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(member, '/account', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /account is suspended/);
+  response = await requestAs(member, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: memberCsrf, kind: 'token', scopes: 'nope' }),
+  });
+  assert.equal(response.status, 403);
+  response = await requestAs(member, '/account/notifications', { headers: BROWSER });
+  assert.equal(response.status, 200, 'reading stays available');
+
+  // Ban: the next request drops the session and sign-in is refused.
+  response = await requestAs(adminJar, '/admin/users/888/status', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'banned', reason: 'abuse' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(member, '/account', { headers: BROWSER });
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location'), /^\/login\?returnTo=/);
+  response = await login(member, 'plain-code');
+  assert.equal(response.headers.get('location'), '/login?error=banned');
+  response = await requestAs(member, '/login?error=banned', { headers: BROWSER });
+  assert.match(await response.text(), /banned from the registry/);
+
+  // Restore: sign-in works again and the states table is clean.
+  response = await requestAs(adminJar, '/admin/users/888/status', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'active' }),
+  });
+  assert.equal(response.status, 303);
+  response = await login(member, 'plain-code');
+  assert.equal(response.headers.get('location'), '/account');
+  assert.equal(app.locals.registry.admin.statusOf('888'), 'active');
+
+  // Config admins are protected from status changes.
+  response = await requestAs(adminJar, '/admin/users/4242/status', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'suspended', reason: 'test' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(adminJar, '/admin/users/4242', { headers: BROWSER });
+  assert.match(await response.text(), /deployment config/);
+  assert.equal(app.locals.registry.admin.statusOf('4242'), 'active');
+});
+
+test('the admin audit feed records role and status changes newest first', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+  const response = await requestAs(jar, '/admin/audit', { headers: BROWSER });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /user\.suspended|user\.restore|role\.grant|role\.revoke/);
+  const entries = app.locals.registry.admin.recentAudit(200);
+  const actions = entries.map((entry) => entry.action);
+  assert.ok(actions.includes('role.grant'));
+  assert.ok(actions.includes('role.revoke'));
+  assert.ok(actions.includes('user.suspended'));
+  assert.ok(actions.includes('user.banned'));
+  assert.ok(actions.includes('user.restore'));
+});
+
 test('a registry without OAuth hides sign-in and refuses account routes', async () => {
   const config = loadConfig();
   config.oauth = {

@@ -84,6 +84,9 @@ function accountBanner({ account, status, notice, error }) {
 
 /** Sign-in landing page (also the friendly result page for OAuth failures). */
 function loginPage({ enabled, error = '', nav = '' }) {
+  const errorMessage = error === 'banned'
+    ? 'This account is banned from the registry. Contact registry@xiom-lang.org if you believe this is a mistake.'
+    : (error ? 'Sign-in failed or was cancelled. Try again.' : '');
   const body = enabled
     ? `<section class="hero">
   <h1>Sign in</h1>
@@ -92,7 +95,7 @@ function loginPage({ enabled, error = '', nav = '' }) {
      profile (<code>read:user</code>), never your repositories, and a browser
      session can never publish.</p>
 </section>
-${noticeBox('', error ? 'Sign-in failed or was cancelled. Try again.' : '')}
+${noticeBox('', errorMessage)}
 <div class="account-card">
   <a class="button primary" href="/auth/github/start">Sign in with GitHub</a>
   <p class="pkg-meta">By signing in you agree to the
@@ -412,123 +415,16 @@ ${accountBanner({ account, status, notice, error })}
   return layout({ title: 'Settings', body, nav });
 }
 
-function pendingRow(record, csrf) {
-  const hint = record.kind === 'publisher'
-    ? 'Approving activates the trusted-publisher entry immediately; the publisher\u2019s workflow works right away \u2014 no host step, no restart.'
-    : 'Approving queues the host mint (the app never mints); record the fulfilment reference here.';
-  return `<li class="request-card">
-  <div class="request-head">
-    <span class="request-id">${shortId(record.id)}</span>
-    ${statusPill(record.status)}
-    <span class="pkg-meta">${escapeHtml(kindLabel(record))} by
-      <a href="https://github.com/${encodeURIComponent(record.requester.login)}" rel="noopener">@${escapeHtml(record.requester.login)}</a>
-      &middot; ${formatWhen(record.createdAt)}</span>
-  </div>
-  <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
-  ${record.scopes ? `<p class="pkg-meta">Scopes: <span class="mono">${escapeHtml(record.scopes.join(', '))}</span></p>` : ''}
-  <p class="pkg-meta">${hint}</p>
-  ${record.note ? `<p class="pkg-desc">${escapeHtml(record.note)}</p>` : ''}
-  ${historyLine(record)}
-  <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/decision">
-    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-    <input name="note" placeholder="Decision note (required to deny)" maxlength="500" aria-label="Decision note">
-    <button class="button primary" type="submit" name="action" value="approve">Approve${record.kind === 'publisher' ? ' &amp; activate' : ''}</button>
-    <button class="button danger" type="submit" name="action" value="deny">Deny</button>
-  </form>
-</li>`;
-}
-
-function approvedRow(record, csrf) {
-  return `<li class="request-card">
-  <div class="request-head">
-    <span class="request-id">${shortId(record.id)}</span>
-    ${statusPill(record.status)}
-    <span class="pkg-meta">${escapeHtml(kindLabel(record))} by
-      <a href="https://github.com/${encodeURIComponent(record.requester.login)}" rel="noopener">@${escapeHtml(record.requester.login)}</a>
-      &middot; approved by @${escapeHtml(record.decidedBy || '?')} ${formatWhen(record.decidedAt)}</span>
-  </div>
-  <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
-  <p class="pkg-meta">Scopes: <span class="mono">${escapeHtml(record.scopes.join(', '))}</span></p>
-  <p class="pkg-meta"><strong>Preferred:</strong> let the fulfilment worker mint and mail the
-     token (approve, then wait for the request to close itself). If the worker is off, use the
-     operators&rsquo; <code>issue-token.sh</code> runbook; <code>scripts/tokens.js</code> is the
-     last-resort manual fallback. Never paste a token into a browser form or an issue.</p>
-  <details class="mint-details">
-    <summary>Manual fallback command (operators only)</summary>
-    <pre class="mint-command"># only if the worker is unavailable; see DEPLOY.md "Token fulfilment worker"
-docker compose exec registry node scripts/tokens.js add \\
-  --file tokens.json --label ${escapeHtml(record.requester.login)}-${escapeHtml(record.id.slice(-8))} \\
-  --scopes "${escapeHtml(record.scopes.join(','))}"
-# then deliver the token line privately and record the reference below</pre>
-  </details>
-  <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/fulfil">
-    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-    <input name="reference" placeholder="Fulfilment reference (e.g. label, mail date)" maxlength="500" required aria-label="Fulfilment reference">
-    <button class="button primary" type="submit">Mark fulfilled</button>
-  </form>
-</li>`;
-}
-
-function closedRow(record, csrf, publisherLive) {
-  const when = record.fulfilledAt || record.decidedAt || record.createdAt;
-  const detail = record.mintReference ? ` &middot; ${escapeHtml(record.mintReference)}` : '';
-  const revoked = record.history.some((entry) => entry.action === 'revoked');
-  let publisherState = '';
-  if (record.kind === 'publisher' && record.status === 'fulfilled') {
-    publisherState = publisherLive
-      ? `<p class="pkg-meta">Trusted publisher is <strong>live</strong> \u2014 publishes from this repo/workflow/ref are accepted now.</p>
-  <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/revoke">
-    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-    <input name="note" placeholder="Revoke note (optional)" maxlength="500" aria-label="Revoke note">
-    <button class="button danger" type="submit">Revoke trusted publisher</button>
-  </form>`
-      : `<p class="pkg-meta">${revoked ? 'Revoked \u2014 the publisher\u2019s workflow is refused again.' : 'No live entry.'}</p>`;
-  }
-  return `<li class="request-card closed">
-  <div class="request-head">
-    <span class="request-id">${shortId(record.id)}</span>
-    ${statusPill(record.status)}
-    <span class="pkg-meta">@${escapeHtml(record.requester.login)} &middot; ${formatWhen(when)}${detail}</span>
-  </div>
-  <p class="mono request-target">${escapeHtml(requestTarget(record))}</p>
-  ${publisherState}
-  ${historyLine(record)}
-</li>`;
-}
-
-/** Admin approval queue: decisions, activation, and fulfilment records. */
-function adminPage({ account, requests, activePublishers = [], csrf, notice = '', error = '', nav = '' }) {
-  const pending = requests.filter((record) => record.status === 'pending');
-  const approved = requests.filter((record) => record.status === 'approved');
-  const closed = requests.filter((record) => record.status === 'denied' || record.status === 'fulfilled');
-  const section = (title, items, empty, render) => `<section>
-  <h2>${escapeHtml(title)} <span class="count">${items.length}</span></h2>
-  ${items.length === 0 ? `<p class="pkg-meta">${escapeHtml(empty)}</p>` : `<ul class="request-list">\n${items.map(render).join('\n')}\n</ul>`}
-</section>`;
-
-  const body = `<section class="hero">
-  <h1>Approval queue</h1>
-  <p>Signed in as <a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">@${escapeHtml(account.login)}</a>.
-     Approving a <strong>trusted publisher</strong> activates the entry immediately &mdash; the publisher&rsquo;s
-     workflow is accepted as soon as you click, with no host step. Approving a <strong>token</strong> request shows
-     the host mint command to run; the app never sees the token and never holds mail credentials.
-     Every action stays in the audit history.</p>
-</section>
-${noticeBox(notice, error)}
-${section('Pending', pending, 'Nothing waiting for a decision.', (record) => pendingRow(record, csrf))}
-${section('Approved, awaiting fulfilment', approved, 'Nothing approved but unfulfilled.', (record) => approvedRow(record, csrf))}
-${section('Closed', closed, 'No closed requests yet.', (record) => closedRow(record, csrf, activePublishers.includes(record.id)))}`;
-  return layout({ title: 'Approval queue', body, nav });
-}
-
 module.exports = {
   loginPage,
   accountOverviewPage,
   accountRequestsPage,
   accountNotificationsPage,
   accountSettingsPage,
-  adminPage,
   requestForm,
   requestTarget,
   kindLabel,
+  noticeBox,
+  statusPill,
+  historyLine,
 };
