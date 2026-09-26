@@ -85,6 +85,7 @@ const {
   adminAuditPage,
 } = require('./ui/admin');
 const { AdminStore } = require('./admin');
+const { publishGuidePage } = require('./ui/publish');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
 
@@ -104,6 +105,11 @@ const COMMUNITY_PUBLISH_TEMPLATE = fs.readFileSync(
 );
 // Release notes rendered at /whats-new (same escape-first markdown pipeline).
 const CHANGELOG_MD = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf-8');
+// The publishing guide: /publish refreshes it from GitHub with a short TTL and
+// falls back to this bundled copy, so the page never depends on network luck.
+const PUBLISHING_DOC_BUNDLED = fs.readFileSync(path.join(__dirname, '..', 'PUBLISHING.md'), 'utf-8');
+const PUBLISHING_DOC_DEFAULT_URL = 'https://raw.githubusercontent.com/xiom-lang/registry/main/PUBLISHING.md';
+const PUBLISHING_DOC_TTL_MS = 10 * 60 * 1000;
 // Package status badge art: state x track matrix (see src/ui/pages.js).
 // `trusted` exists only on the community track -- first-party/official
 // publishes are org-controlled by definition. Keep this in sync with the
@@ -649,6 +655,52 @@ function createApp(config = loadConfig()) {
         changelogHtml: renderMarkdown(CHANGELOG_MD),
         nav: accountNav(req),
       }));
+  });
+
+  // ─── Publishing guide (registry 2.1) ──────────────────────────────────────
+  // Nav "Publish" is registry-hosted: the guide is fetched from the repository
+  // with a short cache and a bundled fallback, then rendered by the same
+  // markdown pipeline as READMEs. git remains the source of truth via the
+  // "View the source on GitHub" link (SESSION.md section 20).
+  let publishingDocCache = { at: 0, markdown: '', source: 'bundled' };
+
+  async function publishingDoc() {
+    if (publishingDocCache.markdown && Date.now() - publishingDocCache.at < PUBLISHING_DOC_TTL_MS) {
+      return publishingDocCache;
+    }
+    const url = config.publishingDocUrl || PUBLISHING_DOC_DEFAULT_URL;
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: 'text/plain', 'User-Agent': 'xiom-registry' },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (response.ok) {
+        const markdown = await response.text();
+        if (markdown.length > 50 && markdown.length < 512 * 1024) {
+          publishingDocCache = { at: Date.now(), markdown, source: 'github', fetchedAt: new Date().toISOString() };
+          return publishingDocCache;
+        }
+      }
+    } catch {
+      // Network, DNS, timeout: the bundled guide is authoritative enough.
+    }
+    publishingDocCache = { at: Date.now(), markdown: PUBLISHING_DOC_BUNDLED, source: 'bundled', fetchedAt: '' };
+    return publishingDocCache;
+  }
+
+  app.get('/publish', generalLimit, async (req, res, next) => {
+    try {
+      const doc = await publishingDoc();
+      res.type('html').set('Cache-Control', 'public, max-age=300')
+        .send(publishGuidePage({ ...doc, nav: accountNav(req) }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // The old backlog path stays a valid link.
+  app.get('/help/publishing', generalLimit, (req, res) => {
+    res.redirect(301, '/publish');
   });
 
   // Stylesheet for the read-only UI (module-level constant, no fs per request).

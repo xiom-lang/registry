@@ -210,6 +210,10 @@ function loadConfig() {
     // Notification email; unset = in-app notices only.
     smtpUrl: process.env.SMTP_URL || '',
     smtpFrom: process.env.SMTP_FROM || '',
+    // Where /publish refreshes PUBLISHING.md from. Empty uses the repository
+    // raw URL; the bundled copy in the image is always the fallback, so the
+    // guide cannot 404 when GitHub is unreachable.
+    publishingDocUrl: process.env.PUBLISHING_DOC_URL || '',
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
     // Path used by the hot-reload watcher (empty when API_KEY is the source).

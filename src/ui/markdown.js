@@ -171,6 +171,20 @@ function isBlockStart(line) {
     || QUOTE.test(line) || LIST.test(line);
 }
 
+/** GitHub-style heading slug for in-page anchors (`## 1. Quickstart` -> `1-quickstart`). */
+function slugify(source) {
+  return String(source)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_~]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 /**
  * Render a markdown document to safe HTML.
  *
@@ -180,6 +194,7 @@ function isBlockStart(line) {
 function renderMarkdown(source) {
   const lines = String(source ?? '').replace(/\r\n?/g, '\n').split('\n');
   const blocks = [];
+  const usedSlugs = new Set();
   let i = 0;
 
   while (i < lines.length) {
@@ -197,7 +212,16 @@ function renderMarkdown(source) {
     if (HEADING.test(line)) {
       const match = HEADING.exec(line);
       const level = match[1].length;
-      blocks.push(`<h${level}>${renderInline(match[2])}</h${level}>`);
+      let slug = slugify(match[2]);
+      if (slug) {
+        const base = slug;
+        let suffix = 2;
+        while (usedSlugs.has(slug)) slug = `${base}-${suffix++}`;
+        usedSlugs.add(slug);
+        blocks.push(`<h${level} id="${slug}">${renderInline(match[2])}</h${level}>`);
+      } else {
+        blocks.push(`<h${level}>${renderInline(match[2])}</h${level}>`);
+      }
       i++;
       continue;
     }

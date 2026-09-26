@@ -907,6 +907,12 @@ table.versions tr:hover td { background: var(--panel); }
 }
 .user-actions input { min-width: 0; }
 
+/* Publishing guide: quick links above the rendered markdown. */
+.quick-links { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
+.guide-source { margin: var(--space-md) 0; }
+.guide { margin-bottom: var(--space-lg); max-width: 900px; }
+.guide h2 { scroll-margin-top: calc(var(--nav-height) + var(--space-md)); }
+
 .account-hero { align-items: center; display: flex; gap: var(--space-md); }
 .account-avatar {
   border: 1px solid var(--line);

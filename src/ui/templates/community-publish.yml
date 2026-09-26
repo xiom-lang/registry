@@ -1,19 +1,41 @@
 # XIOM registry publish -- OIDC trusted publishing for a community package.
 #
-# Setup (once):
-#   1. Save this file as .github/workflows/publish-registry.yml in your repo.
-#   2. Request a trusted publisher on the registry website:
-#        - repository:  <your-account>/<your-repo>
-#        - workflow:    publish-registry.yml
-#        - refs:        refs/heads/main
-#        - scope:       the `name` from package.xi
-#   3. Run this workflow: Actions -> Publish to XIOM registry (OIDC).
+# WHAT THIS IS
+#   A copy-paste GitHub Actions workflow that publishes your package to the
+#   XIOM registry with no long-lived secret: GitHub mints a short-lived OIDC
+#   token for this repo/workflow/ref, and the registry only accepts it if a
+#   maintainer approved that exact combination.
 #
-# No long-lived token is stored: the job mints a short-lived registry token
-# with GitHub OIDC (audience xiom-registry). The token's claims must match the
-# approved trusted-publisher entry. The artifact is signed with the ed25519
-# key from the XIOM_SIGNING_KEY secret, or an ephemeral key per run.
-name: Publish to XIOM registry (OIDC)
+# SETUP (once, ~5 minutes)
+#   1. Save this file as .github/workflows/publish-registry.yml in your repo.
+#   2. Request access on the registry website (Sign in -> Requests):
+#        - Repository: <your-account>/<your-repo>
+#        - Workflow:   publish-registry.yml
+#        - Refs:       refs/tags/v*        (or refs/heads/main for branch runs)
+#        - Scopes:     the `name` from package.xi (e.g. my-lib)
+#   3. Wait for the approval (a maintainer reviews it; you get a notice).
+#
+# HOW TO RELEASE (recommended: tags)
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#   -> uncomment the `push: tags: ["v*"]` trigger below once, then every tag
+#      publishes automatically and the workflow verifies the tag matches
+#      `version:` in package.xi before publishing.
+#
+# HOW TO RELEASE (manual)
+#   Actions -> "Publish to XIOM registry" -> Run workflow.
+#   Use mode=publish, or mode=yank with the version to withdraw.
+#
+# Good to know
+#   - The package is signed with the ed25519 key in the XIOM_SIGNING_KEY
+#     secret if you set one; otherwise a fresh key is generated per run.
+#     Set the secret for a stable "verified" badge on every release.
+#   - `xiom pkg publish` packages the working directory. Keep build output,
+#     test fixtures, and the downloaded toolchain out of the repository (this
+#     workflow downloads the compiler into $RUNNER_TEMP for that reason).
+#   - The registry refuses a version that already exists (409). Bump
+#     `version:` in package.xi for every release.
+name: Publish to XIOM registry
 
 on:
   workflow_dispatch:
@@ -31,6 +53,10 @@ on:
       version:
         description: "Version to yank (mode=yank only)"
         required: false
+  # Recommended for releases: uncomment to publish when a version tag is
+  # pushed. The tag must match `version:` in package.xi (checked below).
+  # push:
+  #   tags: ["v*"]
 
 permissions:
   contents: read
@@ -41,9 +67,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # required: lets the job request the OIDC token
     env:
-      XIOM_REGISTRY: ${{ github.event.inputs.registry }}
+      # `github.event.inputs` is empty on tag runs; the defaults cover both.
+      XIOM_REGISTRY: ${{ github.event.inputs.registry || 'https://registry.xiom-lang.org' }}
+      XIOM_MODE: ${{ github.event.inputs.mode || 'publish' }}
+      YANK_VERSION: ${{ github.event.inputs.version || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -52,14 +81,33 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${XIOM_REGISTRY:-}" ]; then
-            echo "::error::the registry input is empty; set it (production: https://registry.xiom-lang.org, test instance: https://staging.registry.xiom-lang.org)"
+            echo "::error::the registry is empty; set it (production: https://registry.xiom-lang.org)"
             exit 1
           fi
           echo "TARGET registry: ${XIOM_REGISTRY}"
-          echo "mode:            ${{ github.event.inputs.mode }}"
+          echo "mode:            ${XIOM_MODE}"
           echo "repo:            ${GITHUB_REPOSITORY}"
           echo "ref:             ${GITHUB_REF}"
           echo "package.xi name: $(sed -n 's/.*name:[[:space:]]*"\([^"]*\)".*/\1/p' package.xi | head -n1)"
+
+      - name: Check tag matches the package version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/tags/* ]]; then
+            echo "not a tag run; skipping the tag/version check"
+            exit 0
+          fi
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(sed -n 's/.*version:[[:space:]]*"\([^"]*\)".*/\1/p' package.xi | head -n1)"
+          if [ -z "$version" ]; then
+            echo "::error::no version: found in package.xi"
+            exit 1
+          fi
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag v${tag} does not match package.xi version ${version}; bump the manifest or re-tag"
+            exit 1
+          fi
+          echo "tag v${tag} matches package.xi version ${version}"
 
       - name: Mint registry token (GitHub OIDC)
         run: |
@@ -93,7 +141,7 @@ jobs:
           echo "package: $name"
 
       - name: Install toolchain
-        if: github.event.inputs.mode == 'publish'
+        if: env.XIOM_MODE == 'publish'
         run: |
           set -euo pipefail
           pin="v0.61.3"
@@ -109,7 +157,7 @@ jobs:
           echo "$RUNNER_TEMP/compiler/bin" >> "$GITHUB_PATH"
 
       - name: Prepare signing key
-        if: github.event.inputs.mode == 'publish'
+        if: env.XIOM_MODE == 'publish'
         env:
           XIOM_SIGNING_KEY: ${{ secrets.XIOM_SIGNING_KEY }}
         run: |
@@ -131,19 +179,19 @@ jobs:
           fi
 
       - name: Publish
-        if: github.event.inputs.mode == 'publish'
+        if: env.XIOM_MODE == 'publish'
         run: |
           set -euo pipefail
-          echo "publishing to $XIOM_REGISTRY"
+          echo "publishing to ${XIOM_REGISTRY}"
           xiom pkg publish
+          echo "published ${{ steps.pkg.outputs.name }} -- see ${XIOM_REGISTRY}/packages/${{ steps.pkg.outputs.name }}"
 
       - name: Yank
-        if: github.event.inputs.mode == 'yank'
-        env:
-          YANK_VERSION: ${{ github.event.inputs.version }}
+        if: env.XIOM_MODE == 'yank'
         run: |
           set -euo pipefail
-          if [ -z "${YANK_VERSION:-}" ]; then
+          version="${YANK_VERSION:-${GITHUB_REF_NAME#v}}"
+          if [ -z "${version}" ]; then
             echo "mode=yank requires the version input (e.g. 0.1.0)" >&2
             exit 1
           fi
@@ -151,5 +199,5 @@ jobs:
             -H "Authorization: Bearer ${XIOM_REGISTRY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"reason":"withdrawn"}' \
-            "${XIOM_REGISTRY}/packages/${{ steps.pkg.outputs.name }}/${YANK_VERSION}/yank"
-          echo "yanked ${{ steps.pkg.outputs.name }}@${YANK_VERSION} on ${XIOM_REGISTRY}"
+            "${XIOM_REGISTRY}/packages/${{ steps.pkg.outputs.name }}/${version}/yank"
+          echo "yanked ${{ steps.pkg.outputs.name }}@${version} on ${XIOM_REGISTRY}"

@@ -572,7 +572,7 @@ test('readme is served from the stored tarball and rendered safely', async () =>
   for (const target of ['/packages/readme-pkg', '/packages/readme-pkg/1.0.0']) {
     const page = await (await fetch(`${baseUrl}${target}`, { headers: BROWSER })).text();
     assert.match(page, /<details class="readme">/, target);
-    assert.match(page, /<div class="markdown"><h1>Readme fixture<\/h1>/, target);
+    assert.match(page, /<div class="markdown"><h1 id="readme-fixture">Readme fixture<\/h1>/, target);
     assert.match(page, /<code>xiom pkg install readme-pkg<\/code>/, target);
     assert.match(page, /<ul>\n<li>first<\/li>\n<li>second<\/li>\n<\/ul>/, target);
     assert.match(page, /<a href="https:\/\/xiom-lang\.org\/docs" rel="noopener nofollow" target="_blank">Guide<\/a>/, target);
@@ -685,7 +685,8 @@ test('whats-new renders the changelog with the deployed version', async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Registry \d+\.\d+\.\d+/);
-  assert.match(html, /<h2>\[2\.0\.0\]/);
+  assert.match(html, /<h2 id="210-2026-09-26">\[2\.1\.0\]/);
+  assert.match(html, /Mobile-first shell/);
   assert.match(html, /GitHub sign-in/);
   assert.match(html, /href="\/whats-new"/, 'the footer links to the page');
 });

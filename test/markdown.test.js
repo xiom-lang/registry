@@ -17,9 +17,19 @@ test('renders headings, paragraphs, emphasis, and inline code', () => {
     '',
     '## Sub',
   ].join('\n'));
-  assert.match(html, /<h1>Title<\/h1>/);
+  assert.match(html, /<h1 id="title">Title<\/h1>/);
   assert.match(html, /<p>Some <strong>bold<\/strong> and <em>em<\/em> and <code>code<\/code> text\.<\/p>/);
-  assert.match(html, /<h2>Sub<\/h2>/);
+  assert.match(html, /<h2 id="sub">Sub<\/h2>/);
+});
+
+test('headings get unique GitHub-style slugs for anchors', () => {
+  const html = renderMarkdown([
+    '## 1. Five-minute quickstart (trusted publisher, recommended)',
+    '',
+    '## 1. Five-minute quickstart (trusted publisher, recommended)',
+  ].join('\n'));
+  assert.match(html, /<h2 id="1-five-minute-quickstart-trusted-publisher-recommended">/);
+  assert.match(html, /<h2 id="1-five-minute-quickstart-trusted-publisher-recommended-2">/);
 });
 
 test('renders fenced code with an escaped body and language class', () => {

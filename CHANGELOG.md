@@ -4,6 +4,35 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [2.1.0] - 2026-09-26
+
+### Mobile-first UI, the admin console, roles, and beginner publishing docs
+
+- **Mobile-first shell**: a no-JS menu keeps every link reachable, wide data
+  tables scroll or become labelled rows, package rows are denser, banner
+  search no longer covers the wordmark, and touch targets are 44px.
+- **Friendly data presentation**: relative timestamps with the exact value on
+  hover, shortened ids/digests, one trust-pill block per package, copy buttons
+  (progressive enhancement), and an integrity disclosure instead of raw hex.
+- **Account area split** into Overview, Requests, Notifications, and Settings,
+  with unread counts and an explicit mark-all-read.
+- **Admin console** at `/admin`: dashboard counts, request filters, package
+  moderation (flag, mute, clear, yank a version), the full report queue, user
+  management, and an audit trail.
+- **Roles and restrictions**: stored reviewer/admin grants on top of the
+  config allowlists, promote/demote, suspend (read-only) and ban (sessions
+  closed, sign-in refused), with config admins protected and every change
+  audited.
+- **Muting** hides a package from home, listing, search, and category counts
+  while its page, artifacts, downloads, and `/index.json` entry stay intact.
+- **Registry-hosted publishing guide** at `/publish` (nav: Publish), rendered
+  from PUBLISHING.md with a live GitHub fetch and a bundled fallback.
+- **Beginner-first PUBLISHING.md**: five-minute quickstart, tag-based releases
+  with a tag/version guard, manual token lane, troubleshooting table, glossary.
+- **Workflow template upgrade** with a ready tag trigger and the same guard;
+  the GitHub token-request issue template is deprecated and removed.
+- Markdown headings now get GitHub-style anchor ids, so guide links work.
+
 ## [2.0.0] - 2026-09-26
 
 ### Registry 2.0: identities, requests, reviews, and the social base
