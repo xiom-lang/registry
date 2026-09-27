@@ -1968,7 +1968,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 |---|---|---|---|
 | A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
 | A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. **DONE 2026-09-27 (`616a800` store, `2ff1e43` events/UI) -- see 23; owner-verified on staging.** | S |
-| A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
+| A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. **Phase 1 DONE 2026-09-27 (`591067f`):** star ratings moved to SQLite (`review_ratings`, migration 005) with one-time import from reviews.json plus a rollback mirror; interface unchanged. Reports/decisions, then requests/accounts/publishers, remain. | M (phase 1 done) |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
@@ -2443,8 +2443,8 @@ never hand-edit data files on the VPS.
 | Item | Value |
 |---|---|
 | Live version | **2.2.0** on staging and production (`/health`); A2, D7 code, and A7 are on `main` and await the ops deploy |
-| Repo | `main` at `7d7e853` (A2 + D7 code + A7 + A8) + the docs commit; working tree clean |
-| Tests | `npm test` **270/270**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `591067f` (A2 + D7 code + A7 + A8 + A3 phase 1) + the docs commit; working tree clean |
+| Tests | `npm test` **273/273**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2480,29 +2480,31 @@ scope change needed).
   abuse" action that files one report into the existing moderation queue.
 - `7d7e853` `feat(community)`: A8 repository/issue links from published-version
   provenance inside the contact section.
+- `591067f` `feat(reviews)`: A3 phase 1 -- ratings in SQLite (`review_ratings`,
+  migration 005, import + mirror), interface unchanged.
 
 ### 23.3 Next actions, in order
 
-1. **Next up: A3 SQLite primary store, with A9 riding on it** (owner-agreed
-   order D7 -> A7 -> A8 -> A3; D7 code, A7, and A8 are done). A9 must not ship
-   before the SQLite move.
-2. **A3 scope** (to be agreed with the owner when its turn comes): move
-   ratings/reviews first, then requests/accounts/publishers behind their
-   existing interfaces; A9 needs the unique vote index and adds the maintainer
-   reply plus review filters/pagination.
-3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
-4. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
+1. **Next up: A3 phase 2 -- reports and decisions into SQLite** (same
+   behind-the-interface pattern; decisions need a history table, reports need
+   their status/resolution columns), then requests/accounts/publishers. **A9
+   rides on phase 2** (votes need the ratings/reviews tables; replies key off
+   the rating row): one vote per account per review, no self-votes, one flat
+   maintainer reply that notifies the review author, filters + pagination.
+2. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
+3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
    bundle** (this is what the playground's C3 waits on).
-5. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
-6. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
+4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
    template removal, D3 audit pagination when tables grow, D4 backup drill,
    D5 batch rate-limit profile documented, D6 cap retune after L0, **D7 SMTP
    enablement (xiom-lang.org from-address; the pre-gate backlog is already
    skipped, verify with `/health` `email: enabled`)**.
-7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
-   then production; confirm `/health` and the notifications page render.
+6. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
+   then production; confirm `/health`, the contact section, and the dashboard
+   email card. Migration 005 imports the existing ratings on first boot.
 
-### 23.4 A2 + D7 + A7 + A8 implementation notes (for the next session)
+### 23.4 A2 + D7 + A7 + A8 + A3.1 implementation notes (for the next session)
 
 - Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
   `console.warn` on failure) and `notifyPackageMaintainers` (derived +
@@ -2531,12 +2533,18 @@ scope change needed).
   published version whose provenance is a safe `owner/repo` pair (strips
   `.git`); the links render inside the contact section, so A7 and A8 share one
   community surface. The manifest `repository` field is deliberately not used.
+- A3 phase 1: `ReviewStore({ path, db })` -- when `db` is present the store
+  imports reviews.json ratings into `review_ratings` on first open (only if
+  the table is empty) and afterwards reads/writes SQLite, mirroring the result
+  back into reviews.json for rollback. SQLite wins over a stale file. Reports
+  and decisions still write the JSON; phase 2 moves them next, A9 after that.
 - Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
   maintainer, verification gate + `/health` + dashboard, full support flow +
   repo/issue links),
   `test/accounts.test.js` (prefs + verification lifecycle),
   `test/notifications.test.js` (retry/terminal/counts + migrations + `ref`),
   `test/support.test.js` (validation, limits, abuse idempotency, reload),
+  `test/reviews.test.js` (JSON mode + SQLite import/primary/upsert),
   `test/ui.test.js` (provenance link validation).
 - Verification done: both suites green and local headless-Chrome visual
   passes on the notifications page, the settings email states, the dashboard

@@ -58,6 +58,15 @@ The rendered version of this file is at `/whats-new`.
   links as an alternative to the message form; no link is shown when
   provenance carries no repository.
 
+### Storage
+
+- **Ratings move into the platform database**: star ratings now live in the
+  SQLite store (`review_ratings`, one row per package and account) instead of
+  `reviews.json`. The JSON file is imported once on first start and kept
+  afterwards as a best-effort rollback mirror; no API, protocol, or UI change,
+  and reports/decisions continue to live in `reviews.json` until the next
+  phase of the SQLite move.
+
 ### Compatibility
 
 - No `/index.json` change and no protocol change; sessions still never publish
