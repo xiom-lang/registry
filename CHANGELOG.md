@@ -4,6 +4,33 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [Unreleased]
+
+### Notifications
+
+- **Maintainer-claim outcomes notify the claimant**: verifying or rejecting a
+  claim creates an in-app notice linking to the package's Maintainers section.
+- **Report outcomes notify the reporter**: resolving or dismissing a report
+  notifies the reporter with a link to the package page.
+- **Package decisions notify maintainers who have accounts**: review/unreview,
+  flag/unflag, and mute/unmute create a notice for every maintainer holding a
+  registry account (verified claims included). Maintainers without an account
+  are skipped, and the decision itself always succeeds.
+- **Per-kind notification settings**: `/account/settings` gains checkboxes for
+  claim, report, and review notices, stored on the account and on by default;
+  muting a kind suppresses both its in-app notice and its email. Email keeps
+  going only to accounts with a notification email.
+- Notices show a human label and their package link on the notifications page;
+  every enqueue stays best-effort, so a notification failure never fails the
+  action that triggered it.
+
+### Compatibility
+
+- No `/index.json` change and no protocol change; sessions still never publish
+  and every approval/decision remains audited. Stored accounts gain a
+  `notifyKinds` object (schema 1.1.0); files written by 2.2 load with every
+  kind on.
+
 ## [2.2.0] - 2026-09-27
 
 ### Maintainer identity and moderation

@@ -2250,7 +2250,8 @@ the above.
 
 ### 22.3 Next actions, in order
 
-1. **A2 -- notification coverage** (next session's task; scope in 22.4).
+1. ~~**A2 -- notification coverage**~~ -- **done 2026-09-27** (`616a800` store,
+   `2ff1e43` events/UI); shipped in section 23.
 2. A3 SQLite primary store; A4 contributor profiles + sponsors; A5 feeds;
    A6 sponsorship badge.
 3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
@@ -2334,6 +2335,66 @@ protocol untouched); use the repo's store patterns (JSON stores with
 allowlist normalization + atomic writes, or SQLite via src/db.js);
 never hand-edit data files on the VPS.
 ```
+
+---
+
+## 23. Session handoff (2026-09-27, A2 shipped)
+
+### 23.1 State snapshot
+
+| Item | Value |
+|---|---|
+| Live version | **2.2.0** on staging and production (`/health`); the A2 commits are on `main` and await the ops deploy |
+| Repo | `main` at `2ff1e43` (A2 code) + the docs commit; working tree clean |
+| Tests | `npm test` **258/258**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
+| Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
+| Notifications | A2 in code: claim/report/review rows, per-kind mutes on `/account/settings`, best-effort enqueue; local visual check at 390px and 1280px |
+| Accounts schema | `accounts.json` 1.1.0 (`notifyKinds`); 2.2 files load with every kind on |
+
+### 23.2 What shipped this session (in order)
+
+- `616a800` `feat(account)`: per-kind notification prefs (`notifyKinds`
+  allowlist, default all on) with store tests.
+- `2ff1e43` `feat(notifications)`: claim decisions -> claimant, report
+  resolutions/dismissals -> reporter, package decisions -> every maintainer
+  with an account; structured kinds, mute checks, best-effort enqueue, card
+  links and labels, settings checkboxes; HTTP tests per event plus mute and
+  no-account maintainer cases.
+
+Not done from 22.4 (optional, left out on purpose): the `user:email`
+verified-address sub-item still waits on the GitHub app config decision.
+
+### 23.3 Next actions, in order
+
+1. **A3 -- SQLite primary store** (the next item up; scope to be agreed with
+   the owner).
+2. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
+3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
+   bundle** (this is what the playground's C3 waits on).
+4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
+   template removal, D3 audit pagination when tables grow, D4 backup drill,
+   D5 batch rate-limit profile documented, D6 cap retune after L0.
+6. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
+   then production; confirm `/health` and the notifications page render.
+
+### 23.4 A2 implementation notes (for the next session)
+
+- Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
+  `console.warn` on failure) and `notifyPackageMaintainers` (derived +
+  verified maintainers matched against `accounts.getByLogin`). Six decision
+  actions notify; the store-only `clear` action does not (the console never
+  exposes it).
+- Kinds are `claim`/`report`/`review`; legacy request/publisher kinds are
+  unchanged and unmutable. A muted kind writes no row and sends no email.
+- Recipients are identified by `githubId` for claim/report rows and by stored
+  account for maintainers, so renames cannot misdeliver.
+- Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
+  maintainer) and `test/accounts.test.js` (prefs normalization/reload).
+- Verification done: both suites green and a local headless-Chrome visual
+  pass on the notifications and settings pages (mobile 390px + desktop).
+
 
 
 
