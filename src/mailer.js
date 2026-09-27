@@ -37,8 +37,20 @@ function createMailer({ smtpUrl = '', from = '', sendmailPath = '', log = consol
   };
 }
 
+/** Absolutize an app-relative notification link for the email channel. */
+function emailLink(link, registryUrl) {
+  const value = typeof link === 'string' ? link : '';
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith('/') && registryUrl) {
+    return `${String(registryUrl).replace(/\/+$/, '')}${value}`;
+  }
+  // Fragment-only links cannot be made absolute; keep them verbatim.
+  return value;
+}
+
 /** Drain pending outbox emails on a timer (and on demand after events). */
-function startOutbox({ notifications, mailer, intervalMs = DEFAULT_INTERVAL_MS, log = console }) {
+function startOutbox({ notifications, mailer, intervalMs = DEFAULT_INTERVAL_MS, registryUrl = '', log = console }) {
   let draining = false;
 
   async function drain() {
@@ -48,7 +60,8 @@ function startOutbox({ notifications, mailer, intervalMs = DEFAULT_INTERVAL_MS, 
     try {
       for (const row of notifications.pendingEmails()) {
         try {
-          const text = [row.body, row.link].filter(Boolean).join('\n\n');
+          // Email needs an absolute URL; in-app notices keep the relative one.
+          const text = [row.body, emailLink(row.link, registryUrl)].filter(Boolean).join('\n\n');
           await mailer.send({ to: row.email, subject: row.subject || 'XIOM registry notice', text });
           notifications.markEmail(row.id, 'sent');
           sent += 1;
@@ -76,4 +89,4 @@ function startOutbox({ notifications, mailer, intervalMs = DEFAULT_INTERVAL_MS, 
   };
 }
 
-module.exports = { createMailer, startOutbox, DEFAULT_INTERVAL_MS };
+module.exports = { createMailer, startOutbox, emailLink, DEFAULT_INTERVAL_MS };

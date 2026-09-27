@@ -255,7 +255,7 @@ function createApp(config = loadConfig()) {
     console.log(`xiom-registry: stage overrides applied: ${summary}`);
   }
   const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
-  const outbox = startOutbox({ notifications, mailer });
+  const outbox = startOutbox({ notifications, mailer, registryUrl: config.registryUrl });
   console.log(
     mailer.enabled
       ? `xiom-registry: notification email enabled (from ${config.smtpFrom})`

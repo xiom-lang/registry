@@ -199,6 +199,53 @@ test('the email-delivery migration skips pre-gate pending rows once', () => {
   db.close();
 });
 
+test('outbox emails absolute links for the email channel', async () => {
+  const db = new Database({ path: tempDbPath() });
+  const notifications = new NotificationStore({ db });
+  notifications.enqueue({
+    account: { githubId: '1', login: 'a' },
+    kind: 'claim',
+    subject: 'Maintainer claim verified',
+    body: 'You are listed as a maintainer.',
+    link: '/packages/demo-pkg#reviews',
+    email: 'a@example.com',
+  });
+  notifications.enqueue({
+    account: { githubId: '2', login: 'b' },
+    kind: 'notice',
+    subject: 'External link',
+    body: 'Already absolute.',
+    link: 'https://example.com/docs',
+    email: 'b@example.com',
+  });
+
+  const sent = [];
+  const mailer = {
+    enabled: true,
+    async send(message) {
+      sent.push(message);
+      return { status: 'sent' };
+    },
+  };
+  const outbox = startOutbox({
+    notifications,
+    mailer,
+    intervalMs: 10 * 60 * 1000,
+    registryUrl: 'https://staging.registry.xiom-lang.org/',
+  });
+  try {
+    assert.equal(await outbox.drain(), 2);
+    assert.equal(
+      sent[0].text,
+      'You are listed as a maintainer.\n\nhttps://staging.registry.xiom-lang.org/packages/demo-pkg#reviews',
+    );
+    assert.equal(sent[1].text, 'Already absolute.\n\nhttps://example.com/docs');
+  } finally {
+    outbox.stop();
+    db.close();
+  }
+});
+
 test('a disabled mailer never sends and rows without email are skipped', async () => {
   const db = new Database({ path: tempDbPath() });
   const notifications = new NotificationStore({ db });
