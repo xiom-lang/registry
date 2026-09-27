@@ -1973,7 +1973,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
 | A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
-| A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. | S |
+| A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. **DONE 2026-09-27 (`7d7e853`).** | S |
 | A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
@@ -2252,7 +2252,10 @@ queue; no maintainer reply yet (A9).
 already has provenance; when the repository is `github.com/<owner>/<repo>`,
 render Repository + "Open an issue" links (`rel="noopener"`). This also gives
 the A7 support channel a natural "the maintainers prefer issues" path. No link
-when provenance carries no repository.
+when provenance carries no repository. **Shipped 2026-09-27 (`7d7e853`):**
+`provenanceRepository()` validates the `owner/repo` pair from published-version
+provenance (strips `.git`, rejects anything else; the manifest `repository`
+field is not used) and the links render inside the contact section.
 
 **21.9.5 Notification matrix after A7/A9** (kind -> audience, all muteable on
 the account):
@@ -2440,8 +2443,8 @@ never hand-edit data files on the VPS.
 | Item | Value |
 |---|---|
 | Live version | **2.2.0** on staging and production (`/health`); A2, D7 code, and A7 are on `main` and await the ops deploy |
-| Repo | `main` at `710da52` (A2 + D7 code + A7) + the docs commit; working tree clean |
-| Tests | `npm test` **269/269**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `7d7e853` (A2 + D7 code + A7 + A8) + the docs commit; working tree clean |
+| Tests | `npm test` **270/270**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2475,14 +2478,18 @@ scope change needed).
   `support` notifications to account-holding maintainers with a `ref` back to
   the message (migration 004), mute checkbox, and the maintainer "Report
   abuse" action that files one report into the existing moderation queue.
+- `7d7e853` `feat(community)`: A8 repository/issue links from published-version
+  provenance inside the contact section.
 
 ### 23.3 Next actions, in order
 
-1. **Next up: A8 repository/issue links** (owner-agreed order D7 -> A7 -> A8
-   -> A3; D7 code and A7 are done). Then **A3 with A9 riding on it**; A9 must
-   not ship before the SQLite move.
-2. **A3 -- SQLite primary store** (scope to be agreed with the owner when its
-   turn comes; A9 needs its unique vote index).
+1. **Next up: A3 SQLite primary store, with A9 riding on it** (owner-agreed
+   order D7 -> A7 -> A8 -> A3; D7 code, A7, and A8 are done). A9 must not ship
+   before the SQLite move.
+2. **A3 scope** (to be agreed with the owner when its turn comes): move
+   ratings/reviews first, then requests/accounts/publishers behind their
+   existing interfaces; A9 needs the unique vote index and adds the maintainer
+   reply plus review filters/pagination.
 3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
 4. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
    bundle** (this is what the playground's C3 waits on).
@@ -2495,7 +2502,7 @@ scope change needed).
 7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
    then production; confirm `/health` and the notifications page render.
 
-### 23.4 A2 + D7 + A7 implementation notes (for the next session)
+### 23.4 A2 + D7 + A7 + A8 implementation notes (for the next session)
 
 - Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
   `console.warn` on failure) and `notifyPackageMaintainers` (derived +
@@ -2520,15 +2527,21 @@ scope change needed).
   `ref = sup_...`. The abuse flag is idempotent and files one `spam` report;
   the contact form reports errors through `?contact_error=<code>` because the
   package page's flash is consumed by the review context.
+- A8: `provenanceRepository(pkg)` in `src/ui/pages.js` picks the first
+  published version whose provenance is a safe `owner/repo` pair (strips
+  `.git`); the links render inside the contact section, so A7 and A8 share one
+  community surface. The manifest `repository` field is deliberately not used.
 - Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
-  maintainer, verification gate + `/health` + dashboard, full support flow),
+  maintainer, verification gate + `/health` + dashboard, full support flow +
+  repo/issue links),
   `test/accounts.test.js` (prefs + verification lifecycle),
   `test/notifications.test.js` (retry/terminal/counts + migrations + `ref`),
-  `test/support.test.js` (validation, limits, abuse idempotency, reload).
+  `test/support.test.js` (validation, limits, abuse idempotency, reload),
+  `test/ui.test.js` (provenance link validation).
 - Verification done: both suites green and local headless-Chrome visual
   passes on the notifications page, the settings email states, the dashboard
-  email card, the contact form, and the support notice (mobile 390px +
-  desktop).
+  email card, the contact form (with repo/issue links), and the support notice
+  (mobile 390px + desktop).
 
 
 

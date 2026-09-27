@@ -53,6 +53,10 @@ The rendered version of this file is at `/whats-new`.
 - **Abuse reporting**: a maintainer can flag a message to the moderators from
   the notifications page; the first flag files one report into the existing
   queue and later flags are idempotent.
+- **Repository and issue links**: when the published-version provenance names
+  a GitHub repository, the package page offers Repository and "Open an issue"
+  links as an alternative to the message form; no link is shown when
+  provenance carries no repository.
 
 ### Compatibility
 
