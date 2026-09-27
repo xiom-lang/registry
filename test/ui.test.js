@@ -743,6 +743,8 @@ test('whats-new renders the changelog with the deployed version', async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Registry \d+\.\d+\.\d+/);
+  assert.match(html, /<h2 id="220-2026-09-27">\[2\.2\.0\]/);
+  assert.match(html, /Package ownership claims/);
   assert.match(html, /<h2 id="210-2026-09-26">\[2\.1\.0\]/);
   assert.match(html, /Mobile-first shell/);
   assert.match(html, /GitHub sign-in/);

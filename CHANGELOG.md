@@ -4,6 +4,50 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [2.2.0] - 2026-09-27
+
+### Maintainer identity and moderation
+
+- **Package ownership claims**: package pages carry a Maintainers list derived
+  from publish provenance and approved access requests. Any signed-in account
+  can claim a package it maintains, and a reviewer verifies or rejects the
+  claim with a reason. Claiming grants no publishing rights; only verified
+  claims are public, and every decision stays in the claim history.
+- **Claims in the admin console**: a new Claims tab (`/admin/claims`) shows
+  the pending queue, Verify/Reject controls, and recent decisions; reviewers
+  keep the same queue on `/review`.
+- **Packages you maintain**: the account overview lists every package you are
+  tied to -- provenance, approved publisher/token, or verified claim -- with a
+  pending pill for claims awaiting verification.
+- **Independent flag and mute toggles**: Flag/Unflag and Mute/Unmute work
+  independently, so removing one never disturbs the other; both pills show
+  when both apply, and Mark reviewed / Clear review is its own toggle.
+- **State-aware icons**: flagging changes the icon; a muted package dims its
+  art and carries a MUTED tag (even when flagged art outranks it); reviewed
+  adds a ring. Admin console rows show the state icon next to the badges.
+
+### Badges and publishing
+
+- **Stage persistence**: a version's stage survives reloads, and badges fall
+  back to it when the package-level stage is missing.
+- **Audited stage overrides**: entries published before stage stamping get
+  their badge from a generated, PR-reviewed `stage-overrides.json` built from
+  the publisher repo's STATUS.json files at a pinned commit. Display-only: a
+  published stage always wins, and fixture/stdlib names are excluded.
+- The OIDC canary fixture stamps `stage: incubating`; the publishing guide
+  documents the OIDC token lifetime failure mode.
+
+### Hardening and operations
+
+- **Rate limiting behind a proxy is fixed**: `TRUST_PROXY` now takes a hop
+  count or allowlist (never a spoofable boolean), so IP-based limits are
+  enforced again; verified with rotating `X-Forwarded-For`.
+- **Container caps and declared env knobs**: per-service CPU, memory, and PID
+  limits; rate-limit variables are declared in compose so `.env` values
+  actually reach the container; CI boots the built image and validates both
+  compose profiles.
+- Refreshed banner artwork.
+
 ## [2.1.0] - 2026-09-26
 
 ### Mobile-first UI, the admin console, roles, and beginner publishing docs
