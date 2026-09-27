@@ -89,6 +89,14 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '004-notification-ref',
+    up(db) {
+      // A7: a notice can point back at its source object (the `sup_...`
+      // support message for the `support` kind); the abuse flow needs it.
+      db.exec("ALTER TABLE notifications ADD COLUMN ref TEXT NOT NULL DEFAULT ''");
+    },
+  },
 ];
 
 class Database {

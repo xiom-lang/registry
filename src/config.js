@@ -226,6 +226,8 @@ function loadConfig() {
     reviewsPath: process.env.REVIEWS_FILE || path.join(dataDir, 'reviews.json'),
     // Package ownership claims (display-only maintainer identity).
     ownershipPath: process.env.OWNERSHIP_FILE || path.join(dataDir, 'ownership.json'),
+    // Community -> maintainer support messages (A7), auditable + rate-limited.
+    supportPath: process.env.SUPPORT_FILE || path.join(dataDir, 'support.json'),
     // Audited display-stage overrides, generated from the publisher repo's
     // STATUS.json files and reviewed as a PR (SESSION.md 21.4). Missing or
     // malformed is fine: the UI just shows the published stage.

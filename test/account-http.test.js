@@ -1507,18 +1507,22 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   let html = await response.text();
   assert.match(html, /name="claim" checked/);
   assert.match(html, /name="review" checked/);
+  assert.match(html, /name="support" checked/);
   const csrf = csrfFrom(html);
 
-  // Turn review notices off; claim and report stay on.
+  // Turn review notices off; claim, report, and support stay on.
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, claim: 'on', report: 'on' }),
+    body: new URLSearchParams({ csrf, claim: 'on', report: 'on', support: 'on' }),
   });
   assert.equal(response.status, 303);
   assert.equal(response.headers.get('location'), '/account/settings?prefs=1');
 
   const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
-  assert.deepEqual(stored.accounts['777'].notifyKinds, { claim: true, report: true, review: false });
+  assert.deepEqual(
+    stored.accounts['777'].notifyKinds,
+    { claim: true, report: true, review: false, support: true },
+  );
 
   response = await requestAs(member, '/account/settings', { headers: BROWSER });
   html = await response.text();
@@ -1567,9 +1571,129 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const restoreCsrf = csrfFrom(await response.text());
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on' }),
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on' }),
   });
   assert.equal(response.status, 303);
   const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
-  assert.deepEqual(restored.accounts['777'].notifyKinds, { claim: true, report: true, review: true });
+  assert.deepEqual(
+    restored.accounts['777'].notifyKinds,
+    { claim: true, report: true, review: true, support: true },
+  );
+});
+
+// --- A7 community -> maintainer contact (SESSION.md 21.9.2) ----------------
+// One flow: a member messages the maintainers, limits and mutes hold, and a
+// maintainer can flag the message to the moderators.
+
+test('community members message maintainers, with limits, mutes, and abuse reporting', async () => {
+  const { notifications, reviews, support } = app.locals.registry;
+  const before = notifications.listFor('777', { limit: 200 }).length;
+
+  const member = cookieJar();
+  await login(member, 'plain-code');
+  let response = await requestAs(member, '/packages/notify-decision-pkg', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /Contact maintainers/);
+  const csrf = csrfFrom(html);
+  response = await requestAs(member, '/packages/notify-decision-pkg/contact', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'bug', message: 'The install step fails behind a proxy.' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/notify-decision-pkg?contacted=1#contact');
+
+  const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'support.json'), 'utf-8'));
+  const message = Object.values(stored.messages)[0];
+  assert.equal(message.package, 'notify-decision-pkg');
+  assert.equal(message.requester.login, 'plain-user');
+  assert.equal(message.reason, 'bug');
+
+  // Only the maintainer with an account is notified; the row references the
+  // message so abuse handling can find it.
+  const rows = notifications.listFor('777', { limit: 200 });
+  assert.equal(rows.length, before + 1, 'the account-holding maintainer got one row');
+  const row = rows[0];
+  assert.equal(row.kind, 'support');
+  assert.equal(row.subject, 'Support request: notify-decision-pkg');
+  assert.equal(row.body, 'Bug report: The install step fails behind a proxy.');
+  assert.equal(row.link, '/packages/notify-decision-pkg#contact');
+  assert.equal(row.ref, message.id);
+
+  // One message per package per sender per day.
+  response = await requestAs(member, '/packages/notify-decision-pkg/contact', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'question', message: 'One more question about it.' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/notify-decision-pkg?contact_error=support_rate_package#contact');
+  assert.equal(Object.keys(support.list()).length, 1, 'the rate limit wrote nothing');
+  response = await requestAs(member, '/packages/notify-decision-pkg?contact_error=support_rate_package', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /wait for their reply/);
+
+  // The maintainer reads the notice and flags it to the moderators.
+  const maintainer = cookieJar();
+  await login(maintainer, 'user-code');
+  response = await requestAs(maintainer, '/account/notifications', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /maintainer message/);
+  assert.match(html, /Report abuse/);
+  const notifyCsrf = csrfFrom(html);
+  response = await requestAs(maintainer, `/account/notifications/${row.id}/abuse`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: notifyCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/notifications?abuse=1');
+  assert.equal(support.get(message.id).abuseReportedBy, 'user-user');
+  const spamReports = () => reviews.listReports({ status: 'open' })
+    .filter((report) => report.reason === 'spam' && report.package === 'notify-decision-pkg');
+  assert.equal(spamReports().length, 1, 'the first flag files one report');
+
+  // Flagging again is idempotent, and a foreign account cannot flag the row.
+  response = await requestAs(maintainer, `/account/notifications/${row.id}/abuse`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: notifyCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(spamReports().length, 1, 'the second flag files nothing');
+  response = await requestAs(member, `/account/notifications/${row.id}/abuse`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(spamReports().length, 1, 'a foreign row cannot be flagged');
+
+  // Muting the support kind stops the in-app notice for new messages.
+  response = await requestAs(maintainer, '/account/settings', { headers: BROWSER });
+  const settingsCsrf = csrfFrom(await response.text());
+  response = await requestAs(maintainer, '/account/notify-kinds', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: settingsCsrf, claim: 'on', report: 'on', review: 'on' }),
+  });
+  assert.equal(response.status, 303);
+
+  const sender = cookieJar();
+  await login(sender, 'admin-code');
+  response = await requestAs(sender, '/packages/notify-decision-pkg', { headers: BROWSER });
+  const senderCsrf = csrfFrom(await response.text());
+  response = await requestAs(sender, '/packages/notify-decision-pkg/contact', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: senderCsrf, reason: 'question', message: 'Is there a roadmap for this?' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(
+    notifications.listFor('777', { limit: 200 }).length,
+    before + 1,
+    'the muted support kind wrote no row',
+  );
+
+  // Restore all kinds on for later tests.
+  response = await requestAs(maintainer, '/account/settings', { headers: BROWSER });
+  const restoreCsrf = csrfFrom(await response.text());
+  response = await requestAs(maintainer, '/account/notify-kinds', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on' }),
+  });
+  assert.equal(response.status, 303);
 });

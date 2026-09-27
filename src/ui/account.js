@@ -30,6 +30,7 @@ const NOTICE_KIND_LABELS = {
   claim: 'maintainer claim',
   report: 'report update',
   review: 'package decision',
+  support: 'maintainer message',
   'verify-email': 'email confirmation',
 };
 
@@ -248,7 +249,7 @@ ${requests.slice(0, 3).map((record) => `  <li class="request-card">
 <p class="pkg-meta"><a href="/account/requests">All requests and the request form &rarr;</a></p>`;
 }
 
-function notificationCards(notifications, { compact = false } = {}) {
+function notificationCards(notifications, { compact = false, csrf = '' } = {}) {
   const list = compact ? notifications.slice(0, 3) : notifications;
   if (list.length === 0) {
     return '<p class="pkg-meta">Nothing yet. Approvals, review decisions, and '
@@ -257,6 +258,13 @@ function notificationCards(notifications, { compact = false } = {}) {
   return `<ul class="request-list">
 ${list.map((entry) => {
     const link = noticeLink(entry.link);
+    const abuse = !compact && csrf && entry.kind === 'support' && entry.ref
+      ? `<form method="post" action="/account/notifications/${entry.id}/abuse" class="inline-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <button class="button" type="submit">Report abuse</button>
+      <span class="pkg-meta">Flags this message to the moderators.</span>
+    </form>`
+      : '';
     return `  <li class="request-card${entry.readAt ? ' closed' : ''}">
     <div class="request-head">
       <span class="mono">${escapeHtml(NOTICE_KIND_LABELS[entry.kind] || entry.kind)}</span>
@@ -266,6 +274,7 @@ ${list.map((entry) => {
     <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
     ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
     ${link ? `<p class="pkg-meta"><a href="${escapeHtml(link)}">View details &rarr;</a></p>` : ''}
+    ${abuse}
   </li>`;
   }).join('\n')}
 </ul>`;
@@ -404,7 +413,7 @@ ${accountBanner({ account, status, notice, error })}
     <button class="button" type="submit">Mark all as read</button>
   </form>`
     : ''}
-  ${notificationCards(notifications)}
+  ${notificationCards(notifications, { csrf })}
   <p class="pkg-meta">Email delivery is optional and configured in
      <a href="/account/settings">Settings</a>.</p>
 </section>`;
@@ -465,6 +474,7 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('claim', 'Maintainer claim decisions')}
       ${kindRow('report', 'Report updates')}
       ${kindRow('review', 'Package review decisions')}
+      ${kindRow('support', 'Messages from the community')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
   </section>

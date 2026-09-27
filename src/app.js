@@ -89,6 +89,7 @@ const {
 const { AdminStore } = require('./admin');
 const { loadStageOverrides } = require('./stage-overrides');
 const { OwnershipStore, maintainerView, maintainedPackages } = require('./ownership');
+const { SupportStore, SUPPORT_REASONS } = require('./support');
 const { publishGuidePage } = require('./ui/publish');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
@@ -195,6 +196,9 @@ function createApp(config = loadConfig()) {
   // Package ownership claims: display-only maintainer identity derived from
   // provenance/approved requests plus verified claims (SESSION.md 21 A1).
   const ownership = new OwnershipStore({ path: config.ownershipPath });
+  // Community -> maintainer support messages (A7): stored, rate-limited, and
+  // notified as the `support` kind; separate from the report queue.
+  const support = new SupportStore({ path: config.supportPath });
   // Approved trusted-publisher requests activate from boot; the read-only
   // operator file wins if the same repository+workflow is granted there.
   const filePublisherKeys = new Set(
@@ -461,7 +465,7 @@ function createApp(config = loadConfig()) {
    *
    * @returns {boolean} true when a row was enqueued
    */
-  function notifyAccount({ account, kind, subject, body = '', link = '' }) {
+  function notifyAccount({ account, kind, subject, body = '', link = '', ref = '' }) {
     try {
       const stored = account && account.githubId ? accounts.get(account.githubId) : null;
       const prefs = stored ? stored.notifyKinds : null;
@@ -472,6 +476,7 @@ function createApp(config = loadConfig()) {
         subject,
         body,
         link,
+        ref,
         // D7 gate (SESSION.md 21.9.1): only a verified address may receive
         // notification email; in-app notices are unaffected.
         email: stored && stored.notifyEmailVerifiedAt ? stored.notifyEmail : '',
@@ -504,29 +509,40 @@ function createApp(config = loadConfig()) {
   });
 
   /**
+   * Stored accounts of every maintainer of a package (derived + verified
+   * claims), deduped by GitHub id. Maintainers without an account are
+   * skipped: they cannot receive in-app notices.
+   */
+  function maintainerAccounts(name) {
+    const pkg = indexStore.getPackage(name);
+    if (!pkg) return [];
+    const view = maintainerView({
+      packageName: name,
+      pkg,
+      requests: requests.list(),
+      publishers: publisherStore.list(),
+      claims: ownership.claimsFor(name),
+    });
+    const seen = new Set();
+    const result = [];
+    for (const maintainer of view.maintainers) {
+      const stored = accounts.getByLogin(maintainer.login);
+      if (!stored || seen.has(stored.githubId)) continue;
+      seen.add(stored.githubId);
+      result.push(stored);
+    }
+    return result;
+  }
+
+  /**
    * Notify every maintainer of a package who has a registry account after a
-   * moderation decision. Derived and verified maintainer logins are matched
-   * against stored accounts; maintainers without an account cannot receive
-   * in-app notices and are skipped. Best-effort, like every A2 notice.
+   * moderation decision. Best-effort, like every A2 notice.
    */
   function notifyPackageMaintainers(name, action, note = '') {
     const label = DECISION_NOTIFY_SUBJECTS[action];
     if (!label) return;
     try {
-      const pkg = indexStore.getPackage(name);
-      if (!pkg) return;
-      const view = maintainerView({
-        packageName: name,
-        pkg,
-        requests: requests.list(),
-        publishers: publisherStore.list(),
-        claims: ownership.claimsFor(name),
-      });
-      const seen = new Set();
-      for (const maintainer of view.maintainers) {
-        const stored = accounts.getByLogin(maintainer.login);
-        if (!stored || seen.has(stored.githubId)) continue;
-        seen.add(stored.githubId);
+      for (const stored of maintainerAccounts(name)) {
         notifyAccount({
           account: stored,
           kind: 'review',
@@ -538,6 +554,45 @@ function createApp(config = loadConfig()) {
     } catch (err) {
       console.warn(`package decision notification for ${name} failed: ${err.message}`);
     }
+  }
+
+  const SUPPORT_TOPIC_LABELS = Object.freeze({
+    question: 'Question',
+    bug: 'Bug report',
+    security: 'Security concern',
+    other: 'Message',
+  });
+
+  // Error codes for the contact form round trip (the package page consumes the
+  // flash, so this form reports through a query code instead).
+  const SUPPORT_ERRORS = Object.freeze({
+    invalid_reason: `topic must be one of: ${SUPPORT_REASONS.join(', ')}`,
+    support_body_required: 'describe your question or issue before sending',
+    support_rate_package: 'you already messaged the maintainers of this package today; wait for their reply',
+    support_rate_account: 'you reached the daily limit for maintainer messages; try again tomorrow',
+    invalid_package_name: 'that package name is not valid',
+    no_maintainers: 'no maintainer of this package has a registry account yet; '
+      + 'you can report the package to the moderators instead',
+    support_failed: 'the message could not be sent; try again',
+  });
+
+  /** View-model for the contact-maintainers block on a package page (A7). */
+  function packageSupportContext(req, name) {
+    const account = accountOf(req);
+    const recipients = account
+      ? maintainerAccounts(name).filter((stored) => stored.githubId !== account.githubId)
+      : maintainerAccounts(name);
+    const errorCode = String(req.query.contact_error || '');
+    return {
+      signedIn: Boolean(account),
+      recipients: recipients.length,
+      reasons: SUPPORT_REASONS,
+      csrf: req.session ? req.session.csrf : '',
+      notice: typeof req.query.contacted === 'string'
+        ? 'Message sent. The maintainers received a notification.'
+        : '',
+      error: SUPPORT_ERRORS[errorCode] || '',
+    };
   }
 
   /** View-model for the report controls on a package page. */
@@ -964,6 +1019,7 @@ function createApp(config = loadConfig()) {
           readme: readmeFor(pkg),
           review: packageReviewContext(req, pkg.name),
           ownership: packageOwnershipContext(req, pkg.name),
+          support: packageSupportContext(req, pkg.name),
         }));
     }
     res.json(pkg);
@@ -1204,11 +1260,13 @@ function createApp(config = loadConfig()) {
 
   app.get('/account/notifications', generalLimit, requireAccount, (req, res) => {
     const context = accountContext(req);
-    const read = req.query.read === '1' ? 'All notifications marked as read.' : '';
+    const notice = req.query.read === '1'
+      ? 'All notifications marked as read.'
+      : (req.query.abuse === '1' ? 'Thank you. The moderators will review that message.' : '');
     res.type('html').send(accountNotificationsPage({
       ...context,
       notifications: notifications.listFor(context.account.githubId, { limit: 50 }),
-      notice: read,
+      notice,
     }));
   });
 
@@ -1221,6 +1279,44 @@ function createApp(config = loadConfig()) {
     (req, res) => {
       notifications.markAllRead(accountOf(req).githubId);
       res.redirect(303, '/account/notifications?read=1');
+    },
+  );
+
+  // A maintainer can flag a support message to the moderators (A7). The mark
+  // on the message is idempotent; the first flag files one report into the
+  // existing queue, so abuse handling stays in one place.
+  app.post(
+    '/account/notifications/:id/abuse',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const actor = accountOf(req);
+        const row = notifications.get(Number(req.params.id));
+        if (!row || row.githubId !== actor.githubId || row.kind !== 'support' || !row.ref) {
+          return res.redirect(303, '/account/notifications');
+        }
+        const flagged = support.markAbuse(row.ref, { actor });
+        if (!flagged) return res.redirect(303, '/account/notifications');
+        if (!flagged.alreadyReported) {
+          try {
+            reviews.createReport({
+              packageName: flagged.message.package,
+              reporter: actor,
+              reason: 'spam',
+              note: `Contact-channel abuse by @${flagged.message.requester.login}: ${flagged.message.body.slice(0, 300)}`,
+            });
+          } catch (err) {
+            // The abuse mark is the record; a full report queue must not undo it.
+            console.warn(`abuse report for ${flagged.message.id} not filed: ${err.message}`);
+          }
+        }
+        return res.redirect(303, '/account/notifications?abuse=1');
+      } catch (err) {
+        return next(err);
+      }
     },
   );
 
@@ -1323,6 +1419,7 @@ function createApp(config = loadConfig()) {
           claim: Boolean(req.body.claim),
           report: Boolean(req.body.report),
           review: Boolean(req.body.review),
+          support: Boolean(req.body.support),
         });
         return res.redirect(303, '/account/settings?prefs=1');
       } catch (err) {
@@ -1952,6 +2049,58 @@ function createApp(config = loadConfig()) {
     },
   );
 
+  // Community -> maintainer contact (A7, SESSION.md 21.9.2): package-scoped,
+  // signed-in, and rate-limited. Deliberately separate from the report queue:
+  // reports are unverified allegations handled by moderators and never routed
+  // to the maintainer they may be about.
+  app.post(
+    '/packages/:name/contact',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '32kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const name = String(req.params.name).toLowerCase();
+      const back = `/packages/${encodeURIComponent(name)}`;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const sender = accountOf(req);
+        const recipients = maintainerAccounts(name)
+          .filter((stored) => stored.githubId !== sender.githubId);
+        if (recipients.length === 0) {
+          return res.redirect(303, `${back}?contact_error=no_maintainers#contact`);
+        }
+        const message = support.create({
+          packageName: name,
+          requester: sender,
+          reason: String(req.body.reason || ''),
+          body: String(req.body.message || ''),
+        });
+        console.log(`Support message ${message.id} on ${name} by ${message.requester.login}`);
+        for (const stored of recipients) {
+          notifyAccount({
+            account: stored,
+            kind: 'support',
+            subject: `Support request: ${name}`,
+            body: `${SUPPORT_TOPIC_LABELS[message.reason] || 'Message'}: ${message.body}`,
+            link: `${back}#contact`,
+            ref: message.id,
+          });
+        }
+        return res.redirect(303, `${back}?contacted=1#contact`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          const code = SUPPORT_ERRORS[err.code] ? err.code : 'support_failed';
+          return res.redirect(303, `${back}?contact_error=${encodeURIComponent(code)}#contact`);
+        }
+        return next(err);
+      }
+    },
+  );
+
   // Maintainer claim: identity for display only; a reviewer verifies or
   // rejects it from the review queue. Never grants publish power.
   app.post(
@@ -2333,6 +2482,7 @@ function createApp(config = loadConfig()) {
     notifications,
     admin,
     ownership,
+    support,
   };
   return app;
 }

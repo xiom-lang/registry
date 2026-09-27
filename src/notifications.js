@@ -31,10 +31,12 @@ function normalizeEmail(value) {
 function toNotification(row) {
   return {
     id: row.id,
+    githubId: row.github_id,
     kind: row.kind,
     subject: row.subject,
     body: row.body,
     link: row.link,
+    ref: row.ref || '',
     email: row.email,
     emailStatus: row.email_status,
     emailError: row.email_error || '',
@@ -54,31 +56,40 @@ class NotificationStore {
   }
 
   /**
-   * Record an event for one account. `email` (when set) queues delivery.
+   * Record an event for one account. `email` (when set) queues delivery;
+   * `ref` optionally points back at the source object (e.g. a support id).
    *
    * @param {{ account: { githubId: string, login: string }, kind: string,
-   *           subject: string, body?: string, link?: string, email?: string }} input
+   *           subject: string, body?: string, link?: string, ref?: string,
+   *           email?: string }} input
    */
-  enqueue({ account, kind, subject, body = '', link = '', email = '' }) {
+  enqueue({ account, kind, subject, body = '', link = '', ref = '', email = '' }) {
     const githubId = String(account && account.githubId ? account.githubId : '');
     const login = clean(account && account.login, 64);
     if (!/^\d{1,32}$/.test(githubId) || !login) {
       throw new Error('notification requires a signed-in GitHub account');
     }
     const result = this.db.run(
-      `INSERT INTO notifications (github_id, login, kind, subject, body, link, email, email_status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notifications
+         (github_id, login, kind, subject, body, link, ref, email, email_status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       githubId,
       login,
       clean(kind, 32) || 'notice',
       clean(subject, 200),
       clean(body, 1000),
       clean(link, 300),
+      clean(ref, 64),
       normalizeEmail(email),
       normalizeEmail(email) ? 'pending' : 'skipped',
       new Date().toISOString(),
     );
     return Number(result.lastInsertRowid);
+  }
+
+  get(id) {
+    const row = this.db.get('SELECT * FROM notifications WHERE id = ?', Number(id));
+    return row ? toNotification(row) : null;
   }
 
   listFor(githubId, { limit = 50 } = {}) {

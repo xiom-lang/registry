@@ -705,6 +705,50 @@ function maintainersBlock({ name, ownership, signedIn = false, csrf = '' }) {
 </section>`;
 }
 
+const SUPPORT_REASON_LABELS = {
+  question: 'Question about using it',
+  bug: 'Bug report for the maintainers',
+  security: 'Security concern',
+  other: 'Other',
+};
+
+/**
+ * Community -> maintainer contact (A7). Signed-in accounts get a package-scoped
+ * message form; the report queue stays separate and admin-only.
+ */
+function contactBlock({ name, support }) {
+  if (!support) return '';
+  const options = (support.reasons || Object.keys(SUPPORT_REASON_LABELS))
+    .map((reason) => `<option value="${escapeHtml(reason)}">${escapeHtml(SUPPORT_REASON_LABELS[reason] || reason)}</option>`)
+    .join('\n      ');
+  const reachable = support.recipients > 0;
+  const form = !support.signedIn
+    ? `<p class="pkg-meta"><a href="/login?returnTo=${encodeURIComponent(`/packages/${name}#contact`)}">Sign in</a> to message the maintainers.</p>`
+    : (reachable
+      ? `<form method="post" action="/packages/${encodeURIComponent(name)}/contact">
+    <input type="hidden" name="csrf" value="${escapeHtml(support.csrf)}">
+    <label class="form-field"><span>Topic</span>
+      <select name="reason">${options}</select></label>
+    <label class="form-field"><span>Message</span>
+      <textarea name="message" rows="5" maxlength="1000" required
+        placeholder="What do you need from the maintainers?"></textarea></label>
+    <button class="button primary" type="submit">Send to maintainers</button>
+    <span class="pkg-meta">One message per package per day; never share secrets.</span>
+  </form>`
+      : '<p class="pkg-meta">No maintainer of this package has a registry account yet, so messages cannot be delivered. If something is wrong with the package, use <strong>Report this package</strong> below so the moderators see it.</p>');
+  return `<section class="contact-maintainers" id="contact">
+  <h2>Contact maintainers</h2>
+  <p class="pkg-meta">${reachable
+    ? `Questions and bug reports go straight to the package's maintainers (${support.recipients} reachable here).`
+    : 'A direct line to the package maintainers.'}
+     For a problem with the package itself, use <a href="#review">Report this package</a> instead;
+     moderators handle reports.</p>
+  ${support.notice ? `<p class="notice" role="status">${escapeHtml(support.notice)}</p>` : ''}
+  ${support.error ? `<p class="error-box" role="alert">${escapeHtml(support.error)}</p>` : ''}
+  ${form}
+</section>`;
+}
+
 function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const name = pkg.name;
   const names = Object.keys(pkg.versions);
@@ -864,6 +908,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
     signedIn: Boolean(review && review.canReport),
     csrf: review ? review.csrf : '',
   })}
+  ${contactBlock({ name, support: options.support || null })}
   ${integrityBlock}
   ${trustNote}
   ${readmeBlock}
@@ -910,6 +955,7 @@ module.exports = {
   packageIcon,
   packageTrustChips,
   maintainersBlock,
+  contactBlock,
   setStageOverrides,
   effectiveStage,
   paginatePackages,

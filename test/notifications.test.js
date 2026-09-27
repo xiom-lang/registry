@@ -33,11 +33,15 @@ test('migrations are idempotent and notifications survive a reopen', () => {
     body: 'The host will mint your token.',
     link: '/account',
     email: 'alice@example.com',
+    ref: 'sup_0123456789ab',
   });
   assert.ok(id > 0);
   const list = notifications.listFor('42');
   assert.equal(list.length, 1);
   assert.equal(list[0].subject, 'Token request approved');
+  assert.equal(list[0].ref, 'sup_0123456789ab');
+  assert.equal(notifications.get(id).ref, 'sup_0123456789ab');
+  assert.equal(notifications.get(id + 999), null);
   assert.equal(list[0].emailStatus, 'pending');
   assert.equal(notifications.unreadCount('42'), 1);
   assert.equal(notifications.markAllRead('42'), 1);
