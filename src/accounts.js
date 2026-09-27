@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Display identity only: an account links a GitHub login to requests and
-// review state. It carries no publish credential and no role field -- the
-// admin role is recomputed from REGISTRY_ADMIN_LOGINS on every request, so a
-// config change takes effect without touching stored data (SESSION.md 15).
+// review state, plus its optional notification email and per-kind prefs. It
+// carries no publish credential and no role field -- the admin role is
+// recomputed from REGISTRY_ADMIN_LOGINS on every request, so a config change
+// takes effect without touching stored data (SESSION.md 15).
 
 'use strict';
 
@@ -14,11 +15,28 @@ const fs = require('fs');
 const { atomicWriteFile } = require('./index');
 const { normalizeEmail } = require('./notifications');
 
-const ACCOUNTS_SCHEMA_VERSION = '1.0.0';
+const ACCOUNTS_SCHEMA_VERSION = '1.1.0';
 const MAX_ACCOUNTS_BYTES = 2 * 1024 * 1024;
+
+// Structured notification kinds (SESSION.md 22.4 A2). Only these three can be
+// muted from /account/settings; every other outbox kind is unconditional.
+const NOTIFY_KINDS = Object.freeze(['claim', 'report', 'review']);
+const DEFAULT_NOTIFY_KINDS = Object.freeze({ claim: true, report: true, review: true });
 
 function clean(value, maxLength) {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength) : '';
+}
+
+/**
+ * Allowlist-normalize per-kind notification preferences. Missing or malformed
+ * values default to on (the pre-A2 behavior for every row); only an explicit
+ * `false` mutes a kind.
+ */
+function normalizeNotifyKinds(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const out = {};
+  for (const kind of NOTIFY_KINDS) out[kind] = source[kind] !== false;
+  return out;
 }
 
 /**
@@ -65,6 +83,7 @@ class AccountStore {
         name: clean(entry.name, 200),
         avatarUrl: clean(entry.avatarUrl, 512),
         notifyEmail: clean(entry.notifyEmail, 254),
+        notifyKinds: normalizeNotifyKinds(entry.notifyKinds),
         createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
         lastLoginAt: typeof entry.lastLoginAt === 'string' ? entry.lastLoginAt : '',
       };
@@ -107,6 +126,7 @@ class AccountStore {
       name: clean(profile.name, 200),
       avatarUrl: clean(profile.avatarUrl, 512),
       notifyEmail: existing ? existing.notifyEmail : '',
+      notifyKinds: existing ? existing.notifyKinds : { ...DEFAULT_NOTIFY_KINDS },
       createdAt: existing ? existing.createdAt : now,
       lastLoginAt: now,
     };
@@ -125,6 +145,23 @@ class AccountStore {
     return value;
   }
 
+  /**
+   * Store per-kind notification preferences. Only the structured kinds are
+   * read (allowlist); everything else the account posts is ignored.
+   *
+   * @param {string} githubId
+   * @param {{ claim?: boolean, report?: boolean, review?: boolean }} kinds
+   */
+  setNotifyKinds(githubId, kinds) {
+    const id = String(githubId);
+    const existing = this.accounts[id];
+    if (!existing) throw new Error('account not found');
+    const value = normalizeNotifyKinds(kinds);
+    const entry = { ...existing, notifyKinds: value };
+    this.#commit({ ...this.accounts, [id]: entry });
+    return value;
+  }
+
   #commit(next) {
     const serialized = JSON.stringify({
       version: ACCOUNTS_SCHEMA_VERSION,
@@ -139,4 +176,11 @@ class AccountStore {
   }
 }
 
-module.exports = { AccountStore, ACCOUNTS_SCHEMA_VERSION, MAX_ACCOUNTS_BYTES };
+module.exports = {
+  AccountStore,
+  ACCOUNTS_SCHEMA_VERSION,
+  MAX_ACCOUNTS_BYTES,
+  NOTIFY_KINDS,
+  DEFAULT_NOTIFY_KINDS,
+  normalizeNotifyKinds,
+};
