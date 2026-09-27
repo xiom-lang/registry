@@ -244,6 +244,11 @@ function createApp(config = loadConfig()) {
   }
   const mailer = createMailer({ smtpUrl: config.smtpUrl, from: config.smtpFrom });
   const outbox = startOutbox({ notifications, mailer });
+  console.log(
+    mailer.enabled
+      ? `xiom-registry: notification email enabled (from ${config.smtpFrom})`
+      : 'xiom-registry: notification email disabled (SMTP_URL/SMTP_FROM unset) - in-app notices only',
+  );
 
   // Token-file hot reload: the fulfiller worker mints into the mounted file
   // and the next publish sees it -- no force-recreate. Failures keep the
@@ -467,7 +472,9 @@ function createApp(config = loadConfig()) {
         subject,
         body,
         link,
-        email: stored ? stored.notifyEmail : '',
+        // D7 gate (SESSION.md 21.9.1): only a verified address may receive
+        // notification email; in-app notices are unaffected.
+        email: stored && stored.notifyEmailVerifiedAt ? stored.notifyEmail : '',
       });
       outbox.drain().catch(() => {});
       return true;
@@ -779,6 +786,8 @@ function createApp(config = loadConfig()) {
       uptime: process.uptime(),
       started_at: SERVICE_STARTED_AT,
       version: SERVICE_VERSION,
+      // D7: lets ops confirm the SMTP configuration without shell access.
+      email: mailer.enabled ? 'enabled' : 'disabled',
     });
   });
 
@@ -1217,13 +1226,27 @@ function createApp(config = loadConfig()) {
 
   app.get('/account/settings', generalLimit, requireAccount, (req, res) => {
     const context = accountContext(req);
+    const { account } = context;
     const notice = req.query.prefs === '1'
       ? 'Notification preferences saved.'
-      : (req.query.email === '1' ? 'Notification email saved.' : '');
+      : (req.query.email === '1'
+        ? (account.notifyEmail && !account.notifyEmailVerifiedAt
+          ? 'Notification email saved. Open the confirmation link we sent it before email delivery starts.'
+          : 'Notification email saved.')
+        : (req.query.verified === '1'
+          ? 'Notification email verified.'
+          : (req.query.verified === '0'
+            ? 'That confirmation link is not valid or has expired. Save the address again for a new link.'
+            : '')));
     res.type('html').send(accountSettingsPage({
       ...context,
-      notifyEmail: context.account.notifyEmail || '',
-      notifyKinds: context.account.notifyKinds,
+      notifyEmail: account.notifyEmail || '',
+      notifyEmailVerified: Boolean(account.notifyEmail && account.notifyEmailVerifiedAt),
+      notifyEmailPending: Boolean(
+        account.notifyEmail && !account.notifyEmailVerifiedAt
+        && account.notifyEmailTokenHash && account.notifyEmailTokenExpires,
+      ),
+      notifyKinds: account.notifyKinds,
       notice,
     }));
   });
@@ -1237,10 +1260,34 @@ function createApp(config = loadConfig()) {
     (req, res, next) => {
       try {
         const raw = String(req.body.email || '');
-        const saved = accounts.setNotifyEmail(accountOf(req).githubId, raw);
+        const actor = accountOf(req);
+        const saved = accounts.setNotifyEmail(actor.githubId, raw);
         if (raw.trim() !== '' && saved === '') {
           req.session.flash = { error: 'that email address does not look valid' };
           return res.redirect(303, '/account/settings');
+        }
+        if (saved !== '') {
+          // D7 double opt-in (SESSION.md 21.9.1): queue the confirmation link.
+          // This is the one pending email allowed to an unverified address --
+          // it is the proof of control, and ordinary notices stay gated until
+          // the link is opened. Best-effort: saving the address must succeed
+          // even when the outbox cannot record the notice.
+          try {
+            const verification = accounts.ensureEmailVerification(actor.githubId);
+            if (verification.created) {
+              notifications.enqueue({
+                account: actor,
+                kind: 'verify-email',
+                subject: 'Confirm your notification email',
+                body: `Open the link within 24 hours to start receiving notification email at ${saved}.`,
+                link: `/account/verify-email?token=${encodeURIComponent(verification.token)}`,
+                email: saved,
+              });
+              outbox.drain().catch(() => {});
+            }
+          } catch (err) {
+            console.warn(`email verification notice for @${actor.login} failed: ${err.message}`);
+          }
         }
         return res.redirect(303, '/account/settings?email=1');
       } catch (err) {
@@ -1248,6 +1295,17 @@ function createApp(config = loadConfig()) {
       }
     },
   );
+
+  // Confirmation link target for the notification email (D7). The token is
+  // bound to the signed-in account, single-use, and expires after 24 hours.
+  app.get('/account/verify-email', generalLimit, requireAccount, (req, res, next) => {
+    try {
+      const result = accounts.verifyEmail(accountOf(req).githubId, String(req.query.token || ''));
+      return res.redirect(303, `/account/settings?verified=${result === 'verified' ? '1' : '0'}`);
+    } catch (err) {
+      return next(err);
+    }
+  });
 
   // Per-kind notification preferences (SESSION.md 22.4 A2). Checkboxes: a
   // present field means on, an absent one means muted; the store re-applies
@@ -1393,6 +1451,11 @@ function createApp(config = loadConfig()) {
         muted: decisions.filter((entry) => entry.status === 'muted').length,
         users: accounts.list().length,
         ownershipClaims: ownership.pendingCount(),
+      },
+      email: {
+        enabled: mailer.enabled,
+        counts: notifications.outboxCounts(),
+        failures: notifications.recentEmailFailures(3),
       },
       recentAudit: admin.recentAudit(8),
     }));

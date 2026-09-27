@@ -621,6 +621,98 @@ test('accounts set a notification email and see in-app notices', async () => {
   assert.equal(accountsData.accounts['777'].notifyEmail, 'dev@example.com');
 });
 
+test('notification email needs confirmation before any notice email is queued', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+
+  // The health payload tells ops whether the mail service is on (D7).
+  const health = await (await fetch(`${baseUrl}/health`)).json();
+  assert.equal(health.email, 'disabled', 'no SMTP_URL in this sandbox');
+
+  let response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  let html = await response.text();
+  const csrf = csrfFrom(html);
+
+  // Save an address: it is stored unverified and only the confirmation notice
+  // itself is queued for delivery.
+  response = await requestAs(jar, '/account/email', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, email: 'admin@example.com' }),
+  });
+  assert.equal(response.status, 303);
+
+  const { accounts, notifications } = app.locals.registry;
+  assert.equal(accounts.get('4242').notifyEmail, 'admin@example.com');
+  assert.equal(accounts.isEmailVerified('4242'), false);
+  const confirmation = notifications.listFor('4242').find((entry) => entry.kind === 'verify-email');
+  assert.ok(confirmation, 'confirmation notice queued');
+  assert.equal(confirmation.emailStatus, 'pending', 'the confirmation itself may be emailed');
+  const token = new URL(`http://x${confirmation.link}`).searchParams.get('token');
+  assert.match(token, /^[0-9a-f]{48}$/);
+
+  response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /unverified/);
+
+  // An event while unverified stays in-app only: the email column is skipped.
+  response = await requestAs(jar, '/packages/notify-claim-pkg', { headers: BROWSER });
+  const reportCsrf = csrfFrom(await response.text());
+  response = await requestAs(jar, '/packages/notify-claim-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reportCsrf, reason: 'other', note: 'verification gate check' }),
+  });
+  assert.equal(response.status, 303);
+  const reportId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code');
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  const reviewCsrf = csrfFrom(await response.text());
+  response = await requestAs(reviewer, `/review/reports/${reportId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'resolved', resolution: 'gate check' }),
+  });
+  assert.equal(response.status, 303);
+  const gated = notifications.listFor('4242')[0];
+  assert.equal(gated.kind, 'report');
+  assert.equal(gated.emailStatus, 'skipped', 'an unverified address receives no email');
+
+  // Opening the single-use link verifies the address.
+  response = await requestAs(jar, `/account/verify-email?token=${token}`, { headers: BROWSER });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/settings?verified=1');
+  assert.equal(accounts.isEmailVerified('4242'), true);
+
+  response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /verified/);
+  assert.match(html, /This address is verified/);
+
+  // From now on the same event type queues email for the verified address.
+  response = await requestAs(jar, '/packages/notify-report-pkg', { headers: BROWSER });
+  const secondCsrf = csrfFrom(await response.text());
+  response = await requestAs(jar, '/packages/notify-report-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: secondCsrf, reason: 'other', note: 'verified address check' }),
+  });
+  assert.equal(response.status, 303);
+  const secondId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+  response = await requestAs(reviewer, `/review/reports/${secondId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'resolved', resolution: 'verified check' }),
+  });
+  assert.equal(response.status, 303);
+  const delivered = notifications.listFor('4242')[0];
+  assert.equal(delivered.kind, 'report');
+  assert.equal(delivered.emailStatus, 'pending', 'a verified address queues the email');
+  assert.equal(delivered.email, 'admin@example.com');
+
+  // Clear the address so later tests see the original state (and the gate
+  // closes again).
+  accounts.setNotifyEmail('4242', '');
+  assert.equal(accounts.isEmailVerified('4242'), false);
+});
+
 test('signed-in accounts rate a package, one rating each', async () => {
   const jar = cookieJar();
   await login(jar, 'user-code');
@@ -819,6 +911,13 @@ test('the admin console renders every section for admins and refuses members', a
     assert.equal(response.status, 200, `${target} renders`);
     assert.match(await response.text(), pattern, `${target} shows its content`);
   }
+
+  // D7: the dashboard surfaces the mailer state and outbox counts.
+  const dashboard = await requestAs(jar, '/admin', { headers: BROWSER });
+  const dashboardHtml = await dashboard.text();
+  assert.match(dashboardHtml, /Notification email/);
+  assert.match(dashboardHtml, /Mail service disabled on this host/);
+  assert.match(dashboardHtml, /sent \d+/);
 
   const member = cookieJar();
   await login(member, 'user-code');

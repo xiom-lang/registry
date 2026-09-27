@@ -10,13 +10,16 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 
 const { atomicWriteFile } = require('./index');
 const { normalizeEmail } = require('./notifications');
 
-const ACCOUNTS_SCHEMA_VERSION = '1.1.0';
+const ACCOUNTS_SCHEMA_VERSION = '1.2.0';
 const MAX_ACCOUNTS_BYTES = 2 * 1024 * 1024;
+// D7 (SESSION.md 21.9.1): the gate before any notification email is sent.
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Structured notification kinds (SESSION.md 22.4 A2). Only these three can be
 // muted from /account/settings; every other outbox kind is unconditional.
@@ -25,6 +28,10 @@ const DEFAULT_NOTIFY_KINDS = Object.freeze({ claim: true, report: true, review: 
 
 function clean(value, maxLength) {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength) : '';
+}
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
 /**
@@ -37,6 +44,21 @@ function normalizeNotifyKinds(value) {
   const out = {};
   for (const kind of NOTIFY_KINDS) out[kind] = source[kind] !== false;
   return out;
+}
+
+/** Keep verification state meaningful: no address means no verification. */
+function normalizeVerification(entry, notifyEmail) {
+  if (!notifyEmail) {
+    return { notifyEmailVerifiedAt: '', notifyEmailTokenHash: '', notifyEmailTokenExpires: '' };
+  }
+  const hash = typeof entry.notifyEmailTokenHash === 'string' && /^[0-9a-f]{64}$/.test(entry.notifyEmailTokenHash)
+    ? entry.notifyEmailTokenHash
+    : '';
+  return {
+    notifyEmailVerifiedAt: clean(entry.notifyEmailVerifiedAt, 40),
+    notifyEmailTokenHash: hash,
+    notifyEmailTokenExpires: hash ? clean(entry.notifyEmailTokenExpires, 40) : '',
+  };
 }
 
 /**
@@ -77,13 +99,15 @@ class AccountStore {
       if (!/^\d{1,32}$/.test(githubId) || !entry || typeof entry !== 'object') continue;
       const login = clean(entry.login, 64);
       if (!login) continue;
+      const notifyEmail = clean(entry.notifyEmail, 254);
       accounts[githubId] = {
         githubId,
         login,
         name: clean(entry.name, 200),
         avatarUrl: clean(entry.avatarUrl, 512),
-        notifyEmail: clean(entry.notifyEmail, 254),
+        notifyEmail,
         notifyKinds: normalizeNotifyKinds(entry.notifyKinds),
+        ...normalizeVerification(entry, notifyEmail),
         createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
         lastLoginAt: typeof entry.lastLoginAt === 'string' ? entry.lastLoginAt : '',
       };
@@ -127,6 +151,9 @@ class AccountStore {
       avatarUrl: clean(profile.avatarUrl, 512),
       notifyEmail: existing ? existing.notifyEmail : '',
       notifyKinds: existing ? existing.notifyKinds : { ...DEFAULT_NOTIFY_KINDS },
+      notifyEmailVerifiedAt: existing ? existing.notifyEmailVerifiedAt : '',
+      notifyEmailTokenHash: existing ? existing.notifyEmailTokenHash : '',
+      notifyEmailTokenExpires: existing ? existing.notifyEmailTokenExpires : '',
       createdAt: existing ? existing.createdAt : now,
       lastLoginAt: now,
     };
@@ -134,15 +161,90 @@ class AccountStore {
     return entry;
   }
 
-  /** Store (or clear) the notification email; '' disables emails. */
+  /**
+   * Store (or clear) the notification email; '' disables emails. Changing the
+   * address invalidates any earlier verification; re-saving the same address
+   * keeps it.
+   */
   setNotifyEmail(githubId, email) {
     const id = String(githubId);
     const existing = this.accounts[id];
     if (!existing) throw new Error('account not found');
     const value = normalizeEmail(email);
-    const entry = { ...existing, notifyEmail: value };
+    const keepVerification = value !== '' && value === existing.notifyEmail;
+    const entry = {
+      ...existing,
+      notifyEmail: value,
+      notifyEmailVerifiedAt: keepVerification ? existing.notifyEmailVerifiedAt : '',
+      notifyEmailTokenHash: keepVerification ? existing.notifyEmailTokenHash : '',
+      notifyEmailTokenExpires: keepVerification ? existing.notifyEmailTokenExpires : '',
+    };
     this.#commit({ ...this.accounts, [id]: entry });
     return value;
+  }
+
+  /**
+   * Ensure a confirmation token exists for the stored address. The raw token
+   * is returned only when this call created it (only its SHA-256 is stored),
+   * so callers enqueue a confirmation email exactly once per token.
+   *
+   * @returns {{ token: string, expiresAt: string, created: boolean,
+   *             reason: 'created'|'pending'|'verified'|'no-email' }}
+   */
+  ensureEmailVerification(githubId, { now = new Date(), ttlMs = EMAIL_VERIFICATION_TTL_MS } = {}) {
+    const id = String(githubId);
+    const existing = this.accounts[id];
+    if (!existing) throw new Error('account not found');
+    if (!existing.notifyEmail) return { token: '', expiresAt: '', created: false, reason: 'no-email' };
+    if (existing.notifyEmailVerifiedAt) {
+      return { token: '', expiresAt: existing.notifyEmailVerifiedAt, created: false, reason: 'verified' };
+    }
+    if (
+      existing.notifyEmailTokenHash
+      && existing.notifyEmailTokenExpires
+      && existing.notifyEmailTokenExpires > now.toISOString()
+    ) {
+      return { token: '', expiresAt: existing.notifyEmailTokenExpires, created: false, reason: 'pending' };
+    }
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
+    const entry = { ...existing, notifyEmailTokenHash: hashToken(token), notifyEmailTokenExpires: expiresAt };
+    this.#commit({ ...this.accounts, [id]: entry });
+    return { token, expiresAt, created: true, reason: 'created' };
+  }
+
+  /**
+   * Complete verification with the raw token from the confirmation link.
+   *
+   * @returns {'verified'|'invalid'|'expired'}
+   */
+  verifyEmail(githubId, token, { now = new Date() } = {}) {
+    const id = String(githubId);
+    const existing = this.accounts[id];
+    if (!existing) throw new Error('account not found');
+    if (!existing.notifyEmailTokenHash) return 'invalid';
+    const expected = Buffer.from(existing.notifyEmailTokenHash, 'hex');
+    const actual = Buffer.from(hashToken(token || ''), 'hex');
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return 'invalid';
+    if (!existing.notifyEmailTokenExpires || existing.notifyEmailTokenExpires <= now.toISOString()) {
+      const entry = { ...existing, notifyEmailTokenHash: '', notifyEmailTokenExpires: '' };
+      this.#commit({ ...this.accounts, [id]: entry });
+      return 'expired';
+    }
+    const entry = {
+      ...existing,
+      notifyEmailVerifiedAt: now.toISOString(),
+      notifyEmailTokenHash: '',
+      notifyEmailTokenExpires: '',
+    };
+    this.#commit({ ...this.accounts, [id]: entry });
+    return 'verified';
+  }
+
+  /** True when the stored address may receive notification email (D7 gate). */
+  isEmailVerified(githubId) {
+    const existing = this.accounts[String(githubId)];
+    return Boolean(existing && existing.notifyEmail && existing.notifyEmailVerifiedAt);
   }
 
   /**
@@ -180,6 +282,7 @@ module.exports = {
   AccountStore,
   ACCOUNTS_SCHEMA_VERSION,
   MAX_ACCOUNTS_BYTES,
+  EMAIL_VERIFICATION_TTL_MS,
   NOTIFY_KINDS,
   DEFAULT_NOTIFY_KINDS,
   normalizeNotifyKinds,

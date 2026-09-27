@@ -30,6 +30,7 @@ const NOTICE_KIND_LABELS = {
   claim: 'maintainer claim',
   report: 'report update',
   review: 'package decision',
+  'verify-email': 'email confirmation',
 };
 
 /** Only registry-relative or https links become anchors (defense in depth). */
@@ -414,6 +415,8 @@ ${accountBanner({ account, status, notice, error })}
 function accountSettingsPage({
   account,
   notifyEmail = '',
+  notifyEmailVerified = false,
+  notifyEmailPending = false,
   notifyKinds = null,
   csrf,
   notice = '',
@@ -426,6 +429,14 @@ function accountSettingsPage({
   const kindRow = (kind, label) => `<label class="radio-row">
       <input type="checkbox" name="${kind}" ${kindOn(kind) ? 'checked' : ''}>
       <span>${escapeHtml(label)}</span></label>`;
+  const emailState = !notifyEmail
+    ? '<p class="pkg-meta">Email is off. In-app notices keep arriving on this page.</p>'
+    : (notifyEmailVerified
+      ? '<p class="pkg-meta"><span class="status-pill status-approved">verified</span> '
+        + 'This address is verified. Emails start as soon as the registry\'s mail service is enabled.</p>'
+      : `<p class="pkg-meta"><span class="status-pill status-pending">unverified</span> `
+        + `${notifyEmailPending ? 'A confirmation link is queued for this address.' : 'Save the address to queue a confirmation link.'} `
+        + 'It is delivered when the registry\'s mail service is enabled; in-app notices work either way.</p>');
   const body = `${accountHero(account, { title: 'Settings' })}
 ${accountTabs('settings')}
 ${accountBanner({ account, status, notice, error })}
@@ -445,6 +456,7 @@ ${accountBanner({ account, status, notice, error })}
       </div>
       <button class="button primary" type="submit">Save email</button>
     </form>
+    ${emailState}
     <h3 id="notifications" class="account-subhead">Notification types</h3>
     <p class="pkg-meta">Turn a type off to stop both its in-app notices and its email.
        Everything is on by default.</p>

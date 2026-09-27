@@ -51,12 +51,36 @@ function filterChips(base, filters, active) {
 }
 
 /** Console dashboard: what needs attention, with links into each queue. */
-function adminDashboardPage({ account, counts, recentAudit = [], nav = '' }) {
+function adminDashboardPage({ account, counts, email = null, recentAudit = [], nav = '' }) {
   const card = (href, label, value, hint) => `<a class="console-card" href="${href}">
   <span class="console-card-value">${escapeHtml(String(value))}</span>
   <span class="console-card-label">${escapeHtml(label)}</span>
   <span class="pkg-meta">${escapeHtml(hint)}</span>
 </a>`;
+  const outbox = email ? `
+<section>
+  <h2>Notification email</h2>
+  <p class="pkg-meta">${email.enabled
+    ? 'Mail service enabled: verified addresses receive notification email.'
+    : 'Mail service disabled on this host (SMTP_URL/SMTP_FROM unset). In-app notices keep working; queued email rows wait until it is enabled.'}</p>
+  <div class="meta-row">
+    <span>pending ${email.counts.pending}</span>
+    <span>retrying ${email.counts.retrying}</span>
+    <span>sent ${email.counts.sent}</span>
+    <span>failed ${email.counts.failed}</span>
+    <span>skipped ${email.counts.skipped}</span>
+  </div>
+  ${email.failures.length === 0
+    ? '<p class="pkg-meta">No failed deliveries.</p>'
+    : `<ul class="audit-list">
+${email.failures.map((failure) => `  <li class="audit-row">
+    <span class="pkg-meta">${formatWhen(failure.createdAt)}</span>
+    <span>@${escapeHtml(failure.login)}</span>
+    <span class="pkg-meta">${escapeHtml(failure.subject)}</span>
+    <span class="pkg-meta audit-detail">${escapeHtml(failure.emailError || 'delivery failed')} (${failure.attempts} attempts)</span>
+  </li>`).join('\n')}
+</ul>`}
+</section>` : '';
   const body = `<section class="hero">
   <h1>Admin console</h1>
   <p>Signed in as <a href="https://github.com/${encodeURIComponent(account.login)}" rel="noopener">@${escapeHtml(account.login)}</a>.
@@ -74,6 +98,7 @@ ${adminTabs('overview')}
   ${card('/admin/users', 'Accounts', counts.users, 'roles and restrictions')}
   ${card('/admin/claims', 'Ownership claims', counts.ownershipClaims, 'awaiting verification')}
 </div>
+${outbox}
 <section>
   <h2>Recent admin activity</h2>
   ${auditList(recentAudit, 'Nothing has been done from the console yet.')}
