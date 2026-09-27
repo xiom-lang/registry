@@ -117,6 +117,45 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '006-review-reports-decisions',
+    up(db) {
+      // A3 phase 2 (SESSION.md 18.2): the report queue and reviewer decisions
+      // move to SQLite with the same import + JSON mirror contract as ratings.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_reports (
+          id TEXT PRIMARY KEY,
+          package TEXT NOT NULL,
+          reporter_id TEXT NOT NULL,
+          reporter_login TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          note TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('open', 'resolved', 'dismissed')),
+          created_at TEXT NOT NULL,
+          resolution TEXT NOT NULL DEFAULT '',
+          resolved_at TEXT NOT NULL DEFAULT '',
+          resolved_by TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS review_reports_queue ON review_reports (status, created_at DESC, id);
+        CREATE INDEX IF NOT EXISTS review_reports_package ON review_reports (package, status, reporter_id);
+        CREATE TABLE IF NOT EXISTS review_decisions (
+          package TEXT PRIMARY KEY,
+          reviewed INTEGER NOT NULL DEFAULT 0,
+          flagged INTEGER NOT NULL DEFAULT 0,
+          muted INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS review_decision_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          package TEXT NOT NULL,
+          at TEXT NOT NULL,
+          actor TEXT NOT NULL DEFAULT '',
+          action TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS review_decision_history_package ON review_decision_history (package, id);
+      `);
+    },
+  },
 ];
 
 class Database {

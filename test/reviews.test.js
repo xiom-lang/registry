@@ -334,7 +334,7 @@ test('SQLite wins over a stale JSON mirror once it has rows', () => {
   }
 });
 
-test('a rating update never duplicates the row and reports stay on the JSON file', () => {
+test('a rating update never duplicates the row and the mirror carries the truth', () => {
   const legacy = structuredClone(LEGACY_RATINGS);
   legacy.reports = {
     rep_aaaaaaaaaaaa: {
@@ -355,13 +355,125 @@ test('a rating update never duplicates the row and reports stay on the JSON file
     assert.equal(Number(rows[0].stars), 1);
     assert.equal(reviews.ratingSummary('demo-pkg').count, 2, 'updated, not added');
 
-    // Reports still resolve through the JSON queue.
+    // Reports resolve through SQLite in db mode.
     assert.equal(reviews.openReportCount('demo-pkg'), 1);
     const resolved = reviews.resolveReport('rep_aaaaaaaaaaaa', { actor: 'root', resolution: 'handled' });
     assert.equal(resolved.status, 'resolved');
     const mirror = JSON.parse(fs.readFileSync(reviews.path, 'utf-8'));
     assert.equal(mirror.reports.rep_aaaaaaaaaaaa.status, 'resolved');
     assert.equal(mirror.ratings['demo-pkg']['42'].stars, 1, 'mirror carries the SQLite truth');
+  } finally {
+    db.close();
+  }
+});
+
+// ─── A3 phase 2: reports and decisions in SQLite (SESSION.md 18.2) ────────
+
+const LEGACY_QUEUE = {
+  version: '1.1.0',
+  updated_at: '2026-09-01T00:00:00Z',
+  packages: {
+    'demo-pkg': {
+      reviewed: true,
+      flagged: false,
+      muted: false,
+      history: [{ at: '2026-09-01T00:00:00Z', actor: 'root', action: 'review', note: 'clean' }],
+    },
+  },
+  reports: {
+    rep_aaaaaaaaaaaa: {
+      id: 'rep_aaaaaaaaaaaa',
+      package: 'demo-pkg',
+      reporter: { githubId: '5', login: 'carol' },
+      reason: 'other',
+      note: 'valid',
+      status: 'open',
+      createdAt: '2026-09-01T02:00:00Z',
+    },
+  },
+  ratings: {},
+};
+
+test('reports and decisions import from reviews.json and then live in SQLite', () => {
+  const { store: reviews, db, jsonPath } = sqliteStore(structuredClone(LEGACY_QUEUE));
+  try {
+    // Imported state is served from SQLite.
+    assert.equal(reviews.openReportCount('demo-pkg'), 1);
+    assert.equal(reviews.decision('demo-pkg').reviewed, true);
+    assert.deepEqual(reviews.decision('demo-pkg').history.map((entry) => entry.action), ['review']);
+
+    // Report lifecycle goes through SQL.
+    const created = reviews.createReport({
+      packageName: 'demo-pkg',
+      reporter: { githubId: '7', login: 'bob' },
+      reason: 'spam',
+      note: 'looks like spam',
+    });
+    const resolved = reviews.resolveReport(created.id, {
+      actor: 'root', status: 'dismissed', resolution: 'not spam',
+    });
+    assert.equal(resolved.status, 'dismissed');
+    assert.equal(reviews.listReports({ status: 'open' }).length, 1, 'only the legacy report stays open');
+    assert.equal(reviews.listReports({ packageName: 'demo-pkg' }).length, 2);
+
+    // Decision history appends in SQLite.
+    const flipped = reviews.setDecision('demo-pkg', { action: 'flag', actor: 'root', note: 'malware' });
+    assert.equal(flipped.flagged, true);
+    assert.equal(flipped.reviewed, false);
+    assert.deepEqual(flipped.history.map((entry) => entry.action), ['review', 'flag']);
+    assert.deepEqual(
+      reviews.listDecisions().map((entry) => entry.name),
+      ['demo-pkg'],
+    );
+
+    // The JSON mirror is refreshed from the primary store.
+    const mirror = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    assert.equal(mirror.reports[created.id].status, 'dismissed');
+    assert.equal(mirror.packages['demo-pkg'].flagged, true);
+    assert.deepEqual(mirror.packages['demo-pkg'].history.map((entry) => entry.action), ['review', 'flag']);
+  } finally {
+    db.close();
+  }
+});
+
+test('SQLite wins over stale JSON for reports and decisions too', () => {
+  const { store: first, db, dbPath, jsonPath } = sqliteStore(structuredClone(LEGACY_QUEUE));
+  first.resolveReport('rep_aaaaaaaaaaaa', { actor: 'root', resolution: 'done' });
+  first.setDecision('demo-pkg', { action: 'unflag', actor: 'root' });
+  db.close();
+
+  // A stale reviews.json must not win over the primary database.
+  fs.writeFileSync(jsonPath, JSON.stringify(LEGACY_QUEUE));
+  const again = new Database({ path: dbPath });
+  try {
+    const reopened = new ReviewStore({ path: jsonPath, db: again });
+    assert.equal(reopened.listReports({ status: 'open' }).length, 0);
+    assert.equal(reopened.listReports({ status: 'resolved' }).length, 1);
+    assert.equal(reopened.decision('demo-pkg').flagged, false);
+    assert.deepEqual(reopened.decision('demo-pkg').history.map((entry) => entry.action), ['review', 'unflag']);
+  } finally {
+    again.close();
+  }
+});
+
+test('the open-report cap still holds in SQLite mode', () => {
+  const { store: reviews, db } = sqliteStore();
+  try {
+    const reporter = { githubId: '7', login: 'bob' };
+    for (let i = 0; i < 3; i++) {
+      reviews.createReport({ packageName: 'demo-pkg', reporter, reason: 'spam', note: `report ${i}` });
+    }
+    assert.throws(
+      () => reviews.createReport({ packageName: 'demo-pkg', reporter, reason: 'spam', note: 'again' }),
+      /already have open reports/,
+    );
+    // Another reporter or another package is unaffected.
+    assert.ok(reviews.createReport({
+      packageName: 'demo-pkg', reporter: { githubId: '8', login: 'cara' }, reason: 'spam', note: 'x',
+    }));
+    assert.ok(reviews.createReport({
+      packageName: 'other-pkg', reporter, reason: 'spam', note: 'x',
+    }));
   } finally {
     db.close();
   }

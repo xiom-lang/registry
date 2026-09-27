@@ -7,10 +7,10 @@
 // dismiss the report with a note, and every transition stays in the record.
 // Reports are display/audit data: they never alter an artifact or the index.
 //
-// A3 phase 1 (SESSION.md 18.2): ratings live in the platform SQLite database
-// when the store is constructed with `db`. reviews.json is the import source
-// and a best-effort rollback mirror; once SQLite has rows it is primary.
-// Reports and decisions still use the JSON file and move in a later phase.
+// A3 (SESSION.md 18.2): ratings, reports, and decisions live in the platform
+// SQLite database when the store is constructed with `db`. reviews.json is the
+// import source and a best-effort rollback mirror; once SQLite has rows it is
+// primary. Requests/accounts/publishers move in a later phase.
 
 'use strict';
 
@@ -58,6 +58,33 @@ function ratingFromRow(row) {
   };
 }
 
+/** One SQLite report row as the store's public shape. */
+function reportFromRow(row) {
+  const report = {
+    id: row.id,
+    package: row.package,
+    reporter: { githubId: String(row.reporter_id), login: row.reporter_login },
+    reason: row.reason,
+    note: row.note,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+  if (row.resolution) report.resolution = row.resolution;
+  if (row.resolved_at) report.resolvedAt = row.resolved_at;
+  if (row.resolved_by) report.resolvedBy = row.resolved_by;
+  return report;
+}
+
+/** One decision row plus its history as the store's public shape. */
+function decisionFromRows(row, history) {
+  return {
+    reviewed: row.reviewed === 1,
+    flagged: row.flagged === 1,
+    muted: row.muted === 1,
+    history,
+  };
+}
+
 /**
  * Report queue, decisions, and ratings on the registry data volume. When a
  * platform `db` is provided, ratings are stored in SQLite (A3 phase 1);
@@ -76,53 +103,151 @@ class ReviewStore {
     this.reports = state.reports;
     this.ratings = state.ratings;
     if (db) {
-      const imported = this.#importRatings();
-      this.#loadRatingsFromDb();
-      if (imported > 0) {
-        console.log(`xiom-registry: imported ${imported} ratings from reviews.json into SQLite`);
+      const imported = this.#importLegacy();
+      const total = imported.reports + imported.decisions + imported.ratings;
+      if (total > 0) {
+        console.log(
+          `xiom-registry: imported reviews.json into SQLite (${imported.reports} reports, `
+          + `${imported.decisions} decisions, ${imported.ratings} ratings)`,
+        );
       }
     }
   }
 
-  /** One-time move of the JSON ratings into an empty SQLite table. */
-  #importRatings() {
-    const row = this.db.get('SELECT COUNT(*) AS count FROM review_ratings');
-    if (row && Number(row.count) > 0) return 0;
-    let imported = 0;
-    this.db.exec('BEGIN');
-    try {
-      for (const [name, byUser] of Object.entries(this.ratings)) {
-        for (const rating of Object.values(byUser)) {
-          this.db.run(
-            `INSERT OR REPLACE INTO review_ratings (package, github_id, login, stars, review, at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            name,
-            rating.githubId,
-            rating.login,
-            rating.stars,
-            rating.review,
-            rating.at,
-          );
-          imported += 1;
+  /**
+   * One-time move of the JSON state into empty SQLite tables. Each table is
+   * checked independently so a partial import can recover on the next boot.
+   */
+  #importLegacy() {
+    const imported = { reports: 0, decisions: 0, ratings: 0 };
+    const empty = (table) => {
+      const row = this.db.get(`SELECT COUNT(*) AS count FROM ${table}`);
+      return !row || Number(row.count) === 0;
+    };
+    if (empty('review_reports')) {
+      this.db.exec('BEGIN');
+      try {
+        for (const report of Object.values(this.reports)) {
+          this.#insertReport(report);
+          imported.reports += 1;
         }
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`report import failed: ${err.message}`);
       }
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw new Error(`rating import failed: ${err.message}`);
+    }
+    if (empty('review_decisions')) {
+      this.db.exec('BEGIN');
+      try {
+        for (const [name, record] of Object.entries(this.packages)) {
+          this.#insertDecision(name, record);
+          imported.decisions += 1;
+        }
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`decision import failed: ${err.message}`);
+      }
+    }
+    if (empty('review_ratings')) {
+      this.db.exec('BEGIN');
+      try {
+        for (const [name, byUser] of Object.entries(this.ratings)) {
+          for (const rating of Object.values(byUser)) {
+            this.db.run(
+              `INSERT OR REPLACE INTO review_ratings (package, github_id, login, stars, review, at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              name,
+              rating.githubId,
+              rating.login,
+              rating.stars,
+              rating.review,
+              rating.at,
+            );
+            imported.ratings += 1;
+          }
+        }
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`rating import failed: ${err.message}`);
+      }
     }
     return imported;
   }
 
-  /** SQLite is primary: the in-memory mirror feeds the JSON rollback file. */
-  #loadRatingsFromDb() {
+  #insertReport(report) {
+    this.db.run(
+      `INSERT OR REPLACE INTO review_reports
+         (id, package, reporter_id, reporter_login, reason, note, status, created_at,
+          resolution, resolved_at, resolved_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      report.id,
+      report.package,
+      report.reporter.githubId,
+      report.reporter.login,
+      report.reason,
+      report.note,
+      report.status,
+      report.createdAt,
+      report.resolution || '',
+      report.resolvedAt || '',
+      report.resolvedBy || '',
+    );
+  }
+
+  #insertDecision(name, record) {
+    this.db.run(
+      `INSERT OR REPLACE INTO review_decisions (package, reviewed, flagged, muted)
+       VALUES (?, ?, ?, ?)`,
+      name,
+      record.reviewed ? 1 : 0,
+      record.flagged ? 1 : 0,
+      record.muted ? 1 : 0,
+    );
+    this.db.run('DELETE FROM review_decision_history WHERE package = ?', name);
+    for (const item of record.history || []) {
+      this.db.run(
+        'INSERT INTO review_decision_history (package, at, actor, action, note) VALUES (?, ?, ?, ?, ?)',
+        name,
+        item.at || '',
+        item.actor || '',
+        item.action || '',
+        item.note || '',
+      );
+    }
+  }
+
+  #history(name) {
+    return this.db.all(
+      'SELECT at, actor, action, note FROM review_decision_history WHERE package = ? ORDER BY id',
+      name,
+    ).map((row) => ({
+      at: row.at,
+      actor: row.actor,
+      action: row.action,
+      ...(row.note ? { note: row.note } : {}),
+    }));
+  }
+
+  /** The complete JSON mirror built from the primary SQLite tables. */
+  #mirror() {
+    const packages = {};
+    for (const row of this.db.all('SELECT * FROM review_decisions ORDER BY package')) {
+      packages[row.package] = decisionFromRows(row, this.#history(row.package));
+    }
+    const reports = {};
+    for (const row of this.db.all('SELECT * FROM review_reports ORDER BY created_at, id')) {
+      reports[row.id] = reportFromRow(row);
+    }
     const ratings = {};
     for (const row of this.db.all('SELECT * FROM review_ratings ORDER BY package, at')) {
       const name = row.package;
       if (!ratings[name]) ratings[name] = {};
       ratings[name][String(row.github_id)] = ratingFromRow(row);
     }
-    this.ratings = ratings;
+    return { packages, reports, ratings };
   }
 
   #read() {
@@ -194,13 +319,28 @@ class ReviewStore {
     if (!reportNote) {
       throw new BadRequestError('describe the problem so reviewers can act on it', 'report_note_required');
     }
-    const open = Object.values(this.reports).filter((report) => report.status === 'open'
-      && report.package === name && report.reporter.githubId === author.githubId);
-    if (open.length >= MAX_OPEN_REPORTS_PER_REPORTER) {
-      throw new ConflictError(
-        'you already have open reports for this package; wait for a review',
-        'report_limit',
+    if (!this.db) {
+      const open = Object.values(this.reports).filter((report) => report.status === 'open'
+        && report.package === name && report.reporter.githubId === author.githubId);
+      if (open.length >= MAX_OPEN_REPORTS_PER_REPORTER) {
+        throw new ConflictError(
+          'you already have open reports for this package; wait for a review',
+          'report_limit',
+        );
+      }
+    } else {
+      const open = this.db.get(
+        `SELECT COUNT(*) AS count FROM review_reports
+         WHERE status = 'open' AND package = ? AND reporter_id = ?`,
+        name,
+        author.githubId,
       );
+      if (open && Number(open.count) >= MAX_OPEN_REPORTS_PER_REPORTER) {
+        throw new ConflictError(
+          'you already have open reports for this package; wait for a review',
+          'report_limit',
+        );
+      }
     }
     const now = new Date().toISOString();
     const id = this.#newId();
@@ -213,11 +353,21 @@ class ReviewStore {
       status: 'open',
       createdAt: now,
     };
-    this.#commit(this.packages, { ...this.reports, [id]: report }, this.ratings);
+    if (this.db) {
+      this.#insertReport(report);
+      this.#commit();
+    } else {
+      this.#commit(this.packages, { ...this.reports, [id]: report }, this.ratings);
+    }
     return report;
   }
 
   getReport(id) {
+    if (this.db) {
+      const row = this.db.get('SELECT * FROM review_reports WHERE id = ?', String(id));
+      if (!row) throw new NotFoundError(`report "${id}" not found`, 'report_not_found');
+      return reportFromRow(row);
+    }
     const report = this.reports[String(id)];
     if (!report) throw new NotFoundError(`report "${id}" not found`, 'report_not_found');
     return report;
@@ -225,6 +375,23 @@ class ReviewStore {
 
   /** Newest first; optionally filtered by status and/or package. */
   listReports({ status = '', packageName = '' } = {}) {
+    if (this.db) {
+      const clauses = [];
+      const args = [];
+      if (status) {
+        clauses.push('status = ?');
+        args.push(status);
+      }
+      if (packageName) {
+        clauses.push('package = ?');
+        args.push(packageName);
+      }
+      const where = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
+      return this.db.all(
+        `SELECT * FROM review_reports${where} ORDER BY created_at DESC, id DESC`,
+        ...args,
+      ).map(reportFromRow);
+    }
     let all = Object.values(this.reports);
     if (status) all = all.filter((report) => report.status === status);
     if (packageName) all = all.filter((report) => report.package === packageName);
@@ -233,6 +400,13 @@ class ReviewStore {
 
   openReportCount(packageName) {
     const name = String(packageName);
+    if (this.db) {
+      const row = this.db.get(
+        `SELECT COUNT(*) AS count FROM review_reports WHERE status = 'open' AND package = ?`,
+        name,
+      );
+      return row ? Number(row.count) : 0;
+    }
     return Object.values(this.reports)
       .filter((report) => report.status === 'open' && report.package === name).length;
   }
@@ -299,9 +473,8 @@ class ReviewStore {
         entry.review,
         entry.at,
       );
-      // Keep the JSON mirror current for rollback; SQLite stays primary.
-      const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
-      this.#commit(this.packages, this.reports, { ...this.ratings, [name]: next });
+      // Refresh the JSON rollback mirror; SQLite stays primary.
+      this.#commit();
       return entry;
     }
     const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
@@ -311,10 +484,22 @@ class ReviewStore {
 
   /** Current reviewer decision for a package, or null. */
   decision(packageName) {
-    return this.packages[String(packageName)] || null;
+    const name = String(packageName);
+    if (this.db) {
+      const row = this.db.get('SELECT * FROM review_decisions WHERE package = ?', name);
+      if (!row) return null;
+      return decisionFromRows(row, this.#history(name));
+    }
+    return this.packages[name] || null;
   }
 
   listDecisions() {
+    if (this.db) {
+      return this.db.all('SELECT * FROM review_decisions ORDER BY package').map((row) => ({
+        name: row.package,
+        ...decisionFromRows(row, this.#history(row.package)),
+      }));
+    }
     return Object.entries(this.packages).map(([name, record]) => ({ name, ...record }));
   }
 
@@ -348,7 +533,7 @@ class ReviewStore {
         action === 'mute' ? 'mute_reason_required' : 'flag_reason_required',
       );
     }
-    const prior = this.packages[name]
+    const prior = this.decision(name)
       || { reviewed: false, flagged: false, muted: false, history: [] };
     const next = { reviewed: prior.reviewed, flagged: prior.flagged, muted: prior.muted };
     if (action === 'review') {
@@ -370,14 +555,39 @@ class ReviewStore {
       next.flagged = false;
       next.muted = false;
     }
-    const history = [...prior.history, {
+    const entry = {
       at: new Date().toISOString(),
       actor: clean(actor, 64),
       action,
       ...(decisionNote ? { note: decisionNote } : {}),
-    }];
+    };
+    const history = [...prior.history, entry];
     const record = { ...next, history };
-    this.#commit({ ...this.packages, [name]: record }, this.reports, this.ratings);
+    if (this.db) {
+      this.db.run(
+        `INSERT INTO review_decisions (package, reviewed, flagged, muted)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(package) DO UPDATE SET
+           reviewed = excluded.reviewed,
+           flagged = excluded.flagged,
+           muted = excluded.muted`,
+        name,
+        next.reviewed ? 1 : 0,
+        next.flagged ? 1 : 0,
+        next.muted ? 1 : 0,
+      );
+      this.db.run(
+        'INSERT INTO review_decision_history (package, at, actor, action, note) VALUES (?, ?, ?, ?, ?)',
+        name,
+        entry.at,
+        entry.actor,
+        entry.action,
+        entry.note || '',
+      );
+      this.#commit();
+    } else {
+      this.#commit({ ...this.packages, [name]: record }, this.reports, this.ratings);
+    }
     return record;
   }
 
@@ -401,33 +611,51 @@ class ReviewStore {
       resolvedAt: new Date().toISOString(),
       resolvedBy: clean(actor, 64),
     };
-    this.#commit(this.packages, { ...this.reports, [report.id]: updated }, this.ratings);
+    if (this.db) {
+      this.db.run(
+        'UPDATE review_reports SET status = ?, resolution = ?, resolved_at = ?, resolved_by = ? WHERE id = ?',
+        updated.status,
+        updated.resolution,
+        updated.resolvedAt,
+        updated.resolvedBy,
+        updated.id,
+      );
+      this.#commit();
+    } else {
+      this.#commit(this.packages, { ...this.reports, [report.id]: updated }, this.ratings);
+    }
     return updated;
   }
 
   #newId() {
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = `rep_${crypto.randomBytes(6).toString('hex')}`;
-      if (!this.reports[id]) return id;
+      const exists = this.db
+        ? this.db.get('SELECT id FROM review_reports WHERE id = ?', id)
+        : this.reports[id];
+      if (!exists) return id;
     }
     throw new Error('could not allocate a report id');
   }
 
   #commit(nextPackages, nextReports, nextRatings) {
+    const state = this.db
+      ? this.#mirror()
+      : { packages: nextPackages, reports: nextReports, ratings: nextRatings };
     const serialized = JSON.stringify({
       version: REVIEWS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
-      packages: nextPackages,
-      reports: nextReports,
-      ratings: nextRatings,
+      packages: state.packages,
+      reports: state.reports,
+      ratings: state.ratings,
     }, null, 2);
     if (Buffer.byteLength(serialized, 'utf-8') > this.maxBytes) {
       throw new Error(`reviews file would exceed ${this.maxBytes} bytes`);
     }
     atomicWriteFile(this.path, serialized);
-    this.packages = nextPackages;
-    this.reports = nextReports;
-    this.ratings = nextRatings;
+    this.packages = state.packages;
+    this.reports = state.reports;
+    this.ratings = state.ratings;
   }
 }
 
