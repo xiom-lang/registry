@@ -58,6 +58,19 @@ The rendered version of this file is at `/whats-new`.
   links as an alternative to the message form; no link is shown when
   provenance carries no repository.
 
+### Reviews
+
+- **Vote on a review**: signed-in accounts get up/down buttons on every
+  review; one vote per account per review, clicking the same vote again removes
+  it and the other flips it. Counts are public, voter identity stays private
+  for abuse handling, the review author cannot vote on their own review, and
+  the write limiter applies.
+- **One maintainer reply per review**: a package maintainer (or an admin) can
+  post one flat reply, labelled "maintainer" and editable later; it notifies
+  the review author and has its own mute checkbox (kind `review-reply`).
+- **Review list controls**: newest or most-helpful sorting, a text-only
+  filter, and 10-per-page pagination on the package's Reviews section.
+
 ### Storage
 
 - **Reviews, ratings, and decisions move into the platform database**: star

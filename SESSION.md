@@ -1974,7 +1974,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
 | A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
 | A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. **DONE 2026-09-27 (`7d7e853`).** | S |
-| A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
+| A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. **DONE 2026-09-27 (`4872cf9`):** `review_votes` + `review_replies` (migration 007), toggle/self-vote/counts, editable labelled reply notifying `review-reply`, newest/helpful sort, text filter, 10-per-page pagination. | M |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
 `Maintainers` section built from data the registry already holds -- repository
@@ -2247,6 +2247,11 @@ queue; no maintainer reply yet (A9).
   for abuse.
 - filters (with text, most helpful, newest, per version) and pagination land
   with A3/A4; reviews currently render as one list.
+- **Shipped 2026-09-27 (`4872cf9`):** `review_votes` (toggle, private voter,
+  self-vote refused) and one editable `review_replies` row per review notifying
+  the author as `review-reply`; newest/helpful sort, text-only filter, and
+  10-per-page pagination. Per-version filtering is dropped: ratings are
+  package-level, so there is no version to filter on.
 
 **21.9.4 Repository / issue links.** Agreed, small win (A8): the package page
 already has provenance; when the repository is `github.com/<owner>/<repo>`,
@@ -2443,8 +2448,8 @@ never hand-edit data files on the VPS.
 | Item | Value |
 |---|---|
 | Live version | **2.2.0** on staging and production (`/health`); A2, D7 code, and A7 are on `main` and await the ops deploy |
-| Repo | `main` at `db52657` (A2 + D7 code + A7 + A8 + A3 phases 1-2) + the docs commit; working tree clean |
-| Tests | `npm test` **276/276**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `4872cf9` (A2 + D7 code + A7 + A8 + A3.1-2 + A9) + the docs commit; working tree clean |
+| Tests | `npm test` **279/279**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2485,41 +2490,40 @@ scope change needed).
 - `db52657` `feat(reviews)`: A3 phase 2 -- reports, decisions, and decision
   history in SQLite (migration 006); per-table import, mirror rebuilt from
   SQLite on every write, stale JSON can never win. HTTP behaviour unchanged.
+- `4872cf9` `feat(reviews)`: A9 -- votes (`review_votes`, toggle + private
+  voter + self-vote refusal), one editable maintainer reply per review
+  (`review_replies`) notifying the author as `review-reply`, and the review
+  list controls (newest/helpful, text filter, 10-per-page pagination).
 
 ### 23.3 Next actions, in order
 
-1. **Next up: A9 review votes, maintainer reply, list UX** (the A3 foundation
-   it needed is in place): one vote per account per review (toggle, unique
-   index, counts public, voter identity private, author excluded, rate-limited;
-   no public vote justifications), one flat labelled maintainer reply per
-   review that notifies the review author (new muteable kind), and filters +
-   pagination on the package reviews list.
-2. **A3 phase 3**: requests/accounts/publishers into SQLite behind their
-   existing interfaces (same import + mirror contract).
-3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
-4. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
+1. **Next up: A3 phase 3** -- requests/accounts/publishers into SQLite behind
+   their existing interfaces (same per-table import + mirror contract).
+2. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
+3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
    bundle** (this is what the playground's C3 waits on).
-5. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
-6. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
+4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
    template removal, D3 audit pagination when tables grow, D4 backup drill,
    D5 batch rate-limit profile documented, D6 cap retune after L0, **D7 SMTP
    enablement (xiom-lang.org from-address; the pre-gate backlog is already
    skipped, verify with `/health` `email: enabled`)**.
-7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
-   then production; confirm `/health`, the contact section, and the dashboard
-   email card. Migrations 003-006 import the existing data on first boot
-   (watch for the `imported reviews.json into SQLite` log line).
+6. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
+   then production; confirm `/health`, the contact section, the reviews with
+   votes/replies, and the dashboard email card. Migrations 003-007 import the
+   existing data on first boot (watch for the `imported reviews.json into
+   SQLite` log line).
 
-### 23.4 A2 + D7 + A7 + A8 + A3.1-2 implementation notes (for the next session)
+### 23.4 A2 + D7 + A7 + A8 + A3 + A9 implementation notes
 
 - Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
   `console.warn` on failure) and `notifyPackageMaintainers` (derived +
   verified maintainers matched against `accounts.getByLogin`). Six decision
   actions notify; the store-only `clear` action does not (the console never
   exposes it).
-- Kinds are `claim`/`report`/`review`/`support` (the last three plus report
-  are muteable); legacy request/publisher kinds are unchanged and unmutable.
-  A muted kind writes no row and sends no email.
+- Kinds are `claim`/`report`/`review`/`support`/`review-reply` (all muteable);
+  legacy request/publisher kinds are unchanged and unmutable. A muted kind
+  writes no row and sends no email.
 - Recipients are identified by `githubId` for claim/report/support rows and by
   stored account for maintainers, so renames cannot misdeliver.
 - D7 gate: `notifyAccount` passes an email only when
@@ -2527,36 +2531,36 @@ scope change needed).
   deliberate exception (`/account/email` enqueues it directly). Verification
   state (`notifyEmailVerifiedAt`, token digest + expiry) lives on the account;
   changing the address clears it. `markEmail` stays the terminal setter;
-  `markEmailFailure` owns retry/backoff. Migrations 003/004 must not be
-  removed: they skip the pre-gate pending backlog and add `ref`.
+  `markEmailFailure` owns retry/backoff. Migrations 003-007 must not be
+  removed.
 - A7: `maintainerAccounts(name)` is the single source of account-holding
-  maintainers (used by decisions and support); support messages live in
-  `support.json`, are rate-limited in the store, and are notified with
+  maintainers (decisions, support, and review replies); support messages live
+  in `support.json`, are rate-limited in the store, and are notified with
   `ref = sup_...`. The abuse flag is idempotent and files one `spam` report;
   the contact form reports errors through `?contact_error=<code>` because the
   package page's flash is consumed by the review context.
 - A8: `provenanceRepository(pkg)` in `src/ui/pages.js` picks the first
   published version whose provenance is a safe `owner/repo` pair (strips
-  `.git`); the links render inside the contact section, so A7 and A8 share one
-  community surface. The manifest `repository` field is deliberately not used.
-- A3 phases 1-2: `ReviewStore({ path, db })` -- when `db` is present every
-  table (ratings, reports, decisions+history) imports the matching slice of
-  reviews.json only if it is empty, then reads/writes SQLite, rebuilding the
-  JSON mirror from the primary tables on every write. SQLite wins over a stale
-  file. Requests/accounts/publishers still write JSON; phase 3 moves them.
-  A9 keys votes/replies off `review_ratings` rows next.
+  `.git`); the links render inside the contact section.
+- A3 + A9: `ReviewStore({ path, db })` -- every table (ratings, reports,
+  decisions+history, votes, replies) imports the matching slice of
+  reviews.json only if empty, then reads/writes SQLite, rebuilding the JSON
+  mirror from the primary tables on every write; SQLite wins over a stale
+  file. Votes/replies are db-only; requests/accounts/publishers still write
+  JSON (phase 3). A9 list queries live in `ratingsPage` (sort/filter/page) and
+  `votesForPage`/`repliesForPage` (batch view-model).
 - Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
   maintainer, verification gate + `/health` + dashboard, full support flow +
-  repo/issue links),
+  repo/issue links, votes/reply/list controls),
   `test/accounts.test.js` (prefs + verification lifecycle),
   `test/notifications.test.js` (retry/terminal/counts + migrations + `ref`),
   `test/support.test.js` (validation, limits, abuse idempotency, reload),
-  `test/reviews.test.js` (JSON mode + SQLite import/primary/upsert per table),
-  `test/ui.test.js` (provenance link validation).
+  `test/reviews.test.js` (JSON mode + SQLite import/primary per table +
+  votes/replies/pagination), `test/ui.test.js` (provenance link validation).
 - Verification done: both suites green and local headless-Chrome visual
   passes on the notifications page, the settings email states, the dashboard
-  email card, the contact form (with repo/issue links), and the support notice
-  (mobile 390px + desktop).
+  email card, the contact form, the support notice, and the reviews section
+  with votes/replies/pagination (mobile 390px + desktop).
 
 
 
