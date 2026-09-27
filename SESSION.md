@@ -1968,7 +1968,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 |---|---|---|---|
 | A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
 | A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. **DONE 2026-09-27 (`616a800` store, `2ff1e43` events/UI) -- see 23; owner-verified on staging.** | S |
-| A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. **Phases 1-3b DONE 2026-09-27 (`591067f` ratings, `db52657` reports/decisions, `1eeee50` publishers, this session's requests commit):** all of reviews.json, publishers.json, and requests.json are in SQLite with per-table import + rollback mirrors. **Remaining:** accounts (the last JSON store), then A9's follow-ups ride on the new tables. | M (accounts left) |
+| A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. **DONE 2026-09-27 (phases 1-3c):** ratings, reports/decisions, publishers, requests, and accounts all live in SQLite with per-table import + rollback mirrors (`591067f`, `db52657`, `1eeee50`, `1b5e647`, accounts commit this session). The JSON files are mirrors only; `/index.json` untouched. A4 (profiles/feeds) and future pagination/analytics query the new tables. | M (done) |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
@@ -2447,7 +2447,7 @@ never hand-edit data files on the VPS.
 |---|---|
 | Live version | **2.4.0 live on staging and production** (owner confirmed); **2.4.1 prepared on `main`** (header account-menu styling fix) awaiting the next ops deploy |
 | Repo | `main` at the 2.3.1 release commit (A2 + D7 complete + A7 + A8 + A3.1-3 + A9); working tree clean after this session |
-| Tests | `npm test` **283/283**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Tests | `npm test` **284/284**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |

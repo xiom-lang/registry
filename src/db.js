@@ -231,6 +231,30 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '010-stored-accounts',
+    up(db) {
+      // A3 phase 3c (SESSION.md 18.2): the last JSON store. Accounts are
+      // re-validated through normalizeAccountEntry on load; the JSON file is
+      // imported once and kept as a rollback mirror.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS stored_accounts (
+          github_id TEXT PRIMARY KEY,
+          login TEXT NOT NULL,
+          name TEXT NOT NULL DEFAULT '',
+          avatar_url TEXT NOT NULL DEFAULT '',
+          notify_email TEXT NOT NULL DEFAULT '',
+          notify_email_verified_at TEXT NOT NULL DEFAULT '',
+          notify_email_token_hash TEXT NOT NULL DEFAULT '',
+          notify_email_token_expires TEXT NOT NULL DEFAULT '',
+          notify_kinds TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT '',
+          last_login_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS stored_accounts_login ON stored_accounts (login);
+      `);
+    },
+  },
 ];
 
 class Database {

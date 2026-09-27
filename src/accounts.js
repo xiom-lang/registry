@@ -68,19 +68,120 @@ function normalizeVerification(entry, notifyEmail) {
   };
 }
 
+/** Allowlist-normalize one stored account; malformed entries are dropped. */
+function normalizeAccountEntry(githubId, entry) {
+  if (!/^\d{1,32}$/.test(githubId) || !entry || typeof entry !== 'object') return null;
+  const login = clean(entry.login, 64);
+  if (!login) return null;
+  const notifyEmail = clean(entry.notifyEmail, 254);
+  return {
+    githubId,
+    login,
+    name: clean(entry.name, 200),
+    avatarUrl: clean(entry.avatarUrl, 512),
+    notifyEmail,
+    notifyKinds: normalizeNotifyKinds(entry.notifyKinds),
+    ...normalizeVerification(entry, notifyEmail),
+    createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
+    lastLoginAt: typeof entry.lastLoginAt === 'string' ? entry.lastLoginAt : '',
+  };
+}
+
 /**
- * In-memory account map with write-through persistence to accounts.json.
+ * In-memory account map with write-through persistence. With the shared
+ * platform `db`, accounts live in `stored_accounts` and accounts.json is
+ * imported once plus kept as a best-effort rollback mirror (A3 phase 3c).
  * Entries are keyed by the numeric GitHub id (stable across renames); the
  * login is refreshed on every sign-in.
  */
 class AccountStore {
   /**
-   * @param {{ path: string, maxBytes?: number }} options
+   * @param {{ path: string, maxBytes?: number, db?: import('./db').Database|null }} options
    */
-  constructor({ path, maxBytes = MAX_ACCOUNTS_BYTES }) {
+  constructor({ path, maxBytes = MAX_ACCOUNTS_BYTES, db = null }) {
     this.path = path;
     this.maxBytes = maxBytes;
+    this.db = db;
     this.accounts = this.#read();
+    if (db) {
+      const imported = this.#importAccounts();
+      this.#loadFromDb();
+      if (imported > 0) {
+        console.log(`xiom-registry: imported ${imported} accounts into SQLite`);
+      }
+    }
+  }
+
+  /** Import accounts.json into an empty table (one-time move). */
+  #importAccounts() {
+    const row = this.db.get('SELECT COUNT(*) AS count FROM stored_accounts');
+    if (row && Number(row.count) > 0) return 0;
+    this.db.exec('BEGIN');
+    try {
+      for (const entry of Object.values(this.accounts)) this.#insertAccount(entry);
+      this.db.exec('COMMIT');
+      return Object.keys(this.accounts).length;
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw new Error(`account import failed: ${err.message}`);
+    }
+  }
+
+  #insertAccount(entry) {
+    this.db.run(
+      `INSERT OR REPLACE INTO stored_accounts
+         (github_id, login, name, avatar_url, notify_email, notify_email_verified_at,
+          notify_email_token_hash, notify_email_token_expires, notify_kinds, created_at, last_login_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      entry.githubId,
+      entry.login,
+      entry.name,
+      entry.avatarUrl,
+      entry.notifyEmail,
+      entry.notifyEmailVerifiedAt,
+      entry.notifyEmailTokenHash,
+      entry.notifyEmailTokenExpires,
+      JSON.stringify(entry.notifyKinds),
+      entry.createdAt,
+      entry.lastLoginAt,
+    );
+  }
+
+  /** SQLite is primary: rebuild the map, re-validating every row. */
+  #loadFromDb() {
+    this.accounts = {};
+    for (const row of this.db.all('SELECT * FROM stored_accounts ORDER BY github_id')) {
+      const entry = normalizeAccountEntry(row.github_id, {
+        githubId: row.github_id,
+        login: row.login,
+        name: row.name,
+        avatarUrl: row.avatar_url,
+        notifyEmail: row.notify_email,
+        notifyEmailVerifiedAt: row.notify_email_verified_at,
+        notifyEmailTokenHash: row.notify_email_token_hash,
+        notifyEmailTokenExpires: row.notify_email_token_expires,
+        notifyKinds: JSON.parse(row.notify_kinds || '{}'),
+        createdAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+      });
+      if (entry) this.accounts[row.github_id] = entry;
+    }
+  }
+
+  /** Persist the current set: SQLite when present, then the JSON mirror. */
+  #persist() {
+    if (this.db) {
+      this.db.exec('BEGIN');
+      try {
+        this.db.run('DELETE FROM stored_accounts');
+        for (const entry of Object.values(this.accounts)) this.#insertAccount(entry);
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`account write failed: ${err.message}`);
+      }
+    }
+    this.#write(this.accounts);
   }
 
   #read() {
@@ -103,21 +204,8 @@ class AccountStore {
       : {};
     const accounts = {};
     for (const [githubId, entry] of Object.entries(source)) {
-      if (!/^\d{1,32}$/.test(githubId) || !entry || typeof entry !== 'object') continue;
-      const login = clean(entry.login, 64);
-      if (!login) continue;
-      const notifyEmail = clean(entry.notifyEmail, 254);
-      accounts[githubId] = {
-        githubId,
-        login,
-        name: clean(entry.name, 200),
-        avatarUrl: clean(entry.avatarUrl, 512),
-        notifyEmail,
-        notifyKinds: normalizeNotifyKinds(entry.notifyKinds),
-        ...normalizeVerification(entry, notifyEmail),
-        createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
-        lastLoginAt: typeof entry.lastLoginAt === 'string' ? entry.lastLoginAt : '',
-      };
+      const normalized = normalizeAccountEntry(githubId, entry);
+      if (normalized) accounts[githubId] = normalized;
     }
     return accounts;
   }
@@ -164,7 +252,8 @@ class AccountStore {
       createdAt: existing ? existing.createdAt : now,
       lastLoginAt: now,
     };
-    this.#commit({ ...this.accounts, [githubId]: entry });
+    this.accounts = { ...this.accounts, [githubId]: entry };
+    this.#persist();
     return entry;
   }
 
@@ -186,7 +275,8 @@ class AccountStore {
       notifyEmailTokenHash: keepVerification ? existing.notifyEmailTokenHash : '',
       notifyEmailTokenExpires: keepVerification ? existing.notifyEmailTokenExpires : '',
     };
-    this.#commit({ ...this.accounts, [id]: entry });
+    this.accounts = { ...this.accounts, [id]: entry };
+    this.#persist();
     return value;
   }
 
@@ -216,7 +306,8 @@ class AccountStore {
     const token = crypto.randomBytes(24).toString('hex');
     const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
     const entry = { ...existing, notifyEmailTokenHash: hashToken(token), notifyEmailTokenExpires: expiresAt };
-    this.#commit({ ...this.accounts, [id]: entry });
+    this.accounts = { ...this.accounts, [id]: entry };
+    this.#persist();
     return { token, expiresAt, created: true, reason: 'created' };
   }
 
@@ -235,7 +326,8 @@ class AccountStore {
     if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return 'invalid';
     if (!existing.notifyEmailTokenExpires || existing.notifyEmailTokenExpires <= now.toISOString()) {
       const entry = { ...existing, notifyEmailTokenHash: '', notifyEmailTokenExpires: '' };
-      this.#commit({ ...this.accounts, [id]: entry });
+      this.accounts = { ...this.accounts, [id]: entry };
+    this.#persist();
       return 'expired';
     }
     const entry = {
@@ -244,7 +336,8 @@ class AccountStore {
       notifyEmailTokenHash: '',
       notifyEmailTokenExpires: '',
     };
-    this.#commit({ ...this.accounts, [id]: entry });
+    this.accounts = { ...this.accounts, [id]: entry };
+    this.#persist();
     return 'verified';
   }
 
@@ -267,11 +360,12 @@ class AccountStore {
     if (!existing) throw new Error('account not found');
     const value = normalizeNotifyKinds(kinds);
     const entry = { ...existing, notifyKinds: value };
-    this.#commit({ ...this.accounts, [id]: entry });
+    this.accounts = { ...this.accounts, [id]: entry };
+    this.#persist();
     return value;
   }
 
-  #commit(next) {
+  #write(next) {
     const serialized = JSON.stringify({
       version: ACCOUNTS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
@@ -281,7 +375,6 @@ class AccountStore {
       throw new Error(`accounts file would exceed ${this.maxBytes} bytes`);
     }
     atomicWriteFile(this.path, serialized);
-    this.accounts = next;
   }
 }
 

@@ -8,10 +8,12 @@ The rendered version of this file is at `/whats-new`.
 
 ### Storage
 
-- **The request queue moves into the platform database**: token and
-  trusted-publisher requests now live in SQLite (`stored_requests`, migration
-  009) with the same import-once plus JSON rollback-mirror contract as the
-  other stores. Accounts are the last store remaining on the phase-3 list.
+- **The SQLite move is complete**: token and trusted-publisher requests
+  (`stored_requests`, migration 009) and accounts (`stored_accounts`, migration
+  010) now live in the platform database with the same import-once plus JSON
+  rollback-mirror contract as ratings, reports, decisions, and publishers. The
+  JSON files on the data volume are rollback mirrors only; no API, protocol, or
+  UI change.
 
 ## [2.4.1] - 2026-09-27
 

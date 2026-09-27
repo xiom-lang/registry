@@ -190,7 +190,11 @@ function createApp(config = loadConfig()) {
   // audit, and now rating storage live here; JSON stores stay for identity and
   // queue data that has not moved yet.
   const db = new Database({ path: config.dbPath });
-  const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
+  const accounts = new AccountStore({
+    path: config.accountsPath,
+    maxBytes: config.maxAccountsBytes,
+    db,
+  });
   const requests = new RequestStore({
     path: config.requestsPath,
     maxBytes: config.maxRequestsBytes,

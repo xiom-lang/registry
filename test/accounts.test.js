@@ -144,3 +144,50 @@ test('upsert preserves stored prefs and normalization ignores junk', () => {
     { claim: true, report: true, review: true, support: true, 'review-reply': true },
   );
 });
+
+// --- A3 phase 3c: accounts in SQLite (SESSION.md 18.2) -------------------
+
+const { Database } = require('../src/db');
+
+test('accounts import from accounts.json into SQLite and then live there', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-accounts-db-'));
+  const file = path.join(dir, 'accounts.json');
+  fs.writeFileSync(file, JSON.stringify({
+    version: '1.2.0',
+    accounts: {
+      7: { githubId: '7', login: 'legacy', notifyEmail: 'legacy@example.com', createdAt: '2026-09-01T00:00:00Z', lastLoginAt: '' },
+    },
+  }));
+  const db = new Database({ path: path.join(dir, 'registry.db') });
+  try {
+    const store = new AccountStore({ path: file, db });
+    assert.equal(store.get('7').login, 'legacy');
+    assert.equal(Number(db.get('SELECT COUNT(*) AS count FROM stored_accounts').count), 1);
+
+    // A sign-in merges the profile but keeps prefs and verification state.
+    store.setNotifyKinds('7', { claim: false });
+    store.upsert({ id: '7', login: 'legacy-renamed', name: 'Legacy', avatarUrl: '' });
+    assert.equal(store.get('7').login, 'legacy-renamed');
+    assert.equal(store.get('7').notifyKinds.claim, false);
+    assert.equal(
+      Number(db.get('SELECT COUNT(*) AS count FROM stored_accounts').count),
+      1,
+      'upsert replaces the row instead of duplicating it',
+    );
+
+    // Reopen: SQLite is primary and the mirror carries its truth.
+    const reopened = new AccountStore({ path: file, db });
+    assert.equal(reopened.get('7').login, 'legacy-renamed');
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf-8')).accounts['7'].login, 'legacy-renamed');
+
+    // A stale JSON file can never win.
+    fs.writeFileSync(file, JSON.stringify({
+      version: '1.2.0',
+      accounts: { 7: { githubId: '7', login: 'stale', createdAt: '', lastLoginAt: '' } },
+    }));
+    const reloaded = new AccountStore({ path: file, db });
+    assert.equal(reloaded.get('7').login, 'legacy-renamed');
+  } finally {
+    db.close();
+  }
+});
