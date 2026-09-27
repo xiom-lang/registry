@@ -2445,7 +2445,7 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.4.0 prepared on `main`** (email-link fix + admin tab, avatar account menu, mobile card fix); staging and production run **2.3.0 with `email: enabled`** until the next ops deploy |
+| Live version | **2.4.0 live on staging and production** (owner confirmed); **2.4.1 prepared on `main`** (header account-menu styling fix) awaiting the next ops deploy |
 | Repo | `main` at the 2.3.1 release commit (A2 + D7 complete + A7 + A8 + A3.1-3 + A9); working tree clean after this session |
 | Tests | `npm test` **281/281**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |

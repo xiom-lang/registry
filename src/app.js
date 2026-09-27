@@ -420,9 +420,12 @@ function createApp(config = loadConfig()) {
         <button class="nav-account-signout" type="submit">Sign out</button>
       </form>`,
     ].filter(Boolean).join('\n        ');
+    const avatar = account.avatarUrl
+      ? `<img class="nav-avatar" src="${escapeHtml(account.avatarUrl)}" alt="" width="24" height="24">`
+      : `<span class="nav-avatar nav-avatar--fallback" aria-hidden="true">${escapeHtml(account.login.slice(0, 1).toUpperCase())}</span>`;
     return {
       primary: `<details class="nav-account">
-      <summary>${account.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" width="24" height="24">` : ''}<span${current}>@${escapeHtml(account.login)}</span></summary>
+      <summary>${avatar}<span${current}>@${escapeHtml(account.login)}</span></summary>
       <nav class="nav-account-panel" aria-label="Account">${panel}</nav>
     </details>`,
       menu,

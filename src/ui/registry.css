@@ -847,6 +847,88 @@ table.versions tr:hover td { background: var(--panel); }
 }
 .site-header nav a.nav-account { color: var(--signal); }
 .site-header nav a.nav-account:hover { color: var(--paper); }
+
+/* Signed-in account menu: avatar + name button, click for an overlay panel
+   (no JS; details/summary). Mirrors the playground pattern. */
+.nav-account { position: relative; }
+.nav-account > summary {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 7px;
+  list-style: none;
+  padding: 6px 8px;
+}
+.nav-account > summary::-webkit-details-marker { display: none; }
+.nav-account > summary::after {
+  color: var(--muted);
+  content: '\25BE';
+  font-size: 10px;
+  margin-left: 2px;
+}
+.nav-account > summary:hover span { color: var(--paper); }
+.nav-account > summary span {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-avatar {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
+}
+.nav-avatar--fallback {
+  align-items: center;
+  color: var(--paper-dim);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  justify-content: center;
+}
+/* Qualified with .site-header: the generic `.site-header nav { display:flex }`
+   rule would otherwise turn the panel into a clipped flex row. */
+.site-header .nav-account-panel {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  display: grid;
+  gap: 2px;
+  min-width: 208px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+}
+.site-header .nav-account-panel a {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.site-header .nav-account-panel a:hover { background: var(--panel-raised); }
+.site-header .nav-account-signout {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--paper-dim);
+  cursor: pointer;
+  font: inherit;
+  margin-top: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+  width: 100%;
+}
+.site-header .nav-account-signout:hover { background: var(--panel-raised); color: var(--paper); }
+@media (max-width: 640px) {
+  .nav-account > summary span { max-width: 120px; }
+  .site-header .nav-account-panel { left: auto; right: 0; }
+}
 .site-header nav a[aria-current="page"] { color: var(--paper); }
 
 /* Nav actions (Sign in, GitHub) read as buttons, not as menu text. */

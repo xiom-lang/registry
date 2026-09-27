@@ -4,6 +4,17 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [2.4.1] - 2026-09-27
+
+### Fixed
+
+- **Header account menu styling**: the avatar/name control is now a compact
+  button (GitHub avatar or an initial fallback, the login, and a caret) that
+  opens a stacked overlay panel with Overview, Requests, Notifications,
+  Settings, the role links, and Sign out. The panel previously inherited the
+  generic `.site-header nav` flex rule and rendered as a clipped row; it is now
+  scoped and lays out as a menu, and the name ellipsizes on narrow screens.
+
 ## [2.4.0] - 2026-09-27
 
 ### Interface
