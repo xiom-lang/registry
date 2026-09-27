@@ -10,11 +10,12 @@ Read this before touching deployment. The service code and protocol live in
 - Container: `xiom-registry` from `docker-compose.yml`, bound to
   `127.0.0.1:${XIOM_REGISTRY_PORT}` -> container `3000`.
 - Production URL: `https://registry.xiom-lang.org` (port 3100).
-- Staging URL: `https://staging.registry.xiom-lang.org` -- **currently the
-  same container and data as production**. A genuinely separate staging
-  instance is prepared in `docker-compose.yml` under the `staging` profile
-  (port 3200, own volumes, own tokens, own `REGISTRY_URL`); see "Staging
-  isolation" below for the one-time host steps.
+- Staging URL: `https://staging.registry.xiom-lang.org` -- a **separate
+  instance** since the 2026-09-27 split: own container
+  (`xiom-registry-staging`, profile `staging`), port 3200, own volumes, own
+  tokens, and own publisher file; its index advertises the staging URL
+  (identity isolation re-verified on every deploy). Build and recreate it
+  **only through the `staging` profile**; see "Staging isolation" below.
 - Ports: Gitea already owns 3000 on this host, so production uses
   `XIOM_REGISTRY_PORT=3100`; the staging profile uses 3200.
 
@@ -69,8 +70,9 @@ Why `--no-deps` and a named service: `--build` rebuilds the shared
 production from it. Building and starting only `staging` leaves production
 untouched.
 
-**Then repoint the staging vhost** -- until this is done, both hostnames
-still serve the production instance:
+**Staging vhost** -- repointed in the 2026-09-27 split: the staging domain
+proxies to 3200 while production stays on 3100. Re-check after any nginx
+template work:
 
 ```
 # /usr/local/hestia/data/templates/web/nginx/php-fpm/xiom-registry*.tpl|stpl
@@ -108,9 +110,10 @@ xiom-pkg publish         # from a fixture package directory
 xiom-pkg install <name>@<version>
 ```
 
-Note: the e2e probe package (`xiom.staging-e2e-probe`) lives only in the
-old shared volumes; the staging volumes are fresh, and production's copy is
-harmless (signed, one version yanked).
+Note: the old shared-volume e2e probe (`xiom.staging-e2e-probe`) stays only
+in that legacy volume; the staging volumes have their own fixture set
+(`xiom.staging-isolation-probe` and the canaries), and production's copy of the
+old probe is signed and its version yanked, so it is harmless.
 
 ## OIDC trusted publishers
 
@@ -312,13 +315,31 @@ Do not use `v-add-web-domain-proxy` on this host; it fails with
 
 ## Deploy / update
 
+Production (only `registry`; staging is untouched):
+
 ```
 cd /opt/xiom/registry
 git pull
-docker compose up -d --build
+docker compose build registry
+docker compose up -d --no-deps registry
 docker compose ps
 curl -s http://127.0.0.1:3100/health
 ```
+
+Staging (only `staging`, through the staging profile and env file; production
+is untouched):
+
+```
+cd /opt/xiom/registry
+git pull
+docker compose --env-file .env.staging --profile staging build staging
+docker compose --env-file .env.staging --profile staging up -d --no-deps staging
+docker compose ps                               # staging on 3200
+curl -s http://127.0.0.1:3200/health
+```
+
+`docker compose up -d --build` without a service would rebuild the shared
+image and recreate **both** services; use one of the two blocks above.
 
 The image must contain every **root-level file the service reads at runtime**
 (`CHANGELOG.md` for `/whats-new`, `PUBLISHING.md` for the `/publish` fallback).
