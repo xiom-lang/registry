@@ -448,18 +448,89 @@ function createApp(config = loadConfig()) {
     next();
   }
 
+  /**
+   * In-app notice (and optional email) for one account. Best-effort by
+   * design: a notification failure must never fail the action that triggered
+   * it (SESSION.md 22.4 A2). Structured kinds honour the account's per-kind
+   * prefs; a muted kind writes no row and queues no email.
+   *
+   * @returns {boolean} true when a row was enqueued
+   */
+  function notifyAccount({ account, kind, subject, body = '', link = '' }) {
+    try {
+      const stored = account && account.githubId ? accounts.get(account.githubId) : null;
+      const prefs = stored ? stored.notifyKinds : null;
+      if (prefs && prefs[kind] === false) return false;
+      notifications.enqueue({
+        account,
+        kind,
+        subject,
+        body,
+        link,
+        email: stored ? stored.notifyEmail : '',
+      });
+      outbox.drain().catch(() => {});
+      return true;
+    } catch (err) {
+      console.warn(
+        `notification (${kind}) for ${account && account.login ? account.login : '?'} failed: ${err.message}`,
+      );
+      return false;
+    }
+  }
+
   /** In-app notice (and optional email) for the requester of an event. */
   function notifyRequester(request, kind, subject, body, link = '') {
-    const stored = accounts.get(request.requester.githubId);
-    notifications.enqueue({
-      account: request.requester,
-      kind,
-      subject,
-      body,
-      link,
-      email: stored ? stored.notifyEmail : '',
-    });
-    outbox.drain().catch(() => {});
+    notifyAccount({ account: request.requester, kind, subject, body, link });
+  }
+
+  // Package-decision actions that notify the package's maintainers. `clear`
+  // stays store-only: the console exposes the six independent toggles, which
+  // is the A2 scope (SESSION.md 22.4); every decision is still audited.
+  const DECISION_NOTIFY_SUBJECTS = Object.freeze({
+    review: 'Package marked reviewed',
+    unreview: 'Review mark removed',
+    flag: 'Package flagged',
+    unflag: 'Package unflagged',
+    mute: 'Package muted',
+    unmute: 'Package unmuted',
+  });
+
+  /**
+   * Notify every maintainer of a package who has a registry account after a
+   * moderation decision. Derived and verified maintainer logins are matched
+   * against stored accounts; maintainers without an account cannot receive
+   * in-app notices and are skipped. Best-effort, like every A2 notice.
+   */
+  function notifyPackageMaintainers(name, action, note = '') {
+    const label = DECISION_NOTIFY_SUBJECTS[action];
+    if (!label) return;
+    try {
+      const pkg = indexStore.getPackage(name);
+      if (!pkg) return;
+      const view = maintainerView({
+        packageName: name,
+        pkg,
+        requests: requests.list(),
+        publishers: publisherStore.list(),
+        claims: ownership.claimsFor(name),
+      });
+      const seen = new Set();
+      for (const maintainer of view.maintainers) {
+        const stored = accounts.getByLogin(maintainer.login);
+        if (!stored || seen.has(stored.githubId)) continue;
+        seen.add(stored.githubId);
+        notifyAccount({
+          account: stored,
+          kind: 'review',
+          subject: `${label}: ${name}`,
+          body: note,
+          link: `/packages/${encodeURIComponent(name)}`,
+        });
+      }
+    } catch (err) {
+      console.warn(`package decision notification for ${name} failed: ${err.message}`);
+    }
   }
 
   /** View-model for the report controls on a package page. */
@@ -1146,10 +1217,13 @@ function createApp(config = loadConfig()) {
 
   app.get('/account/settings', generalLimit, requireAccount, (req, res) => {
     const context = accountContext(req);
-    const notice = req.query.email === '1' ? 'Notification email saved.' : '';
+    const notice = req.query.prefs === '1'
+      ? 'Notification preferences saved.'
+      : (req.query.email === '1' ? 'Notification email saved.' : '');
     res.type('html').send(accountSettingsPage({
       ...context,
       notifyEmail: context.account.notifyEmail || '',
+      notifyKinds: context.account.notifyKinds,
       notice,
     }));
   });
@@ -1169,6 +1243,30 @@ function createApp(config = loadConfig()) {
           return res.redirect(303, '/account/settings');
         }
         return res.redirect(303, '/account/settings?email=1');
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
+
+  // Per-kind notification preferences (SESSION.md 22.4 A2). Checkboxes: a
+  // present field means on, an absent one means muted; the store re-applies
+  // the allowlist so only claim/report/review are stored. In-app rows and
+  // emails for a muted kind are both suppressed.
+  app.post(
+    '/account/notify-kinds',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        accounts.setNotifyKinds(accountOf(req).githubId, {
+          claim: Boolean(req.body.claim),
+          report: Boolean(req.body.report),
+          review: Boolean(req.body.review),
+        });
+        return res.redirect(303, '/account/settings?prefs=1');
       } catch (err) {
         return next(err);
       }
@@ -1379,6 +1477,7 @@ function createApp(config = loadConfig()) {
           subjectId: name,
           detail: String(req.body.note || '').slice(0, 500),
         });
+        notifyPackageMaintainers(name, action, String(req.body.note || ''));
         res.redirect(303, `/admin/packages?updated=${encodeURIComponent(name)}`);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof NotFoundError) {
@@ -1452,7 +1551,7 @@ function createApp(config = loadConfig()) {
     requireCsrf,
     (req, res, next) => {
       try {
-        reviews.resolveReport(String(req.params.id), {
+        const updated = reviews.resolveReport(String(req.params.id), {
           actor: accountOf(req).login,
           status: String(req.body.status || 'resolved'),
           resolution: String(req.body.resolution || ''),
@@ -1463,6 +1562,13 @@ function createApp(config = loadConfig()) {
           subjectType: 'report',
           subjectId: String(req.params.id),
           detail: `${String(req.body.status || 'resolved')}: ${String(req.body.resolution || '').slice(0, 400)}`,
+        });
+        notifyAccount({
+          account: updated.reporter,
+          kind: 'report',
+          subject: updated.status === 'resolved' ? 'Your report was resolved' : 'Your report was dismissed',
+          body: `Your report on ${updated.package} was ${updated.status}: ${updated.resolution}`,
+          link: `/packages/${encodeURIComponent(updated.package)}`,
         });
         res.redirect(303, '/admin/reports');
       } catch (err) {
@@ -1856,6 +1962,7 @@ function createApp(config = loadConfig()) {
           note: String(req.body.note || ''),
         });
         console.log(`Package ${name} decision: ${action} by ${accountOf(req).login}`);
+        notifyPackageMaintainers(String(name).toLowerCase(), action, String(req.body.note || ''));
         res.redirect(303, `/packages/${encodeURIComponent(name)}?decided=1#review`);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError) {
@@ -1881,6 +1988,13 @@ function createApp(config = loadConfig()) {
           resolution: String(req.body.resolution || ''),
         });
         console.log(`Report ${updated.id} ${updated.status} by ${updated.resolvedBy}`);
+        notifyAccount({
+          account: updated.reporter,
+          kind: 'report',
+          subject: updated.status === 'resolved' ? 'Your report was resolved' : 'Your report was dismissed',
+          body: `Your report on ${updated.package} was ${updated.status}: ${updated.resolution}`,
+          link: `/packages/${encodeURIComponent(updated.package)}`,
+        });
         res.redirect(303, `/review?updated=${encodeURIComponent(updated.id)}`);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError) {
@@ -1901,12 +2015,22 @@ function createApp(config = loadConfig()) {
     requireCsrf,
     (req, res, next) => {
       try {
-        const claim = ownership.decide(req.params.name, req.params.githubId, {
+        const name = String(req.params.name).toLowerCase();
+        const claim = ownership.decide(name, req.params.githubId, {
           actor: accountOf(req).login,
           status: String(req.body.status || ''),
           note: String(req.body.note || ''),
         });
-        console.log(`Ownership claim for ${req.params.name} ${claim.status} by ${claim.decidedBy}`);
+        console.log(`Ownership claim for ${name} ${claim.status} by ${claim.decidedBy}`);
+        notifyAccount({
+          account: { githubId: claim.githubId, login: claim.login },
+          kind: 'claim',
+          subject: claim.status === 'verified' ? 'Maintainer claim verified' : 'Maintainer claim rejected',
+          body: claim.status === 'verified'
+            ? `You are listed as a verified maintainer of ${name}.`
+            : `Your maintainer claim for ${name} was rejected.${claim.note ? ` Reason: ${claim.note}` : ''}`,
+          link: `/packages/${encodeURIComponent(name)}#maintainers`,
+        });
         const back = req.body.next === '/admin/claims'
           ? `/admin/claims?claim=${encodeURIComponent(req.params.githubId)}`
           : `/review?claim=${encodeURIComponent(req.params.githubId)}#ownership`;

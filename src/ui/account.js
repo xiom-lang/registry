@@ -24,6 +24,22 @@ const ROLE_LABELS = {
   member: 'member',
 };
 
+// A2 (SESSION.md 22.4): the structured notification kinds get human labels;
+// legacy kinds keep their raw id.
+const NOTICE_KIND_LABELS = {
+  claim: 'maintainer claim',
+  report: 'report update',
+  review: 'package decision',
+};
+
+/** Only registry-relative or https links become anchors (defense in depth). */
+function noticeLink(value) {
+  const link = typeof value === 'string' ? value : '';
+  if (link.startsWith('/') && !link.startsWith('//')) return link;
+  if (link.startsWith('https://')) return link;
+  return '';
+}
+
 function noticeBox(notice, error) {
   const parts = [];
   if (notice) parts.push(`<p class="notice" role="status">${escapeHtml(notice)}</p>`);
@@ -238,15 +254,19 @@ function notificationCards(notifications, { compact = false } = {}) {
       + 'fulfilment notices appear here.</p>';
   }
   return `<ul class="request-list">
-${list.map((entry) => `  <li class="request-card${entry.readAt ? ' closed' : ''}">
+${list.map((entry) => {
+    const link = noticeLink(entry.link);
+    return `  <li class="request-card${entry.readAt ? ' closed' : ''}">
     <div class="request-head">
-      <span class="mono">${escapeHtml(entry.kind)}</span>
+      <span class="mono">${escapeHtml(NOTICE_KIND_LABELS[entry.kind] || entry.kind)}</span>
       ${entry.readAt ? '' : '<span class="status-pill status-pending">new</span>'}
       <span class="pkg-meta">${formatWhen(entry.createdAt)}</span>
     </div>
     <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
     ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
-  </li>`).join('\n')}
+    ${link ? `<p class="pkg-meta"><a href="${escapeHtml(link)}">View details &rarr;</a></p>` : ''}
+  </li>`;
+  }).join('\n')}
 </ul>`;
 }
 
@@ -394,6 +414,7 @@ ${accountBanner({ account, status, notice, error })}
 function accountSettingsPage({
   account,
   notifyEmail = '',
+  notifyKinds = null,
   csrf,
   notice = '',
   error = '',
@@ -401,6 +422,10 @@ function accountSettingsPage({
   status = 'active',
   nav = '',
 }) {
+  const kindOn = (kind) => !notifyKinds || notifyKinds[kind] !== false;
+  const kindRow = (kind, label) => `<label class="radio-row">
+      <input type="checkbox" name="${kind}" ${kindOn(kind) ? 'checked' : ''}>
+      <span>${escapeHtml(label)}</span></label>`;
   const body = `${accountHero(account, { title: 'Settings' })}
 ${accountTabs('settings')}
 ${accountBanner({ account, status, notice, error })}
@@ -419,6 +444,16 @@ ${accountBanner({ account, status, notice, error })}
         </label>
       </div>
       <button class="button primary" type="submit">Save email</button>
+    </form>
+    <h3 id="notifications" class="account-subhead">Notification types</h3>
+    <p class="pkg-meta">Turn a type off to stop both its in-app notices and its email.
+       Everything is on by default.</p>
+    <form method="post" action="/account/notify-kinds" id="notify-kinds">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      ${kindRow('claim', 'Maintainer claim decisions')}
+      ${kindRow('report', 'Report updates')}
+      ${kindRow('review', 'Package review decisions')}
+      <button class="button primary" type="submit">Save notification types</button>
     </form>
   </section>
   <section>

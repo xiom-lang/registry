@@ -885,6 +885,7 @@ table.versions tr:hover td { background: var(--panel); }
 .account-tab:hover { color: var(--paper); }
 .account-tab.active { border-bottom-color: var(--signal); color: var(--paper); }
 .account-signout { margin-top: var(--space-xl); }
+.account-subhead { margin-top: var(--space-lg); }
 .inline-form { margin-bottom: var(--space-md); }
 .mint-details { margin-top: var(--space-md); }
 .mint-details summary { color: var(--paper-dim); cursor: pointer; font-size: 14px; }

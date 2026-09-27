@@ -142,6 +142,8 @@ test.before(async () => {
   // One package in the index so the package page (report form) renders; the
   // artifact itself is absent, which only hides the readme block.
   fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+  // Fixtures for A2 notification coverage (SESSION.md 22.4): one package per
+  // event stream, plus a maintainer (ghost-org) who has no registry account.
   fs.writeFileSync(path.join(process.env.DATA_DIR, 'index.json'), JSON.stringify({
     version: '1.0.0',
     updated_at: new Date().toISOString(),
@@ -151,6 +153,37 @@ test.before(async () => {
         description: 'fixture package',
         versions: {
           '1.0.0': { version: '1.0.0', sha256: 'aa'.repeat(32), size: 10, published: new Date().toISOString() },
+        },
+        latest: '1.0.0',
+      },
+      'notify-claim-pkg': {
+        name: 'notify-claim-pkg',
+        description: 'fixture package for claim notices',
+        versions: {
+          '1.0.0': { version: '1.0.0', sha256: 'bb'.repeat(32), size: 10, published: new Date().toISOString() },
+        },
+        latest: '1.0.0',
+      },
+      'notify-report-pkg': {
+        name: 'notify-report-pkg',
+        description: 'fixture package for report notices',
+        versions: {
+          '1.0.0': { version: '1.0.0', sha256: 'cc'.repeat(32), size: 10, published: new Date().toISOString() },
+        },
+        latest: '1.0.0',
+      },
+      'notify-decision-pkg': {
+        name: 'notify-decision-pkg',
+        description: 'fixture package for decision notices',
+        versions: {
+          '1.0.0': {
+            version: '1.0.0', sha256: 'dd'.repeat(32), size: 10, published: new Date().toISOString(),
+            publisher: { repository: 'user-user/notify-decision-pkg' },
+          },
+          '0.9.0': {
+            version: '0.9.0', sha256: 'ee'.repeat(32), size: 10, published: new Date().toISOString(),
+            publisher: { repository: 'ghost-org/notify-decision-pkg' },
+          },
         },
         latest: '1.0.0',
       },
@@ -732,8 +765,10 @@ test('account pages split into overview, requests, notifications, and settings',
   assert.match(html, /submitted for review/);
 
   // Notifications page: opening it does not mark anything read; the explicit
-  // action does.
+  // action does. Earlier tests may have left this account notices (report
+  // resolutions now notify the reporter), so start from a clean unread slate.
   const { notifications } = app.locals.registry;
+  notifications.markAllRead('777');
   notifications.enqueue({
     account: { githubId: '777', login: 'user-user' },
     kind: 'request',
@@ -1208,4 +1243,234 @@ test('a registry without OAuth hides sign-in and refuses account routes', async 
     }
     disabledServer.close();
   }
+});
+
+// ─── A2 notification coverage (SESSION.md 22.4) ────────────────────────────
+// One focused test per event: a row is created for the right recipient with
+// the right link. Notification failures never fail the action, so a wrong
+// recipient shows up as a missing row, not a 500.
+
+test('a verified maintainer claim notifies the claimant with a maintainers link', async () => {
+  const claimant = cookieJar();
+  await login(claimant, 'plain-code');
+  let response = await requestAs(claimant, '/packages/notify-claim-pkg', { headers: BROWSER });
+  const claimCsrf = csrfFrom(await response.text());
+  response = await requestAs(claimant, '/packages/notify-claim-pkg/claim', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: claimCsrf }),
+  });
+  assert.equal(response.status, 303);
+
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code');
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  const reviewCsrf = csrfFrom(await response.text());
+  response = await requestAs(reviewer, '/review/claims/notify-claim-pkg/888/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'verified', note: 'owns the repo' }),
+  });
+  assert.equal(response.status, 303);
+
+  const { notifications } = app.locals.registry;
+  const row = notifications.listFor('888')[0];
+  assert.equal(row.kind, 'claim');
+  assert.match(row.subject, /claim verified/i);
+  assert.equal(row.link, '/packages/notify-claim-pkg#maintainers');
+  assert.equal(row.emailStatus, 'skipped', 'no notification email is set');
+
+  // The notifications page renders the link as an anchor.
+  response = await requestAs(claimant, '/account/notifications', { headers: BROWSER });
+  const html = await response.text();
+  assert.match(html, /Maintainer claim verified/);
+  assert.match(html, /href="\/packages\/notify-claim-pkg#maintainers"/);
+});
+
+test('a rejected maintainer claim notifies the claimant with the reason', async () => {
+  const claimant = cookieJar();
+  await login(claimant, 'admin-code');
+  let response = await requestAs(claimant, '/packages/notify-claim-pkg', { headers: BROWSER });
+  const claimCsrf = csrfFrom(await response.text());
+  response = await requestAs(claimant, '/packages/notify-claim-pkg/claim', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: claimCsrf }),
+  });
+  assert.equal(response.status, 303);
+
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code');
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  const reviewCsrf = csrfFrom(await response.text());
+  response = await requestAs(reviewer, '/review/claims/notify-claim-pkg/4242/decision', {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: reviewCsrf,
+      status: 'rejected',
+      note: 'repository owner is someone else',
+    }),
+  });
+  assert.equal(response.status, 303);
+
+  const row = app.locals.registry.notifications.listFor('4242')[0];
+  assert.equal(row.kind, 'claim');
+  assert.match(row.subject, /claim rejected/i);
+  assert.equal(
+    row.body,
+    'Your maintainer claim for notify-claim-pkg was rejected. Reason: repository owner is someone else',
+  );
+  assert.equal(row.link, '/packages/notify-claim-pkg#maintainers');
+});
+
+test('a resolved report notifies the reporter with a package link', async () => {
+  const reporter = cookieJar();
+  await login(reporter, 'plain-code');
+  let response = await requestAs(reporter, '/packages/notify-report-pkg', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(reporter, '/packages/notify-report-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'license', note: 'missing LICENSE file' }),
+  });
+  assert.equal(response.status, 303);
+  const reportId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code');
+  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  const reviewCsrf = csrfFrom(await response.text());
+  response = await requestAs(reviewer, `/review/reports/${reportId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewCsrf, status: 'resolved', resolution: 'license added in 1.0.1' }),
+  });
+  assert.equal(response.status, 303);
+
+  const row = app.locals.registry.notifications.listFor('888')[0];
+  assert.equal(row.kind, 'report');
+  assert.match(row.subject, /report was resolved/i);
+  assert.equal(row.body, 'Your report on notify-report-pkg was resolved: license added in 1.0.1');
+  assert.equal(row.link, '/packages/notify-report-pkg');
+});
+
+test('a dismissed report notifies the reporter through the admin console route', async () => {
+  const reporter = cookieJar();
+  await login(reporter, 'plain-code');
+  let response = await requestAs(reporter, '/packages/notify-report-pkg', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(reporter, '/packages/notify-report-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, reason: 'other', note: 'wrong package page links' }),
+  });
+  assert.equal(response.status, 303);
+  const reportId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/admin/reports', { headers: BROWSER });
+  const adminCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, `/admin/reports/${reportId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'dismissed', resolution: 'not actionable' }),
+  });
+  assert.equal(response.status, 303);
+
+  const row = app.locals.registry.notifications.listFor('888')[0];
+  assert.equal(row.kind, 'report');
+  assert.match(row.subject, /report was dismissed/i);
+  assert.equal(row.body, 'Your report on notify-report-pkg was dismissed: not actionable');
+  assert.equal(row.link, '/packages/notify-report-pkg');
+});
+
+test('package decisions reach maintainers with accounts and skip the rest', async () => {
+  const { notifications, accounts } = app.locals.registry;
+  assert.equal(accounts.getByLogin('ghost-org'), null, 'fixture maintainer has no registry account');
+  const before = notifications.listFor('777', { limit: 200 }).length;
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  let response = await requestAs(admin, '/admin/packages', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(admin, '/admin/packages/notify-decision-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'mute', note: 'metadata spam' }),
+  });
+  assert.equal(response.status, 303);
+
+  const rows = notifications.listFor('777', { limit: 200 });
+  assert.equal(rows.length, before + 1, 'exactly the account-holding maintainer got a row');
+  assert.equal(rows[0].kind, 'review');
+  assert.equal(rows[0].subject, 'Package muted: notify-decision-pkg');
+  assert.equal(rows[0].body, 'metadata spam');
+  assert.equal(rows[0].link, '/packages/notify-decision-pkg');
+});
+
+test('per-kind muting suppresses that kind only and defaults to on', async () => {
+  const member = cookieJar();
+  await login(member, 'user-code');
+  let response = await requestAs(member, '/account/settings', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /name="claim" checked/);
+  assert.match(html, /name="review" checked/);
+  const csrf = csrfFrom(html);
+
+  // Turn review notices off; claim and report stay on.
+  response = await requestAs(member, '/account/notify-kinds', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, claim: 'on', report: 'on' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/settings?prefs=1');
+
+  const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
+  assert.deepEqual(stored.accounts['777'].notifyKinds, { claim: true, report: true, review: false });
+
+  response = await requestAs(member, '/account/settings', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Notification types/);
+  assert.match(html, /name="claim" checked/);
+  assert.doesNotMatch(html, /name="review" checked/);
+
+  // A package decision writes nothing for the muted account...
+  const { notifications } = app.locals.registry;
+  const before = notifications.listFor('777', { limit: 200 }).length;
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/admin/packages', { headers: BROWSER });
+  const adminCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, '/admin/packages/notify-decision-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'unmute', note: 'appeal accepted' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(
+    notifications.listFor('777', { limit: 200 }).length,
+    before,
+    'the muted review kind wrote no row',
+  );
+
+  // ...while the report kind is untouched: a resolution still notifies.
+  response = await requestAs(member, '/packages/notify-report-pkg', { headers: BROWSER });
+  const memberCsrf = csrfFrom(await response.text());
+  response = await requestAs(member, '/packages/notify-report-pkg/report', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: memberCsrf, reason: 'spam', note: 'repeated posting' }),
+  });
+  assert.equal(response.status, 303);
+  const reportId = new URL(response.headers.get('location'), baseUrl).searchParams.get('reported');
+  response = await requestAs(admin, '/admin/reports', { headers: BROWSER });
+  const reportCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, `/admin/reports/${reportId}/resolve`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reportCsrf, status: 'resolved', resolution: 'handled' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(notifications.listFor('777')[0].kind, 'report');
+
+  // Restore all kinds on so the preference does not leak past this test.
+  response = await requestAs(member, '/account/settings', { headers: BROWSER });
+  const restoreCsrf = csrfFrom(await response.text());
+  response = await requestAs(member, '/account/notify-kinds', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on' }),
+  });
+  assert.equal(response.status, 303);
+  const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
+  assert.deepEqual(restored.accounts['777'].notifyKinds, { claim: true, report: true, review: true });
 });
