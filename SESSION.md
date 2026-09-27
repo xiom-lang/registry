@@ -2445,7 +2445,7 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.3.0 live on staging and production with `email: enabled`** (D7 host half done 2026-09-27); **2.3.1 prepared on `main`** (notification-email link fix) and awaits the next ops deploy |
+| Live version | **2.4.0 prepared on `main`** (email-link fix + admin tab, avatar account menu, mobile card fix); staging and production run **2.3.0 with `email: enabled`** until the next ops deploy |
 | Repo | `main` at the 2.3.1 release commit (A2 + D7 complete + A7 + A8 + A3.1-3 + A9); working tree clean after this session |
 | Tests | `npm test` **281/281**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
@@ -2588,6 +2588,15 @@ last defect — notification links were app-relative and not clickable in a mail
 client — fixed in **2.3.1** (`emailLink()` absolutizes against `REGISTRY_URL`
 for the email channel only). Notices queued before an address was verified are
 never backfilled, by design.
+
+**2.4.0 (2026-09-27)** bundles that fix with the owner's UX round: the Admin
+console is an admin-only account tab beside Settings, the signed-in header is a
+GitHub avatar menu (Overview/Requests/Notifications/Settings, role links, and a
+CSRF-protected Sign out), and home-page package cards keep the stage badge on
+its own line on phones so it never clips. DEPLOY.md's staging section is
+corrected (separate container/profile/volumes; split deploy commands). 282
+unit tests and 20 e2e checks green; ops deploys staging first, then production,
+and the owner verifies the new surfaces.
 
 
 

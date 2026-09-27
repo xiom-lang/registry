@@ -4,7 +4,7 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
-## [Unreleased]
+## [2.4.0] - 2026-09-27
 
 ### Interface
 
