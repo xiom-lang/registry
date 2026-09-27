@@ -316,6 +316,14 @@ main { flex: 1; padding: var(--space-xl) 0 var(--space-2xl); }
   .package-card { padding: var(--space-md); }
   .package-card .pkg-badge { border-radius: 10px; height: 48px; width: 48px; }
   .package-card .pkg-badge-group { gap: var(--space-xs); }
+  /* Mobile pass (owner report): the stage badge wraps to its own line inside
+     the card instead of clipping at the right edge. */
+  .package-card .pkg-head { align-items: flex-start; row-gap: 8px; }
+  .package-card .pkg-badge-group {
+    justify-content: flex-start;
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .package-card {

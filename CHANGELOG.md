@@ -4,6 +4,18 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [Unreleased]
+
+### Interface
+
+- **Admin console joins the account tabs**: admins get an Admin tab beside
+  Settings on every account page; the overview text link is gone.
+- **Header account menu**: signed in, the top bar shows the GitHub avatar and
+  login in a dropdown with Overview, Requests, Notifications, Settings, the
+  role links (Review queue / Admin console), and Sign out.
+- **Mobile pass**: package cards on the home page keep the stage badge on its
+  own line instead of clipping at the right edge on phones.
+
 ## [2.3.1] - 2026-09-27
 
 ### Fixed

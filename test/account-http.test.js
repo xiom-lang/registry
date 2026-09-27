@@ -1812,3 +1812,20 @@ test('reviews gain votes, a maintainer reply, and list controls', async () => {
   assert.equal((html.match(/class="rating-item"/g) || []).length, 1,
     'only 777 wrote review text on this package');
 });
+test('the admin console is an account tab and the header carries an account menu', async () => {
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  let response = await requestAs(admin, '/account/settings', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /account-tab[^"]*" href="\/admin"/, 'admins get the Admin tab');
+  assert.match(html, /class="nav-account"/, 'the header renders the account menu');
+  assert.match(html, /action="\/logout"/, 'the menu can sign out');
+  assert.match(html, /Admin console/);
+
+  const member = cookieJar();
+  await login(member, 'plain-code');
+  response = await requestAs(member, '/account/settings', { headers: BROWSER });
+  html = await response.text();
+  assert.doesNotMatch(html, /account-tab[^"]*" href="\/admin"/, 'members get no Admin tab');
+  assert.match(html, /action="\/logout"/);
+});

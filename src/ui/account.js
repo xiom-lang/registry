@@ -1,4 +1,4 @@
-﻿// XIOM Package Registry -- account, request, and admin pages (registry 2.0).
+// XIOM Package Registry -- account, request, and admin pages (registry 2.0).
 // Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -67,8 +67,8 @@ function kindLabel(record) {
   return record.kind === 'publisher' ? 'trusted publisher' : 'token';
 }
 
-/** Shared tabs for the four account pages. */
-function accountTabs(active) {
+/** Shared tabs for the account pages; the Admin tab is admin-only. */
+function accountTabs(active, { admin = false } = {}) {
   const tab = (href, label, key) => {
     const current = active === key;
     return `<a class="account-tab${current ? ' active' : ''}" href="${href}"`
@@ -79,6 +79,7 @@ function accountTabs(active) {
   ${tab('/account/requests', 'Requests', 'requests')}
   ${tab('/account/notifications', 'Notifications', 'notifications')}
   ${tab('/account/settings', 'Settings', 'settings')}
+  ${admin ? tab('/admin', 'Admin', 'admin') : ''}
 </nav>`;
 }
 
@@ -339,7 +340,7 @@ function accountOverviewPage({
       + `<span>Last sign-in ${formatWhen(account.lastLoginAt)}</span>`
       + `<span class="status-pill status-approved">${escapeHtml(ROLE_LABELS[role] || role)}</span>`,
   })}
-${accountTabs('overview')}
+${accountTabs('overview', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}
 <section>
   <h2>Packages you maintain <span class="count">${maintained.length}</span></h2>
@@ -356,9 +357,6 @@ ${accountBanner({ account, status, notice, error })}
     <p class="pkg-meta"><a href="/account/notifications">All notifications${unread > 0 ? ` (${unread} new)` : ''} &rarr;</a></p>
   </section>
 </div>
-${role === 'admin'
-    ? '<p class="pkg-meta"><a href="/admin">Open the admin console &rarr;</a></p>'
-    : ''}
 ${role === 'reviewer'
     ? '<p class="pkg-meta"><a href="/review">Open the review queue &rarr;</a></p>'
     : ''}
@@ -377,11 +375,12 @@ function accountRequestsPage({
   notice = '',
   error = '',
   form = {},
+  role = 'member',
   status = 'active',
   nav = '',
 }) {
   const body = `${accountHero(account, { title: 'Requests' })}
-${accountTabs('requests')}
+${accountTabs('requests', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}
 <h2>New request</h2>
 ${status === 'active'
@@ -399,12 +398,13 @@ function accountNotificationsPage({
   csrf,
   notice = '',
   error = '',
+  role = 'member',
   status = 'active',
   nav = '',
 }) {
   const unread = notifications.filter((entry) => !entry.readAt).length;
   const body = `${accountHero(account, { title: 'Notifications' })}
-${accountTabs('notifications')}
+${accountTabs('notifications', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}
 <section>
   <h2>In-app notices <span class="count">${unread > 0 ? `${unread} new` : notifications.length}</span></h2>
@@ -448,7 +448,7 @@ function accountSettingsPage({
         + `${notifyEmailPending ? 'A confirmation link is queued for this address.' : 'Save the address to queue a confirmation link.'} `
         + 'It is delivered when the registry\'s mail service is enabled; in-app notices work either way.</p>');
   const body = `${accountHero(account, { title: 'Settings' })}
-${accountTabs('settings')}
+${accountTabs('settings', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}
 <div class="account-grid">
   <section>

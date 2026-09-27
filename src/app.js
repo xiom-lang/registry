@@ -408,8 +408,23 @@ function createApp(config = loadConfig()) {
     const current = req.path === '/account' || req.path.startsWith('/account/')
       ? ' aria-current="page"'
       : '';
+    const panel = [
+      '<a href="/account">Overview</a>',
+      '<a href="/account/requests">Requests</a>',
+      '<a href="/account/notifications">Notifications</a>',
+      '<a href="/account/settings">Settings</a>',
+      isReviewer(account) ? '<a href="/review">Review queue</a>' : '',
+      isAdmin(account) ? '<a href="/admin">Admin console</a>' : '',
+      `<form method="post" action="/logout">
+        <input type="hidden" name="csrf" value="${escapeHtml(req.session ? req.session.csrf : '')}">
+        <button class="nav-account-signout" type="submit">Sign out</button>
+      </form>`,
+    ].filter(Boolean).join('\n        ');
     return {
-      primary: `<a class="nav-account" href="/account"${current}>@${escapeHtml(account.login)}</a>`,
+      primary: `<details class="nav-account">
+      <summary>${account.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" width="24" height="24">` : ''}<span${current}>@${escapeHtml(account.login)}</span></summary>
+      <nav class="nav-account-panel" aria-label="Account">${panel}</nav>
+    </details>`,
       menu,
     };
   }
