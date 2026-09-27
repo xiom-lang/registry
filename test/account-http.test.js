@@ -1088,6 +1088,13 @@ test('maintainer claims are filed, verified by reviewers, and shown publicly', a
   assert.match(html, /awaiting verification/);
   assert.doesNotMatch(html, /verified maintainer/, 'pending claims are not public');
 
+  // The reverse view: the claimant sees the package on the account overview.
+  response = await requestAs(plain, '/account', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Packages you maintain/);
+  assert.match(html, /href="\/packages\/readme-pkg"/);
+  assert.match(html, /claim awaiting verification/);
+
   // Duplicate claims are refused with a readable error.
   response = await requestAs(plain, '/packages/readme-pkg/claim', {
     method: 'POST',
@@ -1158,6 +1165,10 @@ test('maintainer claims are filed, verified by reviewers, and shown publicly', a
   // The claimant sees that the claim is settled.
   response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
   assert.match(await response.text(), /You are listed as a verified maintainer/);
+  response = await requestAs(plain, '/account', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Packages you maintain/);
+  assert.doesNotMatch(html, /claim awaiting verification/, 'the settled claim drops the pending pill');
 
   const claims = app.locals.registry.ownership.listClaims({ packageName: 'readme-pkg' });
   assert.equal(claims.length, 1);

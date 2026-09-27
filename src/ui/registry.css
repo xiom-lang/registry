@@ -979,6 +979,7 @@ table.versions tr:hover td { background: var(--panel); }
   display: grid;
   gap: var(--space-xl);
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  margin-top: var(--space-xl);
 }
 
 .request-form fieldset {

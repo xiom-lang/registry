@@ -88,7 +88,7 @@ const {
 } = require('./ui/admin');
 const { AdminStore } = require('./admin');
 const { loadStageOverrides } = require('./stage-overrides');
-const { OwnershipStore, maintainerView } = require('./ownership');
+const { OwnershipStore, maintainerView, maintainedPackages } = require('./ownership');
 const { publishGuidePage } = require('./ui/publish');
 const { reviewPage } = require('./ui/review');
 const { renderMarkdown } = require('./ui/markdown');
@@ -1096,6 +1096,16 @@ function createApp(config = loadConfig()) {
       ...context,
       requests: requests.list({ requesterId: context.account.githubId }),
       notifications: notifications.listFor(context.account.githubId, { limit: 20 }),
+      // The reverse view of the package Maintainers list: which packages this
+      // account is listed for (provenance, approved requests, claims).
+      maintained: maintainedPackages({
+        login: context.account.login,
+        githubId: context.account.githubId,
+        index: indexStore.snapshot(),
+        requests: requests.list(),
+        publishers: publisherStore.list(),
+        claims: ownership.listClaims(),
+      }),
       notice,
     }));
   });

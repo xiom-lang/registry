@@ -169,6 +169,88 @@ function maintainerView({ packageName, pkg, requests = [], publishers = [], clai
 }
 
 /**
+ * Packages an account is listed for, from every source: provenance
+ * repository ownership, its own approved/fulfilled requests whose scopes
+ * cover the package, and its claims (any status -- the caller decides how to
+ * present pending ones). Multiple maintainers per package are the norm; this
+ * is the reverse index for "packages I maintain". Pure function.
+ *
+ * @param {{ login: string, githubId: string, index: object, requests?: object[],
+ *           publishers?: object[], claims?: object }} input
+ * @returns {Array<{ name: string, sources: string[], claimStatus: string }>}
+ */
+function maintainedPackages({
+  login,
+  githubId,
+  index,
+  requests = [],
+  publishers = [],
+  claims = [],
+}) {
+  const wanted = String(login || '').toLowerCase();
+  const id = String(githubId || '');
+  const packages = (index && index.packages) || {};
+  if (!wanted) return [];
+  const names = new Set();
+
+  // 1. Provenance: any published version whose repository owner is this account.
+  for (const [name, pkg] of Object.entries(packages)) {
+    for (const version of Object.values((pkg && pkg.versions) || {})) {
+      const repository = version && version.publisher
+        && typeof version.publisher.repository === 'string' ? version.publisher.repository : '';
+      if (repository && repository.split('/')[0].toLowerCase() === wanted) {
+        names.add(name);
+        break;
+      }
+    }
+  }
+
+  // 2. Approved/fulfilled requests of this account whose scopes cover a package.
+  for (const record of requests) {
+    if (!record || !record.requester
+      || String(record.requester.login).toLowerCase() !== wanted) continue;
+    if (record.status !== 'approved' && record.status !== 'fulfilled') continue;
+    const scopes = { scopes: record.scopes || [] };
+    for (const name of Object.keys(packages)) {
+      if (tokenMayPublish(scopes, name)) names.add(name);
+    }
+  }
+
+  // 3. Claims by this account (pending claims appear with their status;
+  // rejected claims do not count as maintaining unless derived elsewhere).
+  for (const claim of claims) {
+    if (!claim || String(claim.githubId) !== id || claim.status === 'rejected') continue;
+    names.add(claim.package);
+  }
+
+  const results = [];
+  for (const name of names) {
+    const pkg = packages[name];
+    if (!pkg) continue;
+    const view = maintainerView({
+      packageName: name,
+      pkg,
+      requests,
+      publishers,
+      claims: {},
+      viewer: { githubId: id, login },
+      reviewer: false,
+    });
+    const derived = view.alreadyListed;
+    const claim = claims.find((entry) => entry.package === name && String(entry.githubId) === id) || null;
+    if (!derived && !claim) continue;
+    const sources = view.maintainers
+      .find((entry) => entry.login.toLowerCase() === wanted);
+    results.push({
+      name,
+      sources: sources ? sources.sources : [],
+      claimStatus: claim ? claim.status : '',
+    });
+  }
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
  * JSON-file ownership claim store on the registry data volume.
  */
 class OwnershipStore {
@@ -374,5 +456,6 @@ module.exports = {
   SOURCE_RANK,
   deriveMaintainers,
   maintainerView,
+  maintainedPackages,
   normalizeClaim,
 };

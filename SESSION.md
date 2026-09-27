@@ -2147,6 +2147,23 @@ Coverage: an HTTP flow through `/admin/claims` (claim -> pending -> reject
 without reason -> verify with `next` -> recent decisions), plus
 `alreadyListed`/message tests; 247 unit tests and 20 e2e checks pass.
 
+**21.8 Multiple maintainers and "packages you maintain" (owner question,
+2026-09-27).** Multiple maintainers per package are supported by design: the
+Maintainers list is additive (every provenance repository owner, every
+approved-request requester whose scopes cover the package, every verified
+claim) with no single owner slot and no publish power attached. Claims are
+independent -- several accounts can claim the same package and each is
+verified on its own history. What was missing was the reverse view, now on
+the account overview: **Packages you maintain** lists every package the
+signed-in account is tied to, with its source (publish provenance, approved
+trusted publisher, approved token, verified claim) and a "claim awaiting
+verification" pill for pending claims. `maintainedPackages()` in
+`src/ownership.js` builds it from provenance + approved requests + the
+account's claims (rejected claims excluded). Coverage: unit tests for all
+three sources plus an HTTP assertion in the claim flow; 248 unit tests and
+20 e2e checks pass.
+
+
 
 
 

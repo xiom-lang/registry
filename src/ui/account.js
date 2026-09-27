@@ -277,12 +277,32 @@ function accountOverviewPage({
   status = 'active',
   requests = [],
   notifications = [],
+  maintained = [],
   csrf,
   notice = '',
   error = '',
   nav = '',
 }) {
   const unread = notifications.filter((entry) => !entry.readAt).length;
+  const maintainedRow = (entry) => {
+    const labels = [];
+    if (entry.sources.includes('provenance')) labels.push('publish provenance');
+    if (entry.sources.includes('trusted-publisher')) labels.push('approved trusted publisher');
+    if (entry.sources.includes('token')) labels.push('approved token');
+    if (entry.sources.includes('verified-claim')) labels.push('verified claim');
+    const pending = entry.claimStatus === 'pending'
+      ? '<span class="status-pill status-pending">claim awaiting verification</span>'
+      : '';
+    return `<li class="maintainer-row">
+  <a class="pkg-name" href="/packages/${encodeURIComponent(entry.name)}">${escapeHtml(entry.name)}</a>
+  ${pending}
+  ${labels.length > 0 ? `<span class="pkg-meta">${labels.join(' &middot; ')}</span>` : ''}
+</li>`;
+  };
+  const maintainedBlock = maintained.length === 0
+    ? '<p class="pkg-meta">You are not listed as a maintainer of any package yet. Open a package '
+      + 'you publish and use &ldquo;I maintain this package&rdquo; to claim it.</p>'
+    : `<ul class="maintainer-list">\n${maintained.map(maintainedRow).join('\n')}\n</ul>`;
   const body = `${accountHero(account, {
     subtitle: `<span>Joined ${formatWhen(account.createdAt)}</span>`
       + `<span>Last sign-in ${formatWhen(account.lastLoginAt)}</span>`
@@ -290,6 +310,10 @@ function accountOverviewPage({
   })}
 ${accountTabs('overview')}
 ${accountBanner({ account, status, notice, error })}
+<section>
+  <h2>Packages you maintain <span class="count">${maintained.length}</span></h2>
+  ${maintainedBlock}
+</section>
 <div class="account-grid">
   <section>
     <h2>Requests</h2>

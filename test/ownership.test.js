@@ -14,6 +14,7 @@ const {
   OwnershipStore,
   deriveMaintainers,
   maintainerView,
+  maintainedPackages,
 } = require('../src/ownership');
 const { maintainersBlock } = require('../src/ui/pages');
 
@@ -182,8 +183,7 @@ test('claims store normalizes malformed on-disk entries and rejects bad names', 
   assert.throws(() => store.claim('my-lib', { user: { githubId: 'x', login: '' } }), /signed-in GitHub account/);
 });
 
-test('a viewer already listed via provenance is told so and sees no claim form', () => {
-  const pkg = {
+test('a viewer already listed via provenance is told so and sees no claim form', () => {  const pkg = {
     versions: {
       '1.0.0': { published: '2026-09-01T00:00:00.000Z', publisher: { repository: 'octocat/my-lib' } },
     },
@@ -232,4 +232,58 @@ test('a viewer already listed via provenance is told so and sees no claim form',
   const settledHtml = maintainersBlock({ name: 'my-lib', ownership: settled, signedIn: true, csrf: 'x' });
   assert.match(settledHtml, /You are listed as a verified maintainer/);
   assert.doesNotMatch(settledHtml, /I maintain this package/);
+});
+
+test('maintainedPackages lists every package an account is tied to', () => {
+  const index = {
+    packages: {
+      'my-lib': {
+        versions: {
+          '1.0.0': { publisher: { repository: 'octocat/my-lib' } },
+        },
+      },
+      'other-lib': {
+        versions: { '0.1.0': {} },
+      },
+      'third-lib': {
+        versions: { '0.2.0': {} },
+      },
+    },
+  };
+  const requests = [
+    {
+      id: 'req_cccc55556666',
+      kind: 'token',
+      status: 'fulfilled',
+      requester: { githubId: '2', login: 'bob' },
+      scopes: ['other-lib'],
+    },
+  ];
+  const claims = [
+    { package: 'third-lib', githubId: '2', login: 'bob', status: 'pending' },
+    { package: 'other-lib', githubId: '3', login: 'carol', status: 'verified' },
+    { package: 'my-lib', githubId: '2', login: 'bob', status: 'rejected' },
+  ];
+
+  // bob: provenance does not cover him; his token request covers other-lib and
+  // his pending claim covers third-lib; his rejected claim on my-lib is not a
+  // maintainership.
+  const bob = maintainedPackages({
+    login: 'bob', githubId: '2', index, requests, claims,
+  });
+  assert.deepEqual(bob.map((entry) => entry.name), ['other-lib', 'third-lib']);
+  assert.equal(bob.find((entry) => entry.name === 'other-lib').sources.includes('token'), true);
+  assert.equal(bob.find((entry) => entry.name === 'third-lib').claimStatus, 'pending');
+
+  // octocat: provenance owner.
+  const octocat = maintainedPackages({ login: 'octocat', githubId: '9', index });
+  assert.deepEqual(octocat.map((entry) => entry.name), ['my-lib']);
+  assert.equal(octocat[0].sources.includes('provenance'), true);
+
+  // Multiple maintainers per package is the norm: carol's verified claim does
+  // not affect anyone else's list, and bob stays listed for other-lib.
+  const carol = maintainedPackages({
+    login: 'carol', githubId: '3', index, claims,
+  });
+  assert.deepEqual(carol.map((entry) => entry.name), ['other-lib']);
 });
