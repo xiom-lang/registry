@@ -478,3 +478,102 @@ test('the open-report cap still holds in SQLite mode', () => {
     db.close();
   }
 });
+
+// ─── A9: review votes, maintainer reply, list UX (SESSION.md 21.9.3) ──────
+
+test('review votes toggle, flip, and refuse the review author', () => {
+  const { store: reviews, db } = sqliteStore();
+  try {
+    reviews.rate('demo-pkg', { user: { githubId: '1', login: 'alice' }, stars: 5, review: 'great' });
+    reviews.rate('demo-pkg', { user: { githubId: '2', login: 'bob' }, stars: 4, review: 'good' });
+
+    assert.deepEqual(
+      reviews.vote('demo-pkg', '1', { voter: { githubId: '2', login: 'bob' }, value: 1 }),
+      { up: 1, down: 0, mine: 1 },
+    );
+    assert.deepEqual(
+      reviews.vote('demo-pkg', '1', { voter: { githubId: '3', login: 'carol' }, value: -1 }),
+      { up: 1, down: 1, mine: -1 },
+    );
+    // Flipping replaces the vote; casting the same value again removes it.
+    assert.deepEqual(
+      reviews.vote('demo-pkg', '1', { voter: { githubId: '3', login: 'carol' }, value: 1 }),
+      { up: 2, down: 0, mine: 1 },
+    );
+    assert.deepEqual(
+      reviews.vote('demo-pkg', '1', { voter: { githubId: '3', login: 'carol' }, value: 1 }),
+      { up: 1, down: 0, mine: 0 },
+    );
+    assert.throws(
+      () => reviews.vote('demo-pkg', '1', { voter: { githubId: '1', login: 'alice' }, value: 1 }),
+      /your own review/,
+    );
+    assert.throws(
+      () => reviews.vote('demo-pkg', '99', { voter: { githubId: '2', login: 'bob' }, value: 1 }),
+      /not found/,
+    );
+    assert.throws(
+      () => reviews.vote('demo-pkg', '1', { voter: { githubId: '2', login: 'bob' }, value: 5 }),
+      /either up or down/,
+    );
+
+    // Page tallies expose counts and the viewer's own vote only.
+    const page = reviews.ratingsPage('demo-pkg', {});
+    const tallies = reviews.votesForPage('demo-pkg', page.items.map((entry) => entry.githubId), '3');
+    assert.deepEqual(tallies.get('1'), { up: 1, down: 0, mine: 0 });
+  } finally {
+    db.close();
+  }
+});
+
+test('one maintainer reply per review upserts; pages sort and paginate', () => {
+  const { store: reviews, db } = sqliteStore();
+  try {
+    reviews.rate('demo-pkg', { user: { githubId: '1', login: 'alice' }, stars: 5, review: 'great docs' });
+    reviews.rate('demo-pkg', { user: { githubId: '2', login: 'bob' }, stars: 2, review: 'breaks on node 20' });
+    reviews.rate('demo-pkg', { user: { githubId: '3', login: 'carol' }, stars: 4, review: '' });
+
+    const reply = reviews.replyTo('demo-pkg', '2', {
+      author: { githubId: '9', login: 'maint' }, body: 'Fixed in 1.0.1.',
+    });
+    assert.equal(reply.body, 'Fixed in 1.0.1.');
+    assert.equal(reply.updatedAt, '');
+    const edited = reviews.replyTo('demo-pkg', '2', {
+      author: { githubId: '9', login: 'maint' }, body: 'Fixed in 1.0.2.',
+    });
+    assert.equal(edited.body, 'Fixed in 1.0.2.');
+    assert.ok(edited.updatedAt, 'editing stamps updatedAt');
+    assert.equal(reviews.repliesForPage('demo-pkg', ['2']).get('2').body, 'Fixed in 1.0.2.');
+    assert.throws(
+      () => reviews.replyTo('demo-pkg', '7', { author: { githubId: '9', login: 'maint' }, body: 'x' }),
+      /not found/,
+    );
+
+    // The text-only filter keeps reviews that carry text.
+    const textOnly = reviews.ratingsPage('demo-pkg', { textOnly: true });
+    assert.deepEqual(textOnly.items.map((entry) => entry.login).sort(), ['alice', 'bob']);
+
+    // Helpful = net upvotes first.
+    reviews.vote('demo-pkg', '1', { voter: { githubId: '2', login: 'bob' }, value: 1 });
+    reviews.vote('demo-pkg', '1', { voter: { githubId: '3', login: 'carol' }, value: 1 });
+    reviews.vote('demo-pkg', '2', { voter: { githubId: '3', login: 'carol' }, value: -1 });
+    const helpful = reviews.ratingsPage('demo-pkg', { sort: 'helpful' });
+    assert.equal(helpful.items[0].login, 'alice');
+
+    // Pagination over the full list.
+    for (let i = 0; i < 12; i++) {
+      reviews.rate('demo-pkg', { user: { githubId: String(100 + i), login: `user${i}` }, stars: 3 });
+    }
+    const first = reviews.ratingsPage('demo-pkg', { perPage: 10, page: 1 });
+    assert.deepEqual(
+      { total: first.total, pages: first.pages, items: first.items.length, page: first.page },
+      { total: 15, pages: 2, items: 10, page: 1 },
+    );
+    const second = reviews.ratingsPage('demo-pkg', { perPage: 10, page: 2 });
+    assert.deepEqual({ items: second.items.length, page: second.page }, { items: 5, page: 2 });
+    // A page past the end clamps to the last page.
+    assert.equal(reviews.ratingsPage('demo-pkg', { perPage: 10, page: 99 }).page, 2);
+  } finally {
+    db.close();
+  }
+});

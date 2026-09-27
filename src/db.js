@@ -156,6 +156,35 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '007-review-social',
+    up(db) {
+      // A9 (SESSION.md 21.9.3): one vote per account per review (toggle) and
+      // one flat maintainer reply per review. Voter identity stays private:
+      // it is stored for abuse handling and never rendered.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_votes (
+          package TEXT NOT NULL,
+          review_github_id TEXT NOT NULL,
+          voter_id TEXT NOT NULL,
+          value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+          at TEXT NOT NULL,
+          PRIMARY KEY (package, review_github_id, voter_id)
+        );
+        CREATE INDEX IF NOT EXISTS review_votes_review ON review_votes (package, review_github_id);
+        CREATE TABLE IF NOT EXISTS review_replies (
+          package TEXT NOT NULL,
+          review_github_id TEXT NOT NULL,
+          author_id TEXT NOT NULL,
+          author_login TEXT NOT NULL,
+          body TEXT NOT NULL,
+          at TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (package, review_github_id)
+        );
+      `);
+    },
+  },
 ];
 
 class Database {

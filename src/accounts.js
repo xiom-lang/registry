@@ -21,11 +21,17 @@ const MAX_ACCOUNTS_BYTES = 2 * 1024 * 1024;
 // D7 (SESSION.md 21.9.1): the gate before any notification email is sent.
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Structured notification kinds (SESSION.md 22.4 A2 + 21.9.2 A7). Only these
-// can be muted from /account/settings; every other outbox kind is
+// Structured notification kinds (SESSION.md 22.4 A2 + 21.9.2 A7 + 21.9.3 A9).
+// Only these can be muted from /account/settings; every other outbox kind is
 // unconditional.
-const NOTIFY_KINDS = Object.freeze(['claim', 'report', 'review', 'support']);
-const DEFAULT_NOTIFY_KINDS = Object.freeze({ claim: true, report: true, review: true, support: true });
+const NOTIFY_KINDS = Object.freeze(['claim', 'report', 'review', 'support', 'review-reply']);
+const DEFAULT_NOTIFY_KINDS = Object.freeze({
+  claim: true,
+  report: true,
+  review: true,
+  support: true,
+  'review-reply': true,
+});
 
 function clean(value, maxLength) {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength) : '';

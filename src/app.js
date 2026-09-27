@@ -603,22 +603,54 @@ function createApp(config = loadConfig()) {
   }
 
   /** View-model for the report controls on a package page. */
-  function packageReviewContext(req, name) {    const account = accountOf(req);
+  function packageReviewContext(req, name) {
+    const account = accountOf(req);
     const flash = req.session && req.session.flash ? req.session.flash : null;
     if (flash) delete req.session.flash;
     const decision = reviews.decision(name);
-    const ratings = reviews.ratingsFor(name);
+    // A9 list UX: newest or most-helpful, text-only filter, 10 per page.
+    const REVIEWS_PER_PAGE = 10;
+    const page = reviews.ratingsPage(name, {
+      sort: req.query.reviews_sort === 'helpful' ? 'helpful' : 'newest',
+      textOnly: req.query.reviews_filter === 'text',
+      page: Number(req.query.reviews_page) || 1,
+      perPage: REVIEWS_PER_PAGE,
+    });
+    const viewerId = account ? account.githubId : '';
+    const reviewIds = page.items.map((entry) => entry.githubId);
+    const tallies = reviews.votesForPage(name, reviewIds, viewerId);
+    const replies = reviews.repliesForPage(name, reviewIds);
+    const ratings = page.items.map((entry) => ({
+      ...entry,
+      votes: tallies.get(entry.githubId) || { up: 0, down: 0, mine: 0 },
+      reply: replies.get(entry.githubId) || null,
+    }));
+    const myRating = account
+      ? reviews.ratingsFor(name).find((entry) => entry.githubId === account.githubId) || null
+      : null;
+    const canReply = Boolean(account) && (
+      isAdmin(account)
+      || maintainerAccounts(name).some((stored) => stored.githubId === account.githubId)
+    );
     return {
       canReport: Boolean(account),
       canReview: isReviewer(account),
+      canVote: Boolean(account),
+      canReply,
       openReports: reviews.openReportCount(name),
       decision,
       history: decision ? decision.history : [],
       ratings,
+      reviewList: {
+        total: page.total,
+        page: page.page,
+        pages: page.pages,
+        perPage: page.perPage,
+        sort: page.sort,
+        textOnly: page.textOnly,
+      },
       summary: reviews.ratingSummary(name),
-      myRating: account
-        ? ratings.find((entry) => entry.githubId === account.githubId) || null
-        : null,
+      myRating,
       csrf: req.session ? req.session.csrf : '',
       notice: typeof req.query.reported === 'string'
         ? 'Report submitted; a reviewer will take a look.'
@@ -628,7 +660,9 @@ function createApp(config = loadConfig()) {
             ? 'Rating saved.'
             : (typeof req.query.claimed === 'string'
               ? 'Maintainer claim submitted; a reviewer will verify it.'
-              : ''))),
+              : (typeof req.query.voted === 'string'
+                ? 'Vote recorded.'
+                : (typeof req.query.replied === 'string' ? 'Reply posted.' : ''))))),
       error: flash && flash.error ? flash.error : '',
     };
   }
@@ -2019,6 +2053,89 @@ function createApp(config = loadConfig()) {
         if (err instanceof BadRequestError || err instanceof ConflictError) {
           req.session.flash = { error: err.message };
           return res.redirect(303, `/packages/${encodeURIComponent(name)}#reviews`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // A9: one vote per account per review, toggled by casting the same value
+  // again; the review author cannot vote on their own review.
+  app.post(
+    '/packages/:name/reviews/:githubId/vote',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const { name, githubId } = req.params;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        reviews.vote(name, githubId, {
+          voter: accountOf(req),
+          value: req.body.value === 'down' ? -1 : 1,
+        });
+        res.redirect(303, `/packages/${encodeURIComponent(name)}?voted=1#reviews`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/packages/${encodeURIComponent(name)}#reviews`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // A9: one flat maintainer reply per review; posting it notifies the review
+  // author on the new muteable `review-reply` kind.
+  app.post(
+    '/packages/:name/reviews/:githubId/reply',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const name = String(req.params.name).toLowerCase();
+      const back = `/packages/${encodeURIComponent(name)}`;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const actor = accountOf(req);
+        const allowed = isAdmin(actor)
+          || maintainerAccounts(name).some((stored) => stored.githubId === actor.githubId);
+        if (!allowed) {
+          throw new ForbiddenError('only the package maintainers can reply here', 'reply_forbidden');
+        }
+        const review = reviews.ratingsFor(name)
+          .find((entry) => entry.githubId === String(req.params.githubId));
+        if (!review) {
+          throw new NotFoundError('that review was not found', 'review_not_found');
+        }
+        const reply = reviews.replyTo(name, req.params.githubId, {
+          author: actor,
+          body: String(req.body.message || ''),
+        });
+        console.log(`Maintainer reply on ${name} review by ${review.login} (${reply.author.login})`);
+        if (review.githubId !== actor.githubId) {
+          notifyAccount({
+            account: { githubId: review.githubId, login: review.login },
+            kind: 'review-reply',
+            subject: `Maintainer replied to your review of ${name}`,
+            body: reply.body,
+            link: `${back}#reviews`,
+          });
+        }
+        res.redirect(303, `${back}?replied=1#reviews`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError
+          || err instanceof ForbiddenError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `${back}#reviews`);
         }
         return next(err);
       }

@@ -25,6 +25,7 @@ const REVIEWS_SCHEMA_VERSION = '1.1.0';
 const MAX_REVIEWS_BYTES = 4 * 1024 * 1024;
 const MAX_NOTE = 500;
 const MAX_RATING_TEXT = 280;
+const MAX_REPLY = 500;
 const REPORT_REASONS = Object.freeze(['malware', 'spam', 'impersonation', 'license', 'abandoned', 'other']);
 const REPORT_STATUSES = new Set(['open', 'resolved', 'dismissed']);
 const DECISION_STATUSES = new Set(['', 'reviewed', 'flagged', 'muted']);
@@ -480,6 +481,225 @@ class ReviewStore {
     const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
     this.#commit(this.packages, this.reports, { ...this.ratings, [name]: next });
     return entry;
+  }
+
+  /**
+   * Toggle one vote on a review: casting the same value removes it, the
+   * opposite flips it. One row per (package, review, voter) by primary key;
+   * the review author cannot vote on their own review (A9).
+   *
+   * @returns {{ up: number, down: number, mine: -1|0|1 }}
+   */
+  vote(packageName, reviewGithubId, { voter, value }) {
+    const name = clean(packageName, 128).toLowerCase();
+    if (!SAFE_PACKAGE_NAME.test(name)) {
+      throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
+    }
+    if (!this.db) throw new Error('review votes require the platform database');
+    const viewer = normalizeReporter(voter);
+    const targetId = String(reviewGithubId);
+    const direction = Number(value);
+    if (direction !== 1 && direction !== -1) {
+      throw new BadRequestError('a vote is either up or down', 'invalid_vote');
+    }
+    const target = this.db.get(
+      'SELECT github_id FROM review_ratings WHERE package = ? AND github_id = ?',
+      name,
+      targetId,
+    );
+    if (!target) {
+      throw new NotFoundError(`review by ${targetId} on "${name}" not found`, 'review_not_found');
+    }
+    if (targetId === viewer.githubId) {
+      throw new BadRequestError('you cannot vote on your own review', 'self_vote');
+    }
+    const existing = this.db.get(
+      'SELECT value FROM review_votes WHERE package = ? AND review_github_id = ? AND voter_id = ?',
+      name,
+      targetId,
+      viewer.githubId,
+    );
+    if (existing && Number(existing.value) === direction) {
+      this.db.run(
+        'DELETE FROM review_votes WHERE package = ? AND review_github_id = ? AND voter_id = ?',
+        name,
+        targetId,
+        viewer.githubId,
+      );
+    } else {
+      this.db.run(
+        `INSERT INTO review_votes (package, review_github_id, voter_id, value, at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(package, review_github_id, voter_id) DO UPDATE SET
+           value = excluded.value, at = excluded.at`,
+        name,
+        targetId,
+        viewer.githubId,
+        direction,
+        new Date().toISOString(),
+      );
+    }
+    return this.#tally(name, targetId, viewer.githubId);
+  }
+
+  #tally(name, targetId, viewerId = '') {
+    let up = 0;
+    let down = 0;
+    let mine = 0;
+    for (const row of this.db.all(
+      'SELECT value, voter_id FROM review_votes WHERE package = ? AND review_github_id = ?',
+      name,
+      targetId,
+    )) {
+      const value = Number(row.value);
+      if (value === 1) up += 1;
+      else if (value === -1) down += 1;
+      if (viewerId && String(row.voter_id) === String(viewerId)) mine = value;
+    }
+    return { up, down, mine };
+  }
+
+  /** Tallies for a set of reviews on one page, keyed by review github id. */
+  votesForPage(packageName, reviewGithubIds = [], viewerId = '') {
+    const result = new Map();
+    if (!this.db || reviewGithubIds.length === 0) return result;
+    const ids = new Set(reviewGithubIds.map(String));
+    for (const row of this.db.all('SELECT * FROM review_votes WHERE package = ?', String(packageName))) {
+      const id = String(row.review_github_id);
+      if (!ids.has(id)) continue;
+      const tally = result.get(id) || { up: 0, down: 0, mine: 0 };
+      if (Number(row.value) === 1) tally.up += 1;
+      else tally.down += 1;
+      if (viewerId && String(row.voter_id) === String(viewerId)) tally.mine = Number(row.value);
+      result.set(id, tally);
+    }
+    return result;
+  }
+
+  /**
+   * One maintainer reply per review (upsert). Authorization is the caller's
+   * job: the route checks the maintainer list first.
+   */
+  replyTo(packageName, reviewGithubId, { author, body }) {
+    const name = clean(packageName, 128).toLowerCase();
+    if (!SAFE_PACKAGE_NAME.test(name)) {
+      throw new BadRequestError(`"${packageName}" is not a package name`, 'invalid_package_name');
+    }
+    if (!this.db) throw new Error('review replies require the platform database');
+    const responder = normalizeReporter(author);
+    const targetId = String(reviewGithubId);
+    const text = clean(body, MAX_REPLY);
+    if (!text) throw new BadRequestError('write the reply before sending it', 'reply_required');
+    const target = this.db.get(
+      'SELECT github_id FROM review_ratings WHERE package = ? AND github_id = ?',
+      name,
+      targetId,
+    );
+    if (!target) {
+      throw new NotFoundError(`review by ${targetId} on "${name}" not found`, 'review_not_found');
+    }
+    const existing = this.db.get(
+      'SELECT at FROM review_replies WHERE package = ? AND review_github_id = ?',
+      name,
+      targetId,
+    );
+    const now = new Date().toISOString();
+    this.db.run(
+      `INSERT INTO review_replies (package, review_github_id, author_id, author_login, body, at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(package, review_github_id) DO UPDATE SET
+         author_id = excluded.author_id,
+         author_login = excluded.author_login,
+         body = excluded.body,
+         updated_at = excluded.updated_at`,
+      name,
+      targetId,
+      responder.githubId,
+      responder.login,
+      text,
+      existing ? existing.at : now,
+      existing ? now : '',
+    );
+    return {
+      author: responder,
+      body: text,
+      at: existing ? existing.at : now,
+      updatedAt: existing ? now : '',
+    };
+  }
+
+  /** Replies for a set of reviews on one page, keyed by review github id. */
+  repliesForPage(packageName, reviewGithubIds = []) {
+    const result = new Map();
+    if (!this.db || reviewGithubIds.length === 0) return result;
+    const ids = new Set(reviewGithubIds.map(String));
+    for (const row of this.db.all('SELECT * FROM review_replies WHERE package = ?', String(packageName))) {
+      const id = String(row.review_github_id);
+      if (!ids.has(id)) continue;
+      result.set(id, {
+        author: { githubId: String(row.author_id), login: row.author_login },
+        body: row.body,
+        at: row.at,
+        updatedAt: row.updated_at || '',
+      });
+    }
+    return result;
+  }
+
+  /**
+   * One page of reviews. `sort` is 'newest' or 'helpful' (net upvotes, then
+   * newest); `textOnly` keeps reviews that carry text. JSON mode has no vote
+   * data, so 'helpful' falls back to stars there.
+   */
+  ratingsPage(packageName, { page = 1, perPage = 10, sort = 'newest', textOnly = false } = {}) {
+    const name = String(packageName);
+    const limit = Math.min(Math.max(1, Math.floor(Number(perPage) || 10)), 50);
+    const sortValue = sort === 'helpful' ? 'helpful' : 'newest';
+    if (!this.db) {
+      let all = this.ratingsFor(name).filter((entry) => !textOnly || entry.review !== '');
+      if (sortValue === 'helpful') {
+        all = [...all].sort((a, b) => b.stars - a.stars || String(b.at).localeCompare(String(a.at)));
+      }
+      const pages = Math.max(1, Math.ceil(all.length / limit));
+      const current = Math.min(Math.max(1, Math.floor(Number(page) || 1)), pages);
+      return {
+        items: all.slice((current - 1) * limit, current * limit),
+        total: all.length,
+        page: current,
+        pages,
+        perPage: limit,
+        sort: sortValue,
+        textOnly: Boolean(textOnly),
+      };
+    }
+    const textFilter = textOnly ? " AND review <> ''" : '';
+    const totalRow = this.db.get(
+      `SELECT COUNT(*) AS count FROM review_ratings WHERE package = ?${textFilter}`,
+      name,
+    );
+    const total = totalRow ? Number(totalRow.count) : 0;
+    const pages = Math.max(1, Math.ceil(total / limit));
+    const current = Math.min(Math.max(1, Math.floor(Number(page) || 1)), pages);
+    const order = sortValue === 'helpful'
+      ? `ORDER BY (SELECT COALESCE(SUM(v.value), 0) FROM review_votes v
+           WHERE v.package = review_ratings.package AND v.review_github_id = review_ratings.github_id) DESC,
+           at DESC, github_id`
+      : 'ORDER BY at DESC, github_id';
+    const items = this.db.all(
+      `SELECT * FROM review_ratings WHERE package = ?${textFilter} ${order} LIMIT ? OFFSET ?`,
+      name,
+      limit,
+      (current - 1) * limit,
+    ).map(ratingFromRow);
+    return {
+      items,
+      total,
+      page: current,
+      pages,
+      perPage: limit,
+      sort: sortValue,
+      textOnly: Boolean(textOnly),
+    };
   }
 
   /** Current reviewer decision for a package, or null. */

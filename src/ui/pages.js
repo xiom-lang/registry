@@ -886,6 +886,9 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
       summary: review.summary,
       myRating: review.myRating,
       canRate: review.canReport,
+      canVote: review.canVote,
+      canReply: review.canReply,
+      reviewList: review.reviewList,
       csrf: review.csrf,
     })
     : '';

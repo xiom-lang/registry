@@ -31,6 +31,7 @@ const NOTICE_KIND_LABELS = {
   report: 'report update',
   review: 'package decision',
   support: 'maintainer message',
+  'review-reply': 'review reply',
   'verify-email': 'email confirmation',
 };
 
@@ -475,6 +476,7 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('report', 'Report updates')}
       ${kindRow('review', 'Package review decisions')}
       ${kindRow('support', 'Messages from the community')}
+      ${kindRow('review-reply', 'Replies to your reviews')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
   </section>

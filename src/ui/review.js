@@ -147,22 +147,96 @@ function decisionControls({ name, csrf, decision = null }) {
 </form>`;
 }
 
-/** Public ratings and short reviews (the social layer's first slice). */
-function ratingsSection({ name, ratings = [], summary = { count: 0, average: 0 }, myRating = null, canRate = false, csrf = '' }) {
+/** Build a review-list URL for the sort/filter/page controls (A9). */
+function reviewListHref(name, { sort = 'newest', textOnly = false, page = 1 } = {}) {
+  const params = new URLSearchParams();
+  if (sort === 'helpful') params.set('reviews_sort', 'helpful');
+  if (textOnly) params.set('reviews_filter', 'text');
+  if (page > 1) params.set('reviews_page', String(page));
+  const query = params.toString();
+  return `/packages/${encodeURIComponent(name)}${query ? `?${query}` : ''}#reviews`;
+}
+
+/** Public ratings and short reviews with votes, replies, and list controls. */
+function ratingsSection({
+  name,
+  ratings = [],
+  summary = { count: 0, average: 0 },
+  myRating = null,
+  canRate = false,
+  canVote = false,
+  canReply = false,
+  reviewList = null,
+  csrf = '',
+}) {
   const stars = (count) => '\u2605'.repeat(count);
   const summaryLine = summary.count > 0
     ? `<span class="rating-average">${summary.average.toFixed(1)}</span>`
       + ` <span class="rating-stars" aria-hidden="true">${stars(Math.round(summary.average))}</span>`
       + ` <span class="pkg-meta">${summary.count} rating${summary.count === 1 ? '' : 's'}</span>`
     : '<span class="pkg-meta">No ratings yet.</span>';
-  const list = ratings.length === 0 ? '' : `<ul class="rating-list">
-${ratings.map((entry) => `  <li class="rating-item">
-    <span class="mono">@${escapeHtml(entry.login)}</span>
-    <span class="rating-stars" title="${entry.stars} of 5">${stars(entry.stars)}</span>
-    <span class="pkg-meta">${formatWhen(entry.at)}</span>
+  const controls = reviewList
+    ? `<nav class="review-controls" aria-label="Review list">
+    <a href="${reviewListHref(name, { sort: 'newest' })}"${reviewList.sort === 'newest' ? ' aria-current="true"' : ''}>Newest</a>
+    <a href="${reviewListHref(name, { sort: 'helpful' })}"${reviewList.sort === 'helpful' ? ' aria-current="true"' : ''}>Most helpful</a>
+    <a href="${reviewListHref(name, { textOnly: true, sort: reviewList.sort })}"${reviewList.textOnly ? ' aria-current="true"' : ''}>With text</a>
+    ${reviewList.textOnly ? `<a href="${reviewListHref(name, { sort: reviewList.sort })}">All</a>` : ''}
+    <span class="pkg-meta">${reviewList.total} review${reviewList.total === 1 ? '' : 's'}</span>
+  </nav>`
+    : '';
+  const list = ratings.length === 0
+    ? '<p class="pkg-meta">No reviews here yet.</p>'
+    : `<ul class="rating-list">
+${ratings.map((entry) => {
+    const votes = entry.votes || { up: 0, down: 0, mine: 0 };
+    const voteForm = canVote
+      ? `<form class="vote-form" method="post" action="/packages/${encodeURIComponent(name)}/reviews/${encodeURIComponent(entry.githubId)}/vote">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <button class="button vote-button" type="submit" name="value" value="up"
+        aria-label="Helpful" aria-pressed="${votes.mine === 1 ? 'true' : 'false'}">&#9650; ${votes.up}</button>
+      <button class="button vote-button" type="submit" name="value" value="down"
+        aria-label="Not helpful" aria-pressed="${votes.mine === -1 ? 'true' : 'false'}">&#9660; ${votes.down}</button>
+    </form>`
+      : `<span class="pkg-meta">&#9650; ${votes.up} &middot; &#9660; ${votes.down}</span>`;
+    const reply = entry.reply
+      ? `<div class="review-reply">
+      <p class="pkg-meta"><span class="status-pill status-approved">maintainer</span>
+        @${escapeHtml(entry.reply.author.login)} &middot; ${formatWhen(entry.reply.at)}${entry.reply.updatedAt ? ' &middot; edited' : ''}</p>
+      <p class="pkg-desc">${escapeHtml(entry.reply.body)}</p>
+    </div>`
+      : '';
+    const replyForm = canReply
+      ? `<form class="reply-form" method="post" action="/packages/${encodeURIComponent(name)}/reviews/${encodeURIComponent(entry.githubId)}/reply">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <textarea name="message" rows="2" maxlength="500" placeholder="Reply as a maintainer"
+        aria-label="Maintainer reply" required>${escapeHtml(entry.reply ? entry.reply.body : '')}</textarea>
+      <button class="button" type="submit">${entry.reply ? 'Update reply' : 'Reply as maintainer'}</button>
+    </form>`
+      : '';
+    return `  <li class="rating-item">
+    <div class="request-head">
+      <span class="mono">@${escapeHtml(entry.login)}</span>
+      <span class="rating-stars" title="${entry.stars} of 5">${stars(entry.stars)}</span>
+      <span class="pkg-meta">${formatWhen(entry.at)}</span>
+    </div>
     ${entry.review ? `<p class="pkg-desc">${escapeHtml(entry.review)}</p>` : ''}
-  </li>`).join('\n')}
+    <div class="review-social">${voteForm}</div>
+    ${reply}
+    ${replyForm}
+  </li>`;
+  }).join('\n')}
 </ul>`;
+  const pagination = reviewList && reviewList.pages > 1
+    ? `<nav class="pagination review-pagination" aria-label="Review pages">
+    ${reviewList.page > 1
+      ? `<a href="${reviewListHref(name, { ...reviewList, page: reviewList.page - 1 })}">Previous</a>`
+      : ''}
+    <span class="pkg-meta">Page ${reviewList.page} of ${reviewList.pages}</span>
+    ${reviewList.page < reviewList.pages
+      ? `<a href="${reviewListHref(name, { ...reviewList, page: reviewList.page + 1 })}">Next</a>`
+      : ''}
+  </nav>`
+    : '';
   const form = canRate
     ? `<form class="rating-form" method="post" action="/packages/${encodeURIComponent(name)}/rating">
   <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
@@ -185,7 +259,9 @@ ${ratings.map((entry) => `  <li class="rating-item">
   return `<section class="ratings-box" id="reviews">
   <h2>Reviews</h2>
   <p class="rating-summary">${summaryLine}</p>
+  ${controls}
   ${list}
+  ${pagination}
   ${form}
 </section>`;
 }

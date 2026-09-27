@@ -1212,6 +1212,26 @@ textarea:focus-visible {
 .rating-item .pkg-desc { margin-top: 4px; }
 .rating-form { border-top: 1px solid var(--line); margin-top: var(--space-md); padding-top: var(--space-md); }
 
+/* Review votes, maintainer replies, and list controls (A9). */
+.review-controls { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.review-controls a[aria-current="true"] { color: var(--paper); font-weight: 600; }
+.review-social { margin-top: var(--space-xs); }
+.vote-form { display: flex; gap: var(--space-xs); }
+.vote-button { min-width: 64px; padding: 6px 10px; }
+.vote-button[aria-pressed="true"] { border-color: var(--signal); box-shadow: 0 0 0 2px var(--signal-glow); color: var(--signal); }
+.review-reply { border-left: 2px solid var(--line); margin-top: var(--space-sm); padding-left: var(--space-sm); }
+.reply-form { display: flex; flex-direction: column; gap: var(--space-xs); margin-top: var(--space-sm); }
+.reply-form textarea {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  font-family: inherit;
+  padding: var(--space-sm);
+  width: 100%;
+}
+.review-pagination { align-items: center; display: flex; gap: var(--space-md); justify-content: center; margin-top: var(--space-md); }
+
 /* README block on the package page (section 13). */
 .readme {
   border: 1px solid var(--line);

@@ -1508,12 +1508,13 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   assert.match(html, /name="claim" checked/);
   assert.match(html, /name="review" checked/);
   assert.match(html, /name="support" checked/);
+  assert.match(html, /name="review-reply" checked/);
   const csrf = csrfFrom(html);
 
   // Turn review notices off; claim, report, and support stay on.
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, claim: 'on', report: 'on', support: 'on' }),
+    body: new URLSearchParams({ csrf, claim: 'on', report: 'on', support: 'on', 'review-reply': 'on' }),
   });
   assert.equal(response.status, 303);
   assert.equal(response.headers.get('location'), '/account/settings?prefs=1');
@@ -1521,7 +1522,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     stored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: false, support: true },
+    { claim: true, report: true, review: false, support: true, 'review-reply': true },
   );
 
   response = await requestAs(member, '/account/settings', { headers: BROWSER });
@@ -1571,13 +1572,13 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const restoreCsrf = csrfFrom(await response.text());
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on' }),
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on' }),
   });
   assert.equal(response.status, 303);
   const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     restored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: true, support: true },
+    { claim: true, report: true, review: true, support: true, 'review-reply': true },
   );
 });
 
@@ -1674,7 +1675,7 @@ test('community members message maintainers, with limits, mutes, and abuse repor
   const settingsCsrf = csrfFrom(await response.text());
   response = await requestAs(maintainer, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: settingsCsrf, claim: 'on', report: 'on', review: 'on' }),
+    body: new URLSearchParams({ csrf: settingsCsrf, claim: 'on', report: 'on', review: 'on', 'review-reply': 'on' }),
   });
   assert.equal(response.status, 303);
 
@@ -1698,7 +1699,116 @@ test('community members message maintainers, with limits, mutes, and abuse repor
   const restoreCsrf = csrfFrom(await response.text());
   response = await requestAs(maintainer, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on' }),
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on' }),
   });
   assert.equal(response.status, 303);
+});
+// --- A9 review votes, maintainer reply, list UX (SESSION.md 21.9.3) -------
+
+test('reviews gain votes, a maintainer reply, and list controls', async () => {
+  const { notifications, reviews } = app.locals.registry;
+
+  // 888 votes up the review 777 left on readme-pkg in the rating test.
+  const voter = cookieJar();
+  await login(voter, 'plain-code'); // 888
+  let response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /Most helpful/);
+  assert.match(html, /With text/);
+  const csrf = csrfFrom(html);
+
+  response = await requestAs(voter, '/packages/readme-pkg/reviews/777/vote', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, value: 'up' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/readme-pkg?voted=1#reviews');
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /aria-pressed="true"/, 'the active vote is marked');
+  assert.match(html, /&#9650; 1/);
+
+  // Casting the same value again removes the vote (toggle).
+  response = await requestAs(voter, '/packages/readme-pkg/reviews/777/vote', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, value: 'up' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /&#9650; 0/);
+
+  // A review of one's own cannot be voted on: 888 rates, then self-votes.
+  response = await requestAs(voter, '/packages/readme-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, stars: '4', review: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(voter, '/packages/readme-pkg/reviews/888/vote', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, value: 'up' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /cannot vote on your own review/);
+
+  // 888 maintains readme-pkg (verified claim), so 888 can reply to 777.
+  response = await requestAs(voter, '/packages/readme-pkg/reviews/777/reply', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, message: 'Thanks, fixed in 1.0.1.' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/readme-pkg?replied=1#reviews');
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /status-approved">maintainer/);
+  assert.match(html, /Thanks, fixed in 1.0.1\./);
+
+  const notice = notifications.listFor('777')[0];
+  assert.equal(notice.kind, 'review-reply');
+  assert.equal(notice.subject, 'Maintainer replied to your review of readme-pkg');
+  assert.equal(notice.body, 'Thanks, fixed in 1.0.1.');
+  assert.equal(notice.link, '/packages/readme-pkg#reviews');
+
+  // Editing updates the same reply instead of adding another.
+  response = await requestAs(voter, '/packages/readme-pkg/reviews/777/reply', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, message: 'Thanks, fixed in 1.0.2.' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /fixed in 1\.0\.2/);
+  assert.match(html, /edited/);
+  assert.equal((html.match(/class="review-reply"/g) || []).length, 1);
+
+  // A non-maintainer cannot reply: 777 is a reviewer, not a maintainer here.
+  const outsider = cookieJar();
+  await login(outsider, 'user-code'); // 777
+  response = await requestAs(outsider, '/packages/readme-pkg', { headers: BROWSER });
+  const outsiderCsrf = csrfFrom(await response.text());
+  response = await requestAs(outsider, '/packages/readme-pkg/reviews/888/reply', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: outsiderCsrf, message: 'Me too.' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(outsider, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /only the package maintainers can reply/);
+
+  // Filters and pagination: 11 extra textless ratings make 13 rows over 2 pages.
+  for (let i = 0; i < 11; i++) {
+    reviews.rate('readme-pkg', { user: { githubId: String(200 + i), login: `ext${i}` }, stars: 3 });
+  }
+  response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /13 reviews/);
+  response = await requestAs(voter, '/packages/readme-pkg?reviews_page=2', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Page 2 of 2/);
+  assert.equal((html.match(/class="rating-item"/g) || []).length, 3);
+
+  response = await requestAs(voter, '/packages/readme-pkg?reviews_filter=text', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /1 review</, 'only the text review counts in the filter');
+  assert.equal((html.match(/class="rating-item"/g) || []).length, 1,
+    'only 777 wrote review text on this package');
 });
