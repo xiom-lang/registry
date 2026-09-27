@@ -2447,7 +2447,7 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.3.0** prepared on `main` (release commit); staging and production still run **2.2.0** until the ops deploy |
+| Live version | **2.3.0 live on staging and production** (`/health`, deployed 2026-09-27 21:35/21:43 UTC); email still `disabled` pending the D7 SMTP step |
 | Repo | `main` at the 2.3.0 release commit (A2 + D7 code + A7 + A8 + A3.1-3 + A9); working tree clean |
 | Tests | `npm test` **280/280**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
@@ -2575,9 +2575,12 @@ Cut after the three feature rounds of this session plus the storage moves:
   Requests and accounts remain for the next phase.
 
 `/whats-new` renders this changelog automatically and `/health` reports the
-version. Ops deploys `main` (staging first, then production); the owner then
-verifies the new surfaces on staging. The `SMTP_URL`/`SMTP_FROM` step from D7
-remains the only piece that needs the host, and is independent of the deploy.
+version. Ops deployed `main` on 2026-09-27: staging at 21:35 UTC and production
+at 21:43 UTC, both confirmed 2.3.0 with `email: disabled`; `live-check` green on
+both (276 artifacts verified, staging/production identity isolated) and the new
+surfaces (contact form, repository/issue links, review controls) confirmed on
+package pages. The `SMTP_URL`/`SMTP_FROM` step from D7 remains the only piece
+that needs the host, and is independent of the deploy.
 
 
 
