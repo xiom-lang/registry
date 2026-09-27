@@ -2447,9 +2447,9 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.2.0** on staging and production (`/health`); A2, D7 code, and A7 are on `main` and await the ops deploy |
-| Repo | `main` at `4872cf9` (A2 + D7 code + A7 + A8 + A3.1-2 + A9) + the docs commit; working tree clean |
-| Tests | `npm test` **279/279**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Live version | **2.3.0** prepared on `main` (release commit); staging and production still run **2.2.0** until the ops deploy |
+| Repo | `main` at the 2.3.0 release commit (A2 + D7 code + A7 + A8 + A3.1-3 + A9); working tree clean |
+| Tests | `npm test` **280/280**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2561,6 +2561,23 @@ scope change needed).
   passes on the notifications page, the settings email states, the dashboard
   email card, the contact form, the support notice, and the reviews section
   with votes/replies/pagination (mobile 390px + desktop).
+
+### 23.5 Release 2.3.0 (2026-09-27)
+
+Cut after the three feature rounds of this session plus the storage moves:
+
+- A2 notification coverage (owner-verified on staging) and D7 email delivery:
+  verified-address gate, retry/backoff, `/health` + dashboard visibility.
+- A7 community -> maintainer contact, A8 repository/issue links, A9 review
+  votes + maintainer reply + review list controls.
+- A3 SQLite phases 1-3a: ratings, reports/decisions, and trusted-publisher
+  entries imported from their JSON files, which stay as rollback mirrors.
+  Requests and accounts remain for the next phase.
+
+`/whats-new` renders this changelog automatically and `/health` reports the
+version. Ops deploys `main` (staging first, then production); the owner then
+verifies the new surfaces on staging. The `SMTP_URL`/`SMTP_FROM` step from D7
+remains the only piece that needs the host, and is independent of the deploy.
 
 
 

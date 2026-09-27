@@ -4,7 +4,7 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
-## [Unreleased]
+## [2.3.0] - 2026-09-27
 
 ### Notifications
 
@@ -74,13 +74,13 @@ The rendered version of this file is at `/whats-new`.
 ### Storage
 
 - **Reviews, ratings, and decisions move into the platform database**: star
-  ratings (`review_ratings`), the report queue (`review_reports`), and the
-  reviewer toggles with their history (`review_decisions` /
-  `review_decision_history`) now live in the SQLite store instead of
-  `reviews.json`. The JSON file is imported once per table on first start and
-  kept afterwards as a best-effort rollback mirror; no API, protocol, or UI
-  change. Requests, accounts, and publishers keep their JSON stores until the
-  next phase.
+  ratings (`review_ratings`), the report queue (`review_reports`), the reviewer
+  toggles with their history (`review_decisions` / `review_decision_history`),
+  and app-managed trusted-publisher entries (`stored_publishers`) now live in
+  the SQLite store instead of their JSON files. Each file is imported once on
+  first start and kept afterwards as a best-effort rollback mirror; no API,
+  protocol, or UI change. Requests and accounts keep their JSON stores until
+  the next phase.
 
 ### Compatibility
 
