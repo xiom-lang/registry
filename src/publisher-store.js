@@ -7,6 +7,10 @@
 // no restart. The read-only TRUSTED_PUBLISHERS_FILE stays the operator's
 // channel for first-party grants; this store is the community channel and
 // carries request provenance (who approved what, when) for the audit.
+//
+// A3 phase 3 (SESSION.md 18.2): with the shared platform `db`, entries live in
+// `stored_publishers`; publishers.json is imported once into an empty table
+// and kept afterwards as a best-effort rollback mirror. SQLite is primary.
 
 'use strict';
 
@@ -19,14 +23,31 @@ const { normalizePublishers } = require('./publishers');
 const PUBLISHERS_SCHEMA_VERSION = '1.0.0';
 const MAX_PUBLISHERS_BYTES = 1024 * 1024;
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 class PublisherStore {
   /**
-   * @param {{ path: string, maxBytes?: number }} options
+   * @param {{ path: string, maxBytes?: number, db?: import('./db').Database|null }} options
    */
-  constructor({ path, maxBytes = MAX_PUBLISHERS_BYTES }) {
+  constructor({ path, maxBytes = MAX_PUBLISHERS_BYTES, db = null }) {
     this.path = path;
     this.maxBytes = maxBytes;
+    this.db = db;
     this.entries = this.#read();
+    if (db) {
+      const imported = this.#importEntries();
+      this.#loadFromDb();
+      if (imported > 0) {
+        console.log(`xiom-registry: imported ${imported} trusted-publisher entries into SQLite`);
+      }
+    }
   }
 
   #read() {
@@ -71,6 +92,85 @@ class PublisherStore {
     return this.entries.find((entry) => entry.requestId === requestId) || null;
   }
 
+  /** Import publishers.json into an empty table (one-time move). */
+  #importEntries() {
+    const row = this.db.get('SELECT COUNT(*) AS count FROM stored_publishers');
+    if (row && Number(row.count) > 0) return 0;
+    this.db.exec('BEGIN');
+    try {
+      for (const entry of this.entries) this.#insertEntry(entry);
+      this.db.exec('COMMIT');
+      return this.entries.length;
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw new Error(`publisher import failed: ${err.message}`);
+    }
+  }
+
+  #insertEntry(entry) {
+    this.db.run(
+      `INSERT OR REPLACE INTO stored_publishers
+         (request_id, label, repository, workflow, refs, scopes, first_party, events, approved_by, approved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      entry.requestId,
+      entry.label,
+      entry.repository,
+      entry.workflow,
+      JSON.stringify(entry.refs || []),
+      JSON.stringify(entry.scopes || []),
+      entry.firstParty ? 1 : 0,
+      JSON.stringify(entry.events || []),
+      entry.approvedBy || '',
+      entry.approvedAt || '',
+    );
+  }
+
+  /** SQLite is primary: rebuild the in-memory set from the stored rows. */
+  #loadFromDb() {
+    this.entries = [];
+    for (const row of this.db.all('SELECT * FROM stored_publishers ORDER BY request_id')) {
+      const entry = {
+        label: row.label,
+        repository: row.repository,
+        workflow: row.workflow,
+        refs: parseJsonArray(row.refs),
+        scopes: parseJsonArray(row.scopes),
+        firstParty: row.first_party === 1,
+        events: parseJsonArray(row.events),
+        requestId: row.request_id,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+      };
+      try {
+        const [normalized] = normalizePublishers([entry], 'publishers state');
+        this.entries.push({
+          ...normalized,
+          requestId: entry.requestId,
+          approvedBy: entry.approvedBy,
+          approvedAt: entry.approvedAt,
+        });
+      } catch {
+        // A malformed row is dropped rather than refusing to boot.
+      }
+    }
+  }
+
+  /** Persist the current set: SQLite when present, then the JSON mirror. */
+  #persist() {
+    if (this.db) {
+      this.db.exec('BEGIN');
+      try {
+        this.db.run('DELETE FROM stored_publishers');
+        for (const entry of this.entries) this.#insertEntry(entry);
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`publisher write failed: ${err.message}`);
+      }
+    }
+    this.#write(this.entries);
+  }
+
   /**
    * Activate a trusted-publisher entry for an approved request.
    *
@@ -113,7 +213,8 @@ class PublisherStore {
       approvedBy: raw.approvedBy,
       approvedAt: raw.approvedAt,
     };
-    this.#commit([...this.entries, entry]);
+    this.entries = [...this.entries, entry];
+    this.#persist();
     return entry;
   }
 
@@ -126,11 +227,12 @@ class PublisherStore {
         'publisher_not_found',
       );
     }
-    this.#commit(this.entries.filter((item) => item.requestId !== requestId));
+    this.entries = this.entries.filter((item) => item.requestId !== requestId);
+    this.#persist();
     return entry;
   }
 
-  #commit(next) {
+  #write(next) {
     const serialized = JSON.stringify({
       version: PUBLISHERS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
@@ -140,7 +242,6 @@ class PublisherStore {
       throw new Error(`publishers state would exceed ${this.maxBytes} bytes`);
     }
     atomicWriteFile(this.path, serialized);
-    this.entries = next;
   }
 }
 

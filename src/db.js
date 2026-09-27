@@ -185,6 +185,29 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '008-stored-publishers',
+    up(db) {
+      // A3 phase 3 (SESSION.md 18.2): app-managed trusted-publisher entries
+      // move to SQLite with the import + JSON mirror contract. Everything is
+      // re-validated through normalizePublishers on load, so an edited row is
+      // dropped rather than trusted.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS stored_publishers (
+          request_id TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          repository TEXT NOT NULL,
+          workflow TEXT NOT NULL,
+          refs TEXT NOT NULL DEFAULT '[]',
+          scopes TEXT NOT NULL DEFAULT '[]',
+          first_party INTEGER NOT NULL DEFAULT 0,
+          events TEXT NOT NULL DEFAULT '[]',
+          approved_by TEXT NOT NULL DEFAULT '',
+          approved_at TEXT NOT NULL DEFAULT ''
+        );
+      `);
+    },
+  },
 ];
 
 class Database {

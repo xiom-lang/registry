@@ -11,6 +11,7 @@ const os = require('os');
 const path = require('path');
 
 const { PublisherStore } = require('../src/publisher-store');
+const { Database } = require('../src/db');
 
 function store() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-publishers-'));
@@ -81,4 +82,47 @@ test('removes the entry for a request and drops malformed stored entries', () =>
   }));
   const loaded = new PublisherStore({ path: publishers.path });
   assert.deepEqual(loaded.list().map((entry) => entry.repository), ['bob/good']);
+});
+
+// ─── A3 phase 3: entries in SQLite (SESSION.md 18.2) ──────────────────────
+
+test('entries import from publishers.json into SQLite and then live there', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-publishers-db-'));
+  const file = path.join(dir, 'publishers.json');
+  fs.writeFileSync(file, JSON.stringify({ version: '1.0.0', entries: [] }));
+  const db = new Database({ path: path.join(dir, 'registry.db') });
+  try {
+    const publishers = new PublisherStore({ path: file, db });
+
+    // Add and remove write SQLite and refresh the JSON mirror.
+    const added = publishers.add(APPROVAL);
+    assert.equal(added.requestId, APPROVAL.requestId);
+    assert.equal(Number(db.get('SELECT COUNT(*) AS count FROM stored_publishers').count), 1);
+    const mirrored = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    assert.equal(mirrored.entries.length, 1);
+    assert.equal(mirrored.entries[0].requestId, APPROVAL.requestId);
+
+    // Reloading reads the live matchers back from SQLite.
+    const reopened = new PublisherStore({ path: file, db });
+    assert.equal(reopened.list().length, 1);
+    assert.equal(reopened.list()[0].refMatchers[0].test('refs/heads/main'), true);
+
+    publishers.remove(APPROVAL.requestId);
+    assert.equal(Number(db.get('SELECT COUNT(*) AS count FROM stored_publishers').count), 0);
+
+    // A stale JSON file can never win once SQLite has rows.
+    publishers.add({
+      requestId: 'req_eeeeeeeeeeee',
+      repository: 'carol/live',
+      workflow: 'publish-registry.yml',
+      refs: ['refs/heads/main'],
+      scopes: ['live-lib'],
+      approvedBy: 'root',
+    });
+    fs.writeFileSync(file, JSON.stringify({ version: '1.0.0', entries: [APPROVAL] }));
+    const reloaded = new PublisherStore({ path: file, db });
+    assert.deepEqual(reloaded.list().map((entry) => entry.requestId), ['req_eeeeeeeeeeee']);
+  } finally {
+    db.close();
+  }
 });

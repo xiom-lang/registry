@@ -200,6 +200,7 @@ function createApp(config = loadConfig()) {
   const publisherStore = new PublisherStore({
     path: config.storedPublishersPath,
     maxBytes: config.maxPublishersBytes,
+    db,
   });
   // Package ownership claims: display-only maintainer identity derived from
   // provenance/approved requests plus verified claims (SESSION.md 21 A1).
