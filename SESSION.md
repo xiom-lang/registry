@@ -1953,22 +1953,28 @@ ordered list. Nothing here changes the publish protocol or the 2.0/2.1
 guarantees (sessions never publish, no platform signing keys for community
 packages, every decision audited, `/index.json` immutable in shape).
 
-**Status 2026-09-27:** 2.2.0 is live on staging and production (maintainer
-identity A1, moderation toggles, state-aware icons, stage overrides, rate-limit
-and ops hardening; see 21.1-21.8). The owner verified the claim approve/reject,
-report, and icon flows on staging. Remaining roadmap items below are unchanged
-unless noted.
+**Status 2026-09-27 (evening):** 2.2.0 is live on staging and production
+(maintainer identity A1, moderation toggles, state-aware icons, stage overrides,
+rate-limit and ops hardening; see 21.1-21.8). A2 is shipped in code
+(`616a800`, `2ff1e43`) and verified by the owner on staging; production
+promotion is pending ops. The owner verified the claim approve/reject, report,
+and icon flows on staging. Owner feedback from the A2 test round (notification
+email, community->maintainer contact, review votes/replies) is recorded in
+21.9 and tracked as A7-A9, D7.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
 | Order | Feature | Notes / source | Size |
 |---|---|---|---|
 | A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
-| A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
+| A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. **DONE 2026-09-27 (`616a800` store, `2ff1e43` events/UI) -- see 23; owner-verified on staging.** | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
+| A7 | **Community -> maintainer contact** | Owner feedback 2026-09-27 (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. | M |
+| A8 | **Repository / issue-tracker links** | Owner feedback 2026-09-27 (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. | S |
+| A9 | **Review votes, maintainer reply, list UX** | Owner feedback 2026-09-27 (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
 `Maintainers` section built from data the registry already holds -- repository
@@ -2177,6 +2183,76 @@ three sources plus an HTTP assertion in the claim flow; 248 unit tests and
 
 
 
+**21.9 Owner feedback from the A2 test round (2026-09-27, evening).**
+Recorded here, tracked as A7-A9 and D7. Positions below are the engineering
+assessment; items marked *open* need an owner decision.
+
+**21.9.1 In-app works, email does not (owner finding).** Diagnosis: not a code
+bug. `createMailer` (`src/mailer.js`) returns `enabled: false` unless **both**
+`SMTP_URL` and `SMTP_FROM` are set; `drain()` then returns 0. `enqueue` writes
+`email_status = 'pending'` for a row with an address and nothing ever changes
+it. Enabling app email was already open ops work (19 "Open backlog", 20.7:
+"enable the fulfiller worker on the VPS ... and app email"), and 18 records the
+from-address rule (ops 2026-09-26): use an `xiom-lang.org` address because
+generic mail from the VPS host domain is rejected by Gmail. The send path
+itself is covered by `test/notifications.test.js` (fake sender, sent/failed
+statuses), so the missing piece is the VPS environment.
+Ops checklist: set `SMTP_URL`/`SMTP_FROM` in `/opt/xiom/registry/.env`, recreate
+`registry` (both compose services already pass the vars through), verify with
+`docker logs xiom-registry | grep 'notification email'` (a broken relay logs
+`failed: ...`) and confirm a real account receives one. Two cautions:
+(a) all queued `pending` rows deliver on the first successful drain -- decide
+whether pre-cutover rows should be marked `skipped` first; (b) `notifyEmail` is
+self-asserted, so enabling SMTP without address verification lets an account
+send registry notices to arbitrary addresses (D7 gate).
+
+**21.9.2 Reports stay admin-only; add a separate maintainer contact.** The
+observed behavior (a report notifies the reporter of the outcome; maintainers
+are notified only on package decisions) is intentional and should stay. A
+report is an unverified allegation, often *about* the maintainer, so routing it
+to them invites retaliation and chilling effects; moderation belongs with
+admins/reviewers who can see the whole picture. What the owner wants -- the
+community reaching maintainers directly instead of through admins -- is a
+different intent and gets its own channel (A7): a package-scoped support
+message from a signed-in account, rate-limited, stored as a `support`
+notification, muteable, and itself reportable if abused. Best-practice routing
+for a growing community: recipients come from relationships (reporter,
+claimant, maintainers, reviewers), never from a global admin inbox; admins are
+moderators and a fallback, not a switchboard.
+
+**21.9.3 Review votes and maintainer reply.** Agreed, with constraints:
+- one vote per account per review, toggleable/changeable (`UNIQUE(review_id,
+  github_id)` once reviews move to SQLite, A3); counts public, voter identity
+  private (stored for abuse handling, never rendered); the review author cannot
+  vote on their own review; per-account rate limit.
+- maintainers reply with **one flat reply per review**, labelled as a
+  maintainer response, no nested threads; replying notifies the review author
+  (new structured kind, muteable). Maintainers should reply rather than vote on
+  reviews of their own package.
+- *Open:* whether a vote can carry a short justification. Recommendation:
+  defer public vote comments (they become a second comment system to moderate);
+  the reply plus an editable review covers the same ground for now. If added
+  later, show it collapsed and admin-visible for abuse.
+- filters (with text, most helpful, newest, per version) and pagination land
+  with A3/A4; reviews currently render as one list.
+
+**21.9.4 Repository / issue links.** Agreed, small win (A8): the package page
+already has provenance; when the repository is `github.com/<owner>/<repo>`,
+render Repository + "Open an issue" links (`rel="noopener"`). This also gives
+the A7 support channel a natural "the maintainers prefer issues" path. No link
+when provenance carries no repository.
+
+**21.9.5 Notification matrix after A7/A9** (kind -> audience, all muteable on
+the account):
+| Event | Recipients | Kind |
+|---|---|---|
+| Claim verified/rejected | claimant | `claim` |
+| Report resolved/dismissed | reporter (admins see the queue, not a notice) | `report` |
+| Package decision | package maintainers with accounts | `review` |
+| Support message sent | package maintainers with accounts | `support` (A7) |
+| Maintainer reply to a review | review author | `reviewReply` (A9) |
+
+
 ### Track B -- publishing DX (client + registry, section 20.7)
 
 | Order | Feature | Notes | Size |
@@ -2207,6 +2283,7 @@ three sources plus an HTTP assertion in the claim flow; 248 unit tests and
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
 | D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
 | D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
+| D7 | **Notification email enablement + observability** | Owner finding 2026-09-27 (21.9.1): in-app notices work but no email is sent because `SMTP_URL`/`SMTP_FROM` are unset on the VPS (`mailer.enabled=false`, rows stay `pending`). Ops sets both (from-address on `xiom-lang.org`; SPF/DKIM/MX are live) and decides the queued-backlog policy. Code half: boot log + mailer status on `/health` and/or the console, outbox counts (pending/sent/failed) with a retry/backoff policy for `failed`, per-row email status. **Gate:** `notifyEmail` is self-asserted, so verify addresses (double opt-in or the `user:email` scope) before any send; unset SMTP keeps the abuse vector dormant. | M (ops+code) |
 
 ### Explicit non-goals (unchanged)
 
@@ -2367,16 +2444,24 @@ verified-address sub-item still waits on the GitHub app config decision.
 
 ### 23.3 Next actions, in order
 
-1. **A3 -- SQLite primary store** (the next item up; scope to be agreed with
-   the owner).
-2. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
-3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
+1. **2.2.x cleanup round (owner feedback, 21.9): D7 email enablement first**
+   (ops sets SMTP, code adds the verified-address gate + outbox visibility),
+   then **A7 community->maintainer contact** and **A8 repository/issue links**
+   -- both directly answer the owner's community-reach problem and are small;
+   A9 (votes/reply/pagination) rides with A3's SQLite move. Owner to confirm
+   this order against A3.
+2. **A3 -- SQLite primary store** (was the next item up; scope to be agreed
+   with the owner).
+3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
+4. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
    bundle** (this is what the playground's C3 waits on).
-4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
-5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
+5. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+6. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
    template removal, D3 audit pagination when tables grow, D4 backup drill,
-   D5 batch rate-limit profile documented, D6 cap retune after L0.
-6. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
+   D5 batch rate-limit profile documented, D6 cap retune after L0, **D7 SMTP
+   enablement (xiom-lang.org from-address; decide the pending-backlog policy
+   before the first drain)**.
+7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
    then production; confirm `/health` and the notifications page render.
 
 ### 23.4 A2 implementation notes (for the next session)
