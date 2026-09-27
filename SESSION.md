@@ -2215,4 +2215,125 @@ packages, and rewriting the registry in XIOM before selfhost is stable
 (section 7). A browser session never becomes a publish credential in any of
 the above.
 
+---
+
+## 22. Session handoff (2026-09-27)
+
+### 22.1 State snapshot
+
+| Item | Value |
+|---|---|
+| Live version | **2.2.0** on staging (219 packages) and production (277 packages) |
+| Repo | `main` at `bd44223`, working tree clean; CI green on every push |
+| Tests | `npm test` **248/248**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
+| Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
+| Batch publish | Ops raises `PUBLISH_RATE_MAX=600` for eco batch windows and restores 20 after (D5); the value now reaches the container because compose declares it |
+| Owner-verified | Claim approve/reject, report resolve/dismiss, and icons on publish + admin state changes, all on staging 2.2.0 |
+
+### 22.2 What shipped this session (in order)
+
+- `5c432ee` mobile-first UI, format helpers, labelled rows.
+- `c8dfc31` account overview/requests/notifications/settings.
+- `a39962c` admin console, SQLite roles/states/audit, mute semantics.
+- `5bc9f51` `/publish` guide from git + PUBLISHING.md rewrite + issue-template removal.
+- `57be0ba` A1 package ownership claims; `c2fb136` docs.
+- `efa7073` image ships PUBLISHING.md + lazy guide read + CI image smoke.
+- `8fb8cae` trust-proxy rate-limit fix (hop count, never a boolean).
+- `a06c9fc`/`394db71` resource caps + declared rate-limit env knobs.
+- `8723d3c`/`2c3ce1e`/`80347ea` decision audit fixes, stage persistence, icon state guarantee.
+- `4fa7756` audited stage overrides (`stage-overrides.json`, generator, audit row).
+- `5520e7e` independent flag/mute toggles + console state icons.
+- `e6bcff4` `/admin/claims` + "already listed" explanation.
+- `26c205a` "Packages you maintain" on the account overview.
+- `3990278` release 2.2.0 (CHANGELOG + version); `bd44223` roadmap refresh.
+
+### 22.3 Next actions, in order
+
+1. **A2 -- notification coverage** (next session's task; scope in 22.4).
+2. A3 SQLite primary store; A4 contributor profiles + sponsors; A5 feeds;
+   A6 sponsorship badge.
+3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
+   bundle** (this is what the playground's C3 waits on).
+4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
+   template removal, D3 audit pagination when tables grow, D4 backup drill,
+   D5 batch rate-limit profile documented, D6 cap retune after L0.
+
+### 22.4 A2 scope (agreed with the owner, 2026-09-27)
+
+Add notification rows (existing `NotificationStore`, in-app notices page +
+optional email when SMTP is configured) for events that currently dead-end:
+
+- **Ownership claim decided** (verified or rejected) -> notify the claimant,
+  linking to `/packages/<name>#maintainers`. This is the gap the owner just
+  walked into: the outcome is only visible by revisiting the page.
+- **Report resolved/dismissed** -> notify the reporter, linking to the
+  package page.
+- **Package decision** (`review`/`flag`/`mute`/`unflag`/`unmute`/`unreview`)
+  -> notify every maintainer of the package **who has a registry account**
+  (match derived/verified maintainer logins against `accounts.list()`; the
+  ones without accounts cannot receive in-app notices).
+- Keep the notification kinds structured (`claim`, `report`, `review`) so
+  per-kind muting can be added in the account settings (checkboxes stored on
+  the account, default all on). Email only when `notifyEmail` is set; no
+  change to who can receive.
+- Events must never fail the underlying action: enqueue is best-effort like
+  the existing fulfilment notices.
+- Optional sub-item (only if the GitHub app config is agreed): request
+  `user:email` and store the verified primary address as a *verified* flag;
+  do not block A2 on it.
+
+Tests: one HTTP/unit test per event (row created, right recipient, right
+link), a mute test, and a no-account maintainer case; keep
+`npm test`/`npm run test:e2e` green; then DCO commit, push, CI, and hand the
+deploy to ops (staging -> production).
+
+### 22.5 Copy-paste prompt for the next session
+
+```text
+Work in the xiom-lang/registry repository (E:\xiom-lang\registry). Read
+SESSION.md section 22 first; it is the current handoff. Staging and
+production both run 2.2.0 (https://staging.registry.xiom-lang.org is the
+feature-test instance; data goes directly to production per the 2026-09-26
+policy).
+
+Task, in order:
+
+1. Verify the state: git pull, git status clean, npm test (expect 248) and
+   npm run test:e2e (expect 20); check /health on staging and production.
+
+2. Implement A2 notification coverage exactly as scoped in SESSION.md 22.4:
+   - notify the claimant when a maintainer claim is verified or rejected;
+   - notify the reporter when their report is resolved or dismissed;
+   - notify the package's maintainers who have registry accounts when a
+     package decision (review/flag/mute/unflag/unmute/unreview) is applied;
+   - structured notification kinds (claim/report/review), per-kind mute
+     checkboxes in /account/settings stored on the account (default on),
+     email only when notifyEmail is set, enqueue best-effort so a
+     notification failure never fails the action;
+   - UI stays server-rendered and mobile-first; no /index.json protocol
+     change; sessions never publish.
+
+3. Tests: one focused test per event (row created, correct recipient, correct
+   link), a mute test, and a maintainer-without-account case. Run the full
+   suites before claiming anything done (npm test and npm run test:e2e), plus
+   a local visual check of the notifications page on mobile.
+
+4. Documentation: update SESSION.md (mark A2 done with commit hash and move
+   the next item up) and CHANGELOG.md under an Unreleased/next-version
+   section; keep the 2.2 guarantees.
+
+5. DCO-signed conventional commits, push to main, watch CI
+   (gh run watch) to green, then hand the deploy to ops (git pull + recreate,
+   staging first, then production).
+
+Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
+approval/decision audited, one-click trusted publishers, /index.json
+protocol untouched); use the repo's store patterns (JSON stores with
+allowlist normalization + atomic writes, or SQLite via src/db.js);
+never hand-edit data files on the VPS.
+```
+
+
 
