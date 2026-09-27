@@ -767,3 +767,24 @@ test('download route ignores negotiation and always serves bytes', async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'application/gzip');
 });
+
+test('provenance repository links are GitHub-shaped or absent', () => {
+  const { provenanceRepository } = require('../src/ui/pages');
+  const withRepo = (repository) => ({ versions: { '1.0.0': { publisher: { repository } } } });
+  assert.equal(
+    provenanceRepository(withRepo('user-user/notify-decision-pkg')).url,
+    'https://github.com/user-user/notify-decision-pkg',
+  );
+  assert.equal(
+    provenanceRepository(withRepo('user-user/repo.git')).url,
+    'https://github.com/user-user/repo',
+  );
+  assert.equal(provenanceRepository(withRepo('not-a-repo')), null);
+  assert.equal(provenanceRepository(withRepo('two/parts/here')), null);
+  assert.equal(provenanceRepository(withRepo('../../evil')), null);
+  assert.equal(provenanceRepository(withRepo('owner/re po')), null);
+  assert.equal(provenanceRepository({ versions: {} }), null);
+  assert.equal(provenanceRepository(null), null);
+  // The manifest `repository` field is not provenance and is not used here.
+  assert.equal(provenanceRepository({ repository: 'https://github.com/x/y', versions: {} }), null);
+});

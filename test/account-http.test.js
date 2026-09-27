@@ -1594,6 +1594,11 @@ test('community members message maintainers, with limits, mutes, and abuse repor
   let response = await requestAs(member, '/packages/notify-decision-pkg', { headers: BROWSER });
   let html = await response.text();
   assert.match(html, /Contact maintainers/);
+  // A8: provenance offers the repository and the issue-tracker escape hatch.
+  assert.match(html, /href="https:\/\/github.com\/user-user\/notify-decision-pkg"/);
+  assert.match(html, /href="https:\/\/github.com\/user-user\/notify-decision-pkg\/issues\/new"/);
+  const plain = await requestAs(member, '/packages/readme-pkg', { headers: BROWSER });
+  assert.doesNotMatch(await plain.text(), /issues\/new/, 'no provenance means no issue link');
   const csrf = csrfFrom(html);
   response = await requestAs(member, '/packages/notify-decision-pkg/contact', {
     method: 'POST',

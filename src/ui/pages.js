@@ -712,12 +712,39 @@ const SUPPORT_REASON_LABELS = {
   other: 'Other',
 };
 
+// A8 (SESSION.md 21.9.4): the published-version provenance stores
+// `owner/repo`; only a safe GitHub-shaped pair becomes a link.
+const SAFE_REPO_PART = /^[A-Za-z0-9._-]+$/;
+
+/** @returns {{ repository: string, url: string }|null} */
+function provenanceRepository(pkg) {
+  for (const version of Object.values((pkg && pkg.versions) || {})) {
+    const raw = version && version.publisher && typeof version.publisher.repository === 'string'
+      ? version.publisher.repository.trim().replace(/\.git$/, '')
+      : '';
+    const parts = raw.split('/');
+    if (parts.length !== 2) continue;
+    const [owner, repo] = parts;
+    if (!SAFE_REPO_PART.test(owner) || !SAFE_REPO_PART.test(repo)) continue;
+    if (owner.startsWith('.') || repo.startsWith('.')) continue;
+    if (raw.length > 140) continue;
+    return { repository: raw, url: `https://github.com/${raw}` };
+  }
+  return null;
+}
+
 /**
- * Community -> maintainer contact (A7). Signed-in accounts get a package-scoped
- * message form; the report queue stays separate and admin-only.
+ * Community -> maintainer contact (A7) plus the repository/issue escape hatch
+ * (A8). Signed-in accounts get a package-scoped message form; the report queue
+ * stays separate and admin-only.
  */
-function contactBlock({ name, support }) {
+function contactBlock({ name, support, pkg }) {
   if (!support) return '';
+  const repo = provenanceRepository(pkg);
+  const repoLinks = repo
+    ? `<p class="pkg-meta">Prefer GitHub? <a href="${escapeHtml(repo.url)}" rel="noopener">Repository</a>
+     &middot; <a href="${escapeHtml(repo.url)}/issues/new" rel="noopener">Open an issue</a></p>`
+    : '';
   const options = (support.reasons || Object.keys(SUPPORT_REASON_LABELS))
     .map((reason) => `<option value="${escapeHtml(reason)}">${escapeHtml(SUPPORT_REASON_LABELS[reason] || reason)}</option>`)
     .join('\n      ');
@@ -743,6 +770,7 @@ function contactBlock({ name, support }) {
     : 'A direct line to the package maintainers.'}
      For a problem with the package itself, use <a href="#review">Report this package</a> instead;
      moderators handle reports.</p>
+  ${repoLinks}
   ${support.notice ? `<p class="notice" role="status">${escapeHtml(support.notice)}</p>` : ''}
   ${support.error ? `<p class="error-box" role="alert">${escapeHtml(support.error)}</p>` : ''}
   ${form}
@@ -908,7 +936,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
     signedIn: Boolean(review && review.canReport),
     csrf: review ? review.csrf : '',
   })}
-  ${contactBlock({ name, support: options.support || null })}
+  ${contactBlock({ name, support: options.support || null, pkg })}
   ${integrityBlock}
   ${trustNote}
   ${readmeBlock}
@@ -956,6 +984,7 @@ module.exports = {
   packageTrustChips,
   maintainersBlock,
   contactBlock,
+  provenanceRepository,
   setStageOverrides,
   effectiveStage,
   paginatePackages,
