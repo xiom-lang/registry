@@ -1972,9 +1972,9 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
-| A7 | **Community -> maintainer contact** | Owner feedback 2026-09-27 (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. | M |
-| A8 | **Repository / issue-tracker links** | Owner feedback 2026-09-27 (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. | S |
-| A9 | **Review votes, maintainer reply, list UX** | Owner feedback 2026-09-27 (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
+| A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. | M |
+| A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. | S |
+| A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
 `Maintainers` section built from data the registry already holds -- repository
@@ -2184,8 +2184,9 @@ three sources plus an HTTP assertion in the claim flow; 248 unit tests and
 
 
 **21.9 Owner feedback from the A2 test round (2026-09-27, evening).**
-Recorded here, tracked as A7-A9 and D7. Positions below are the engineering
-assessment; items marked *open* need an owner decision.
+Recorded here, tracked as A7-A9 and D7. **The owner agreed to all four items on
+2026-09-27**; the single open question (vote justifications) was decided to
+defer, and the agreed build order is D7 -> A7 -> A8 -> A3 (A9 rides with A3).
 
 **21.9.1 In-app works, email does not (owner finding).** Diagnosis: not a code
 bug. `createMailer` (`src/mailer.js`) returns `enabled: false` unless **both**
@@ -2229,10 +2230,10 @@ moderators and a fallback, not a switchboard.
   maintainer response, no nested threads; replying notifies the review author
   (new structured kind, muteable). Maintainers should reply rather than vote on
   reviews of their own package.
-- *Open:* whether a vote can carry a short justification. Recommendation:
-  defer public vote comments (they become a second comment system to moderate);
-  the reply plus an editable review covers the same ground for now. If added
-  later, show it collapsed and admin-visible for abuse.
+- **Decided (owner, 2026-09-27): no public vote justifications for now.** They
+  become a second comment system to moderate; the reply plus an editable review
+  covers the same ground. If added later, show it collapsed and admin-visible
+  for abuse.
 - filters (with text, most helpful, newest, per version) and pagination land
   with A3/A4; reviews currently render as one list.
 
@@ -2251,6 +2252,12 @@ the account):
 | Package decision | package maintainers with accounts | `review` |
 | Support message sent | package maintainers with accounts | `support` (A7) |
 | Maintainer reply to a review | review author | `reviewReply` (A9) |
+
+**Agreed build order (owner, 2026-09-27):** **D7** first (email unblocks every
+notification already shipped), then **A7** (maintainer contact) and **A8**
+(repository/issue links), then **A3** (A9 rides with the SQLite move; A4-A6
+after). A2's production promotion stays with ops and is independent of this
+order.
 
 
 ### Track B -- publishing DX (client + registry, section 20.7)
@@ -2283,7 +2290,7 @@ the account):
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
 | D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
 | D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
-| D7 | **Notification email enablement + observability** | Owner finding 2026-09-27 (21.9.1): in-app notices work but no email is sent because `SMTP_URL`/`SMTP_FROM` are unset on the VPS (`mailer.enabled=false`, rows stay `pending`). Ops sets both (from-address on `xiom-lang.org`; SPF/DKIM/MX are live) and decides the queued-backlog policy. Code half: boot log + mailer status on `/health` and/or the console, outbox counts (pending/sent/failed) with a retry/backoff policy for `failed`, per-row email status. **Gate:** `notifyEmail` is self-asserted, so verify addresses (double opt-in or the `user:email` scope) before any send; unset SMTP keeps the abuse vector dormant. | M (ops+code) |
+| D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1 finding): in-app notices work but no email is sent because `SMTP_URL`/`SMTP_FROM` are unset on the VPS (`mailer.enabled=false`, rows stay `pending`). Ops sets both (from-address on `xiom-lang.org`; SPF/DKIM/MX are live) and decides the queued-backlog policy. Code half: boot log + mailer status on `/health` and/or the console, outbox counts (pending/sent/failed) with a retry/backoff policy for `failed`, per-row email status. **Gate:** `notifyEmail` is self-asserted, so verify addresses (double opt-in or the `user:email` scope) before any send; unset SMTP keeps the abuse vector dormant. | M (ops+code) |
 
 ### Explicit non-goals (unchanged)
 
@@ -2444,14 +2451,13 @@ verified-address sub-item still waits on the GitHub app config decision.
 
 ### 23.3 Next actions, in order
 
-1. **2.2.x cleanup round (owner feedback, 21.9): D7 email enablement first**
-   (ops sets SMTP, code adds the verified-address gate + outbox visibility),
-   then **A7 community->maintainer contact** and **A8 repository/issue links**
-   -- both directly answer the owner's community-reach problem and are small;
-   A9 (votes/reply/pagination) rides with A3's SQLite move. Owner to confirm
-   this order against A3.
-2. **A3 -- SQLite primary store** (was the next item up; scope to be agreed
-   with the owner).
+1. **2.2.x cleanup round (owner-agreed order, 21.9): D7 email enablement
+   first** (ops sets SMTP, code adds the verified-address gate + outbox
+   visibility), then **A7 community->maintainer contact**, then **A8
+   repository/issue links**, then **A3 with A9 riding on it**. A9 must not
+   ship before the SQLite move.
+2. **A3 -- SQLite primary store** (scope to be agreed with the owner when its
+   turn comes; A9 needs its unique vote index).
 3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
 4. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
    bundle** (this is what the playground's C3 waits on).
