@@ -1953,12 +1953,18 @@ ordered list. Nothing here changes the publish protocol or the 2.0/2.1
 guarantees (sessions never publish, no platform signing keys for community
 packages, every decision audited, `/index.json` immutable in shape).
 
+**Status 2026-09-27:** 2.2.0 is live on staging and production (maintainer
+identity A1, moderation toggles, state-aware icons, stage overrides, rate-limit
+and ops hardening; see 21.1-21.8). The owner verified the claim approve/reject,
+report, and icon flows on staging. Remaining roadmap items below are unchanged
+unless noted.
+
 ### Track A -- finish the community layer (the section 18 expansion)
 
 | Order | Feature | Notes / source | Size |
 |---|---|---|---|
 | A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
-| A2 | **Notification coverage** | 18.1: review decisions and ratings writes as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
+| A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. Unlocks feeds, pagination, analytics. Keep `/index.json` out of it. | M |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
@@ -2187,7 +2193,7 @@ three sources plus an HTTP assertion in the claim flow; 248 unit tests and
 |---|---|---|---|
 | C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). | M |
 | C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. | S |
-| C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. | L |
+| C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). | L |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
 | C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. | M |
 
