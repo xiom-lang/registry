@@ -2201,18 +2201,16 @@ generic mail from the VPS host domain is rejected by Gmail. The send path
 itself is covered by `test/notifications.test.js` (fake sender, sent/failed
 statuses), so the missing piece is the VPS environment.
 **Code half shipped 2026-09-27** (`4110752` outbox retry/backoff + migration
-003, `014f156` verified-address gate + observability): saved addresses are
-unverified until a single-use 24h confirmation link is opened, only verified
-addresses queue email, `/health` reports `email: enabled|disabled`, the dashboard
-shows outbox counts and recent failures, and failed sends retry with backoff
-before giving up. Migration 003 also skips the pre-gate `pending` backlog once,
-so nothing queued before the gate can ever deliver.
-Ops checklist (the remaining half): set `SMTP_URL`/`SMTP_FROM` in
-`/opt/xiom/registry/.env`, recreate `registry` (both compose services already
-pass the vars through), verify with `/health` (`email: enabled`) and
-`docker logs xiom-registry | grep 'notification email'` (a broken relay logs
-`attempt N failed: ...`), then confirm a real account that has opened its
-confirmation link receives one.
+003, `014f156` verified-address gate + observability), **host half DONE the
+same day**: authenticated SMTP on 465 as `registry@xiom-lang.org` on both
+environments, `/health` reports `email: enabled`, staging delivery confirmed
+externally with clean DKIM. One follow-up defect found in real mail: the email
+text carried app-relative links (`/account/verify-email?token=...`), which are
+not clickable in a mail client. **Fixed in 2.3.1** (`emailLink()` in
+`src/mailer.js` absolutizes against `REGISTRY_URL` for the email channel only;
+in-app notices keep the relative link). Previously queued notices are never
+backfilled: the gate attaches an email only when the address is verified at
+enqueue time, by design.
 
 **21.9.2 Reports stay admin-only; add a separate maintainer contact.** The
 observed behavior (a report notifies the reporter of the outcome; maintainers
@@ -2447,9 +2445,9 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.3.0 live on staging and production** (`/health`, deployed 2026-09-27 21:35/21:43 UTC); email still `disabled` pending the D7 SMTP step |
-| Repo | `main` at the 2.3.0 release commit (A2 + D7 code + A7 + A8 + A3.1-3 + A9); working tree clean |
-| Tests | `npm test` **280/280**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Live version | **2.3.0 live on staging and production with `email: enabled`** (D7 host half done 2026-09-27); **2.3.1 prepared on `main`** (notification-email link fix) and awaits the next ops deploy |
+| Repo | `main` at the 2.3.1 release commit (A2 + D7 complete + A7 + A8 + A3.1-3 + A9); working tree clean after this session |
+| Tests | `npm test` **281/281**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2576,11 +2574,20 @@ Cut after the three feature rounds of this session plus the storage moves:
 
 `/whats-new` renders this changelog automatically and `/health` reports the
 version. Ops deployed `main` on 2026-09-27: staging at 21:35 UTC and production
-at 21:43 UTC, both confirmed 2.3.0 with `email: disabled`; `live-check` green on
-both (276 artifacts verified, staging/production identity isolated) and the new
-surfaces (contact form, repository/issue links, review controls) confirmed on
-package pages. The `SMTP_URL`/`SMTP_FROM` step from D7 remains the only piece
-that needs the host, and is independent of the deploy.
+at 21:43 UTC, both confirmed 2.3.0; `live-check` green on both (staging 219/218,
+production 277/276 artifacts verified, isolation ok), imports logged
+(production: 0 reports, 1 decision, 0 ratings into SQLite), publisher entries
+at 359 scopes on both (packages `eco-v0.1.9` retry unblocked, `PUBLISH_RATE_MAX`
+restored to 20). The new surfaces (contact form, repository/issue links, review
+controls) were confirmed on package pages.
+
+**D7 completed the same day:** authenticated SMTP on 465 as
+`registry@xiom-lang.org` on both environments, `/health` → `email: enabled`,
+staging delivery confirmed externally with clean DKIM. Real mail exposed one
+last defect — notification links were app-relative and not clickable in a mail
+client — fixed in **2.3.1** (`emailLink()` absolutizes against `REGISTRY_URL`
+for the email channel only). Notices queued before an address was verified are
+never backfilled, by design.
 
 
 

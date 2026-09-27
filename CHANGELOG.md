@@ -4,6 +4,22 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [2.3.1] - 2026-09-27
+
+### Fixed
+
+- **Notification email links are clickable**: the email channel now
+  absolutizes app-relative notice links against `REGISTRY_URL`, so a link such
+  as `/account/verify-email?token=...` or `/packages/<name>#reviews` opens from
+  a mail client. In-app notices keep the relative link, stored rows are
+  unchanged, and absolute links are left untouched. Notices created before an
+  address was verified still never email and are not backfilled (by design).
+
+### Operations
+
+- Notification email is live on staging and production (authenticated SMTP as
+  `registry@xiom-lang.org`, DKIM clean); `/health` reports `email: enabled`.
+
 ## [2.3.0] - 2026-09-27
 
 ### Notifications
