@@ -2187,6 +2187,8 @@ three sources plus an HTTP assertion in the claim flow; 248 unit tests and
 Recorded here, tracked as A7-A9 and D7. **The owner agreed to all four items on
 2026-09-27**; the single open question (vote justifications) was decided to
 defer, and the agreed build order is D7 -> A7 -> A8 -> A3 (A9 rides with A3).
+**D7's code half shipped the same day** (`4110752`, `014f156`); its ops half
+(SMTP on the VPS) is the only piece that still needs the host.
 
 **21.9.1 In-app works, email does not (owner finding).** Diagnosis: not a code
 bug. `createMailer` (`src/mailer.js`) returns `enabled: false` unless **both**
@@ -2198,14 +2200,19 @@ from-address rule (ops 2026-09-26): use an `xiom-lang.org` address because
 generic mail from the VPS host domain is rejected by Gmail. The send path
 itself is covered by `test/notifications.test.js` (fake sender, sent/failed
 statuses), so the missing piece is the VPS environment.
-Ops checklist: set `SMTP_URL`/`SMTP_FROM` in `/opt/xiom/registry/.env`, recreate
-`registry` (both compose services already pass the vars through), verify with
+**Code half shipped 2026-09-27** (`4110752` outbox retry/backoff + migration
+003, `014f156` verified-address gate + observability): saved addresses are
+unverified until a single-use 24h confirmation link is opened, only verified
+addresses queue email, `/health` reports `email: enabled|disabled`, the dashboard
+shows outbox counts and recent failures, and failed sends retry with backoff
+before giving up. Migration 003 also skips the pre-gate `pending` backlog once,
+so nothing queued before the gate can ever deliver.
+Ops checklist (the remaining half): set `SMTP_URL`/`SMTP_FROM` in
+`/opt/xiom/registry/.env`, recreate `registry` (both compose services already
+pass the vars through), verify with `/health` (`email: enabled`) and
 `docker logs xiom-registry | grep 'notification email'` (a broken relay logs
-`failed: ...`) and confirm a real account receives one. Two cautions:
-(a) all queued `pending` rows deliver on the first successful drain -- decide
-whether pre-cutover rows should be marked `skipped` first; (b) `notifyEmail` is
-self-asserted, so enabling SMTP without address verification lets an account
-send registry notices to arbitrary addresses (D7 gate).
+`attempt N failed: ...`), then confirm a real account that has opened its
+confirmation link receives one.
 
 **21.9.2 Reports stay admin-only; add a separate maintainer contact.** The
 observed behavior (a report notifies the reporter of the outcome; maintainers
@@ -2290,7 +2297,7 @@ order.
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
 | D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
 | D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
-| D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1 finding): in-app notices work but no email is sent because `SMTP_URL`/`SMTP_FROM` are unset on the VPS (`mailer.enabled=false`, rows stay `pending`). Ops sets both (from-address on `xiom-lang.org`; SPF/DKIM/MX are live) and decides the queued-backlog policy. Code half: boot log + mailer status on `/health` and/or the console, outbox counts (pending/sent/failed) with a retry/backoff policy for `failed`, per-row email status. **Gate:** `notifyEmail` is self-asserted, so verify addresses (double opt-in or the `user:email` scope) before any send; unset SMTP keeps the abuse vector dormant. | M (ops+code) |
+| D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1). **Code half DONE 2026-09-27 (`4110752`, `014f156`):** verified-address gate (single-use 24h link; only verified addresses queue email), retry/backoff with recorded errors, migration 003 skips the pre-gate backlog, `/health` + dashboard visibility. **Ops half remains:** set `SMTP_URL`/`SMTP_FROM` (from-address on `xiom-lang.org`) and recreate, then confirm delivery to an account with a verified address. | M (ops left) |
 
 ### Explicit non-goals (unchanged)
 
@@ -2422,19 +2429,20 @@ never hand-edit data files on the VPS.
 
 ---
 
-## 23. Session handoff (2026-09-27, A2 shipped)
+## 23. Session handoff (2026-09-27, A2 + D7 code shipped)
 
 ### 23.1 State snapshot
 
 | Item | Value |
 |---|---|
-| Live version | **2.2.0** on staging and production (`/health`); the A2 commits are on `main` and await the ops deploy |
-| Repo | `main` at `2ff1e43` (A2 code) + the docs commit; working tree clean |
-| Tests | `npm test` **258/258**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Live version | **2.2.0** on staging and production (`/health`); A2 and the D7 code half are on `main` and await the ops deploy |
+| Repo | `main` at `014f156` (A2 + D7 code) + the docs commit; working tree clean |
+| Tests | `npm test` **265/265**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
-| Notifications | A2 in code: claim/report/review rows, per-kind mutes on `/account/settings`, best-effort enqueue; local visual check at 390px and 1280px |
-| Accounts schema | `accounts.json` 1.1.0 (`notifyKinds`); 2.2 files load with every kind on |
+| Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; local visual checks at 390px and 1280px |
+| Accounts schema | `accounts.json` 1.2.0 (`notifyKinds` + email verification); 2.2 files load with every kind on and unverified addresses |
+| D7 ops half | Set `SMTP_URL`/`SMTP_FROM` (xiom-lang.org from-address) and recreate; no backlog decision needed -- migration 003 skips pre-gate pending rows |
 
 ### 23.2 What shipped this session (in order)
 
@@ -2447,15 +2455,23 @@ never hand-edit data files on the VPS.
   no-account maintainer cases.
 
 Not done from 22.4 (optional, left out on purpose): the `user:email`
-verified-address sub-item still waits on the GitHub app config decision.
+verified-address sub-item is superseded by D7's double opt-in (no GitHub app
+scope change needed).
+
+- `4110752` `feat(notifications)`: outbox retry with exponential backoff and a
+  recorded error; migration 003 adds `attempts`/`next_attempt_at`/`email_error`
+  and skips the pre-gate pending backlog once; `outboxCounts()` and
+  `recentEmailFailures()` for the console.
+- `014f156` `feat(account)`: verified-address gate (single-use 24h confirmation
+  link, kind `verify-email`; only verified addresses queue ordinary email),
+  `/health` `email: enabled|disabled`, boot log, dashboard email card with
+  counts and failures, settings verification state.
 
 ### 23.3 Next actions, in order
 
-1. **2.2.x cleanup round (owner-agreed order, 21.9): D7 email enablement
-   first** (ops sets SMTP, code adds the verified-address gate + outbox
-   visibility), then **A7 community->maintainer contact**, then **A8
-   repository/issue links**, then **A3 with A9 riding on it**. A9 must not
-   ship before the SQLite move.
+1. **Next up: A7 community->maintainer contact** (owner-agreed order D7 ->
+   A7 -> A8 -> A3; D7's code half is done). Then **A8 repository/issue links**,
+   then **A3 with A9 riding on it**. A9 must not ship before the SQLite move.
 2. **A3 -- SQLite primary store** (scope to be agreed with the owner when its
    turn comes; A9 needs its unique vote index).
 3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
@@ -2465,12 +2481,12 @@ verified-address sub-item still waits on the GitHub app config decision.
 6. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
    template removal, D3 audit pagination when tables grow, D4 backup drill,
    D5 batch rate-limit profile documented, D6 cap retune after L0, **D7 SMTP
-   enablement (xiom-lang.org from-address; decide the pending-backlog policy
-   before the first drain)**.
+   enablement (xiom-lang.org from-address; the pre-gate backlog is already
+   skipped, verify with `/health` `email: enabled`)**.
 7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
    then production; confirm `/health` and the notifications page render.
 
-### 23.4 A2 implementation notes (for the next session)
+### 23.4 A2 + D7 implementation notes (for the next session)
 
 - Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
   `console.warn` on failure) and `notifyPackageMaintainers` (derived +
@@ -2481,10 +2497,20 @@ verified-address sub-item still waits on the GitHub app config decision.
   unchanged and unmutable. A muted kind writes no row and sends no email.
 - Recipients are identified by `githubId` for claim/report rows and by stored
   account for maintainers, so renames cannot misdeliver.
+- D7 gate: `notifyAccount` passes an email only when
+  `account.notifyEmailVerifiedAt` is set; the confirmation notice is the one
+  deliberate exception (`/account/email` enqueues it directly). Verification
+  state (`notifyEmailVerifiedAt`, token digest + expiry) lives on the account;
+  changing the address clears it. `markEmail` stays the terminal setter;
+  `markEmailFailure` owns retry/backoff. Migration 003 must not be removed:
+  it skips the pre-gate pending backlog.
 - Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
-  maintainer) and `test/accounts.test.js` (prefs normalization/reload).
-- Verification done: both suites green and a local headless-Chrome visual
-  pass on the notifications and settings pages (mobile 390px + desktop).
+  maintainer, verification gate + `/health` + dashboard),
+  `test/accounts.test.js` (prefs + verification lifecycle),
+  `test/notifications.test.js` (retry/terminal/counts + the migration test).
+- Verification done: both suites green and local headless-Chrome visual
+  passes on the notifications page, the settings email states, and the
+  dashboard email card (mobile 390px + desktop).
 
 
 

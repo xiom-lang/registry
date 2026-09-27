@@ -24,12 +24,28 @@ The rendered version of this file is at `/whats-new`.
   every enqueue stays best-effort, so a notification failure never fails the
   action that triggered it.
 
+### Notification email
+
+- **Verified addresses only**: saving a notification email queues a single-use
+  24-hour confirmation link; ordinary notices stay in-app until the link is
+  opened, and changing the address invalidates the verification. This closes
+  the gap where any account could redirect registry email at any address
+  before the mail service is enabled.
+- **Delivery failures retry**: the outbox retries with exponential backoff
+  (1m, 2m, 4m, ... capped at 1h), records the last SMTP error, and gives up
+  after five attempts. Rows queued before the verified-address gate shipped
+  are skipped once by a migration and are never delivered.
+- **Delivery visibility**: `/health` reports `email: enabled|disabled`, the
+  boot log states why email is off, the admin dashboard shows outbox counts
+  (pending/retrying/sent/failed/skipped) and recent failures with their error,
+  and `/account/settings` shows whether the saved address is verified.
+
 ### Compatibility
 
 - No `/index.json` change and no protocol change; sessions still never publish
   and every approval/decision remains audited. Stored accounts gain a
-  `notifyKinds` object (schema 1.1.0); files written by 2.2 load with every
-  kind on.
+  `notifyKinds` object and email verification state (schema 1.2.0); files
+  written by 2.2 load with every kind on and addresses unverified.
 
 ## [2.2.0] - 2026-09-27
 
