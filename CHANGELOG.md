@@ -60,12 +60,14 @@ The rendered version of this file is at `/whats-new`.
 
 ### Storage
 
-- **Ratings move into the platform database**: star ratings now live in the
-  SQLite store (`review_ratings`, one row per package and account) instead of
-  `reviews.json`. The JSON file is imported once on first start and kept
-  afterwards as a best-effort rollback mirror; no API, protocol, or UI change,
-  and reports/decisions continue to live in `reviews.json` until the next
-  phase of the SQLite move.
+- **Reviews, ratings, and decisions move into the platform database**: star
+  ratings (`review_ratings`), the report queue (`review_reports`), and the
+  reviewer toggles with their history (`review_decisions` /
+  `review_decision_history`) now live in the SQLite store instead of
+  `reviews.json`. The JSON file is imported once per table on first start and
+  kept afterwards as a best-effort rollback mirror; no API, protocol, or UI
+  change. Requests, accounts, and publishers keep their JSON stores until the
+  next phase.
 
 ### Compatibility
 
