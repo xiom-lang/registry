@@ -73,6 +73,22 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '003-email-delivery',
+    up(db) {
+      // D7 (SESSION.md 21.9.1): retry bookkeeping for the outbox plus a
+      // one-time backlog skip. Rows that were already queued when the
+      // verified-address gate shipped were created without any verification,
+      // so they are deliberately never sent; every new email is gated in the
+      // account store.
+      db.exec(`
+        ALTER TABLE notifications ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE notifications ADD COLUMN next_attempt_at TEXT;
+        ALTER TABLE notifications ADD COLUMN email_error TEXT NOT NULL DEFAULT '';
+        UPDATE notifications SET email_status = 'skipped' WHERE email_status = 'pending';
+      `);
+    },
+  },
 ];
 
 class Database {

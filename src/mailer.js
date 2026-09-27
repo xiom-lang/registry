@@ -53,8 +53,8 @@ function startOutbox({ notifications, mailer, intervalMs = DEFAULT_INTERVAL_MS, 
           notifications.markEmail(row.id, 'sent');
           sent += 1;
         } catch (err) {
-          log.warn(`notification email ${row.id} failed: ${err.message}`);
-          notifications.markEmail(row.id, 'failed');
+          log.warn(`notification email ${row.id} attempt ${row.attempts + 1} failed: ${err.message}`);
+          notifications.markEmailFailure(row.id, err.message);
         }
       }
     } finally {
