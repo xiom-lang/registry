@@ -191,7 +191,11 @@ function createApp(config = loadConfig()) {
   // queue data that has not moved yet.
   const db = new Database({ path: config.dbPath });
   const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
-  const requests = new RequestStore({ path: config.requestsPath, maxBytes: config.maxRequestsBytes });
+  const requests = new RequestStore({
+    path: config.requestsPath,
+    maxBytes: config.maxRequestsBytes,
+    db,
+  });
   const reviews = new ReviewStore({
     path: config.reviewsPath,
     maxBytes: config.maxReviewsBytes,

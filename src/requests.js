@@ -6,6 +6,11 @@
 // approved, and marked fulfilled after the host mints and mails the token
 // (SESSION.md section 15). It never reads or writes the token store, never
 // generates secrets, and never stores a credential.
+//
+// A3 phase 3 (SESSION.md 18.2): with the shared platform `db`, records live in
+// `stored_requests` (record JSON in `data`, extracted columns for the queue);
+// requests.json is imported once into an empty table and kept afterwards as a
+// best-effort rollback mirror. SQLite is primary.
 
 'use strict';
 
@@ -105,12 +110,79 @@ function normalizePublisherRequest({ repository, workflow, refs, scopes }) {
  */
 class RequestStore {
   /**
-   * @param {{ path: string, maxBytes?: number }} options
+   * @param {{ path: string, maxBytes?: number, db?: import('./db').Database|null }} options
    */
-  constructor({ path, maxBytes = MAX_REQUESTS_BYTES }) {
+  constructor({ path, maxBytes = MAX_REQUESTS_BYTES, db = null }) {
     this.path = path;
     this.maxBytes = maxBytes;
+    this.db = db;
     this.requests = this.#read();
+    if (db) {
+      const imported = this.#importRequests();
+      this.#loadFromDb();
+      if (imported > 0) {
+        console.log(`xiom-registry: imported ${imported} requests into SQLite`);
+      }
+    }
+  }
+
+  /** Import requests.json into an empty table (one-time move). */
+  #importRequests() {
+    const row = this.db.get('SELECT COUNT(*) AS count FROM stored_requests');
+    if (row && Number(row.count) > 0) return 0;
+    this.db.exec('BEGIN');
+    try {
+      for (const record of Object.values(this.requests)) this.#insertRecord(record);
+      this.db.exec('COMMIT');
+      return Object.keys(this.requests).length;
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw new Error(`request import failed: ${err.message}`);
+    }
+  }
+
+  #insertRecord(record) {
+    this.db.run(
+      `INSERT OR REPLACE INTO stored_requests
+         (id, kind, status, requester_id, requester_login, created_at, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      record.id,
+      record.kind,
+      record.status,
+      record.requester.githubId,
+      record.requester.login,
+      record.createdAt,
+      JSON.stringify(record),
+    );
+  }
+
+  /** SQLite is primary: rebuild the in-memory map, re-validating every row. */
+  #loadFromDb() {
+    this.requests = {};
+    for (const row of this.db.all('SELECT * FROM stored_requests ORDER BY created_at, id')) {
+      try {
+        const record = normalizeRecord(row.id, JSON.parse(row.data));
+        if (record) this.requests[row.id] = record;
+      } catch {
+        // A malformed row is dropped rather than refusing to boot.
+      }
+    }
+  }
+
+  /** Persist the current set: SQLite when present, then the JSON mirror. */
+  #persist() {
+    if (this.db) {
+      this.db.exec('BEGIN');
+      try {
+        this.db.run('DELETE FROM stored_requests');
+        for (const record of Object.values(this.requests)) this.#insertRecord(record);
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw new Error(`request write failed: ${err.message}`);
+      }
+    }
+    this.#write(this.requests);
   }
 
   #read() {
@@ -179,7 +251,8 @@ class RequestStore {
       createdAt: now,
       history: [{ at: now, actor: requester.login, action: 'created' }],
     };
-    this.#commit({ ...this.requests, [id]: record });
+    this.requests = { ...this.requests, [id]: record };
+    this.#persist();
     return record;
   }
 
@@ -228,7 +301,8 @@ class RequestStore {
         ...(decisionNote ? { note: decisionNote } : {}),
       }],
     };
-    this.#commit({ ...this.requests, [record.id]: updated });
+    this.requests = { ...this.requests, [record.id]: updated };
+    this.#persist();
     return updated;
   }
 
@@ -260,7 +334,8 @@ class RequestStore {
         ...(mintReference ? { note: mintReference } : {}),
       }],
     };
-    this.#commit({ ...this.requests, [record.id]: updated });
+    this.requests = { ...this.requests, [record.id]: updated };
+    this.#persist();
     return updated;
   }
 
@@ -281,19 +356,23 @@ class RequestStore {
         ...(revokeNote ? { note: revokeNote } : {}),
       }],
     };
-    this.#commit({ ...this.requests, [record.id]: updated });
+    this.requests = { ...this.requests, [record.id]: updated };
+    this.#persist();
     return updated;
   }
 
   #newId() {
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = `req_${crypto.randomBytes(6).toString('hex')}`;
-      if (!this.requests[id]) return id;
+      const exists = this.db
+        ? this.db.get('SELECT id FROM stored_requests WHERE id = ?', id)
+        : this.requests[id];
+      if (!exists) return id;
     }
     throw new Error('could not allocate a request id');
   }
 
-  #commit(next) {
+  #write(next) {
     const serialized = JSON.stringify({
       version: REQUESTS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),
@@ -303,7 +382,6 @@ class RequestStore {
       throw new Error(`requests file would exceed ${this.maxBytes} bytes`);
     }
     atomicWriteFile(this.path, serialized);
-    this.requests = next;
   }
 }
 

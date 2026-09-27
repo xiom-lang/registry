@@ -184,3 +184,39 @@ test('malformed persisted records are dropped on load', () => {
   const requests = new RequestStore({ path: file });
   assert.deepEqual(requests.list().map((entry) => entry.id), ['req_aaaaaaaaaaaa']);
 });
+
+// --- A3 phase 3: the queue in SQLite (SESSION.md 18.2) --------------------
+
+const { Database } = require('../src/db');
+
+test('requests import from requests.json into SQLite and then live there', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-requests-db-'));
+  const file = path.join(dir, 'requests.json');
+  fs.writeFileSync(file, JSON.stringify({ version: '1.0.0', requests: {} }));
+  const db = new Database({ path: path.join(dir, 'registry.db') });
+  try {
+    const requests = new RequestStore({ path: file, db });
+    const created = requests.create({
+      kind: 'token', requester: REQUESTER, scopes: 'my-lib', note: 'for the release job',
+    });
+    assert.equal(Number(db.get('SELECT COUNT(*) AS count FROM stored_requests').count), 1);
+    const mirrored = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    assert.equal(mirrored.requests[created.id].scopes[0], 'my-lib');
+
+    // The full lifecycle persists through SQLite with history intact.
+    const approved = requests.decide(created.id, { action: 'approve', actor: 'root' });
+    assert.equal(approved.status, 'approved');
+    const fulfilled = requests.fulfil(created.id, { actor: 'root', reference: 'mint-1' });
+    assert.equal(fulfilled.status, 'fulfilled');
+    const reopened = new RequestStore({ path: file, db });
+    assert.deepEqual(reopened.get(created.id).history.map((entry) => entry.action), ['created', 'approved', 'fulfilled']);
+    assert.equal(reopened.list({ status: 'fulfilled' }).length, 1);
+
+    // A stale or malformed JSON file can never win over the database.
+    fs.writeFileSync(file, JSON.stringify({ version: '1.0.0', requests: { req_ffffffffffff: { bad: true } } }));
+    const reloaded = new RequestStore({ path: file, db });
+    assert.deepEqual(reloaded.list().map((entry) => entry.id), [created.id]);
+  } finally {
+    db.close();
+  }
+});

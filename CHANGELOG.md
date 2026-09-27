@@ -4,6 +4,15 @@ All notable changes to the XIOM Package Registry service. Versions are the
 deployed service version shown by `/health` and `/`, and follow semver.
 The rendered version of this file is at `/whats-new`.
 
+## [Unreleased]
+
+### Storage
+
+- **The request queue moves into the platform database**: token and
+  trusted-publisher requests now live in SQLite (`stored_requests`, migration
+  009) with the same import-once plus JSON rollback-mirror contract as the
+  other stores. Accounts are the last store remaining on the phase-3 list.
+
 ## [2.4.1] - 2026-09-27
 
 ### Fixed

@@ -208,6 +208,29 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '009-stored-requests',
+    up(db) {
+      // A3 phase 3 (SESSION.md 18.2): the request queue moves to SQLite with
+      // the same import + JSON mirror contract. The record itself (optional
+      // fields plus its history) lives in `data` and is re-validated through
+      // normalizeRecord on load; the extracted columns serve the queue
+      // queries and indexes.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS stored_requests (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          status TEXT NOT NULL,
+          requester_id TEXT NOT NULL,
+          requester_login TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          data TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS stored_requests_queue ON stored_requests (status, created_at DESC, id);
+        CREATE INDEX IF NOT EXISTS stored_requests_requester ON stored_requests (requester_id, status);
+      `);
+    },
+  },
 ];
 
 class Database {
