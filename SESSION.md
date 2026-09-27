@@ -1972,7 +1972,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
-| A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. | M |
+| A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
 | A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. | S |
 | A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. Votes/sorting need A3's SQLite. | M |
 
@@ -2226,7 +2226,11 @@ message from a signed-in account, rate-limited, stored as a `support`
 notification, muteable, and itself reportable if abused. Best-practice routing
 for a growing community: recipients come from relationships (reporter,
 claimant, maintainers, reviewers), never from a global admin inbox; admins are
-moderators and a fallback, not a switchboard.
+moderators and a fallback, not a switchboard. **Shipped 2026-09-27
+(`710da52`):** `support.json` store (allowlist + atomic writes), package-page
+form, 1/package/day + 5/account/day limits, `support` mute checkbox, and the
+maintainer "Report abuse" action that files one report into the existing
+queue; no maintainer reply yet (A9).
 
 **21.9.3 Review votes and maintainer reply.** Agreed, with constraints:
 - one vote per account per review, toggleable/changeable (`UNIQUE(review_id,
@@ -2435,12 +2439,12 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.2.0** on staging and production (`/health`); A2 and the D7 code half are on `main` and await the ops deploy |
-| Repo | `main` at `014f156` (A2 + D7 code) + the docs commit; working tree clean |
-| Tests | `npm test` **265/265**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Live version | **2.2.0** on staging and production (`/health`); A2, D7 code, and A7 are on `main` and await the ops deploy |
+| Repo | `main` at `710da52` (A2 + D7 code + A7) + the docs commit; working tree clean |
+| Tests | `npm test` **269/269**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
-| Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; local visual checks at 390px and 1280px |
+| Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
 | Accounts schema | `accounts.json` 1.2.0 (`notifyKinds` + email verification); 2.2 files load with every kind on and unverified addresses |
 | D7 ops half | Set `SMTP_URL`/`SMTP_FROM` (xiom-lang.org from-address) and recreate; no backlog decision needed -- migration 003 skips pre-gate pending rows |
 
@@ -2466,12 +2470,17 @@ scope change needed).
   link, kind `verify-email`; only verified addresses queue ordinary email),
   `/health` `email: enabled|disabled`, boot log, dashboard email card with
   counts and failures, settings verification state.
+- `710da52` `feat(community)`: A7 contact channel -- `support.json` store with
+  validation and 1/package/day + 5/account/day limits, package-page form,
+  `support` notifications to account-holding maintainers with a `ref` back to
+  the message (migration 004), mute checkbox, and the maintainer "Report
+  abuse" action that files one report into the existing moderation queue.
 
 ### 23.3 Next actions, in order
 
-1. **Next up: A7 community->maintainer contact** (owner-agreed order D7 ->
-   A7 -> A8 -> A3; D7's code half is done). Then **A8 repository/issue links**,
-   then **A3 with A9 riding on it**. A9 must not ship before the SQLite move.
+1. **Next up: A8 repository/issue links** (owner-agreed order D7 -> A7 -> A8
+   -> A3; D7 code and A7 are done). Then **A3 with A9 riding on it**; A9 must
+   not ship before the SQLite move.
 2. **A3 -- SQLite primary store** (scope to be agreed with the owner when its
    turn comes; A9 needs its unique vote index).
 3. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
@@ -2486,31 +2495,40 @@ scope change needed).
 7. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
    then production; confirm `/health` and the notifications page render.
 
-### 23.4 A2 + D7 implementation notes (for the next session)
+### 23.4 A2 + D7 + A7 implementation notes (for the next session)
 
 - Wiring lives in `createApp`: `notifyAccount` (best-effort, mute-aware,
   `console.warn` on failure) and `notifyPackageMaintainers` (derived +
   verified maintainers matched against `accounts.getByLogin`). Six decision
   actions notify; the store-only `clear` action does not (the console never
   exposes it).
-- Kinds are `claim`/`report`/`review`; legacy request/publisher kinds are
-  unchanged and unmutable. A muted kind writes no row and sends no email.
-- Recipients are identified by `githubId` for claim/report rows and by stored
-  account for maintainers, so renames cannot misdeliver.
+- Kinds are `claim`/`report`/`review`/`support` (the last three plus report
+  are muteable); legacy request/publisher kinds are unchanged and unmutable.
+  A muted kind writes no row and sends no email.
+- Recipients are identified by `githubId` for claim/report/support rows and by
+  stored account for maintainers, so renames cannot misdeliver.
 - D7 gate: `notifyAccount` passes an email only when
   `account.notifyEmailVerifiedAt` is set; the confirmation notice is the one
   deliberate exception (`/account/email` enqueues it directly). Verification
   state (`notifyEmailVerifiedAt`, token digest + expiry) lives on the account;
   changing the address clears it. `markEmail` stays the terminal setter;
-  `markEmailFailure` owns retry/backoff. Migration 003 must not be removed:
-  it skips the pre-gate pending backlog.
+  `markEmailFailure` owns retry/backoff. Migrations 003/004 must not be
+  removed: they skip the pre-gate pending backlog and add `ref`.
+- A7: `maintainerAccounts(name)` is the single source of account-holding
+  maintainers (used by decisions and support); support messages live in
+  `support.json`, are rate-limited in the store, and are notified with
+  `ref = sup_...`. The abuse flag is idempotent and files one `spam` report;
+  the contact form reports errors through `?contact_error=<code>` because the
+  package page's flash is consumed by the review context.
 - Tests: `test/account-http.test.js` (event/recipient/link, mute, no-account
-  maintainer, verification gate + `/health` + dashboard),
+  maintainer, verification gate + `/health` + dashboard, full support flow),
   `test/accounts.test.js` (prefs + verification lifecycle),
-  `test/notifications.test.js` (retry/terminal/counts + the migration test).
+  `test/notifications.test.js` (retry/terminal/counts + migrations + `ref`),
+  `test/support.test.js` (validation, limits, abuse idempotency, reload).
 - Verification done: both suites green and local headless-Chrome visual
-  passes on the notifications page, the settings email states, and the
-  dashboard email card (mobile 390px + desktop).
+  passes on the notifications page, the settings email states, the dashboard
+  email card, the contact form, and the support notice (mobile 390px +
+  desktop).
 
 
 

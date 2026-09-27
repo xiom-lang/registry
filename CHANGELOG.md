@@ -40,6 +40,20 @@ The rendered version of this file is at `/whats-new`.
   (pending/retrying/sent/failed/skipped) and recent failures with their error,
   and `/account/settings` shows whether the saved address is verified.
 
+### Community contact
+
+- **Message maintainers directly**: package pages now carry a "Contact
+  maintainers" form for signed-in accounts, separate from the admin-only
+  report flow. The topic and message are stored (audit and abuse handling) and
+  delivered as a `support` notice to every maintainer with a registry account;
+  email follows the verified-address rule.
+- **Limits and controls**: one message per package per sender per day and five
+  per account per day; `support` has its own mute checkbox, and a maintainer
+  never gets notified about their own message.
+- **Abuse reporting**: a maintainer can flag a message to the moderators from
+  the notifications page; the first flag files one report into the existing
+  queue and later flags are idempotent.
+
 ### Compatibility
 
 - No `/index.json` change and no protocol change; sessions still never publish
