@@ -6,6 +6,11 @@
 // a package (abuse, malware, licensing); reviewers and admins resolve or
 // dismiss the report with a note, and every transition stays in the record.
 // Reports are display/audit data: they never alter an artifact or the index.
+//
+// A3 phase 1 (SESSION.md 18.2): ratings live in the platform SQLite database
+// when the store is constructed with `db`. reviews.json is the import source
+// and a best-effort rollback mirror; once SQLite has rows it is primary.
+// Reports and decisions still use the JSON file and move in a later phase.
 
 'use strict';
 
@@ -42,20 +47,82 @@ function normalizeReporter(reporter) {
   return { githubId, login };
 }
 
+/** One SQLite rating row as the store's public shape. */
+function ratingFromRow(row) {
+  return {
+    githubId: String(row.github_id),
+    login: row.login,
+    stars: Number(row.stars),
+    review: row.review || '',
+    at: row.at || '',
+  };
+}
+
 /**
- * JSON-file report queue on the registry data volume.
+ * Report queue, decisions, and ratings on the registry data volume. When a
+ * platform `db` is provided, ratings are stored in SQLite (A3 phase 1);
+ * otherwise the legacy JSON path is used (unit tests and embedded use).
  */
 class ReviewStore {
   /**
-   * @param {{ path: string, maxBytes?: number }} options
+   * @param {{ path: string, maxBytes?: number, db?: import('./db').Database|null }} options
    */
-  constructor({ path, maxBytes = MAX_REVIEWS_BYTES }) {
+  constructor({ path, maxBytes = MAX_REVIEWS_BYTES, db = null }) {
     this.path = path;
     this.maxBytes = maxBytes;
+    this.db = db;
     const state = this.#read();
     this.packages = state.packages;
     this.reports = state.reports;
     this.ratings = state.ratings;
+    if (db) {
+      const imported = this.#importRatings();
+      this.#loadRatingsFromDb();
+      if (imported > 0) {
+        console.log(`xiom-registry: imported ${imported} ratings from reviews.json into SQLite`);
+      }
+    }
+  }
+
+  /** One-time move of the JSON ratings into an empty SQLite table. */
+  #importRatings() {
+    const row = this.db.get('SELECT COUNT(*) AS count FROM review_ratings');
+    if (row && Number(row.count) > 0) return 0;
+    let imported = 0;
+    this.db.exec('BEGIN');
+    try {
+      for (const [name, byUser] of Object.entries(this.ratings)) {
+        for (const rating of Object.values(byUser)) {
+          this.db.run(
+            `INSERT OR REPLACE INTO review_ratings (package, github_id, login, stars, review, at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            name,
+            rating.githubId,
+            rating.login,
+            rating.stars,
+            rating.review,
+            rating.at,
+          );
+          imported += 1;
+        }
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw new Error(`rating import failed: ${err.message}`);
+    }
+    return imported;
+  }
+
+  /** SQLite is primary: the in-memory mirror feeds the JSON rollback file. */
+  #loadRatingsFromDb() {
+    const ratings = {};
+    for (const row of this.db.all('SELECT * FROM review_ratings ORDER BY package, at')) {
+      const name = row.package;
+      if (!ratings[name]) ratings[name] = {};
+      ratings[name][String(row.github_id)] = ratingFromRow(row);
+    }
+    this.ratings = ratings;
   }
 
   #read() {
@@ -172,11 +239,26 @@ class ReviewStore {
 
   /** Star ratings (1-5) with an optional short review, one per account. */
   ratingsFor(packageName) {
+    if (this.db) {
+      return this.db.all(
+        'SELECT * FROM review_ratings WHERE package = ? ORDER BY at DESC, github_id',
+        String(packageName),
+      ).map(ratingFromRow);
+    }
     return Object.values(this.ratings[String(packageName)] || {})
       .sort((a, b) => String(b.at).localeCompare(String(a.at)));
   }
 
   ratingSummary(packageName) {
+    if (this.db) {
+      const row = this.db.get(
+        'SELECT COUNT(*) AS count, AVG(stars) AS average FROM review_ratings WHERE package = ?',
+        String(packageName),
+      );
+      const count = row ? Number(row.count) : 0;
+      if (count === 0) return { count: 0, average: 0 };
+      return { count, average: Math.round((Number(row.average) || 0) * 10) / 10 };
+    }
     const list = this.ratingsFor(packageName);
     if (list.length === 0) return { count: 0, average: 0 };
     const total = list.reduce((sum, entry) => sum + entry.stars, 0);
@@ -201,6 +283,27 @@ class ReviewStore {
       review: clean(review, MAX_RATING_TEXT),
       at: new Date().toISOString(),
     };
+    if (this.db) {
+      this.db.run(
+        `INSERT INTO review_ratings (package, github_id, login, stars, review, at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(package, github_id) DO UPDATE SET
+           login = excluded.login,
+           stars = excluded.stars,
+           review = excluded.review,
+           at = excluded.at`,
+        name,
+        entry.githubId,
+        entry.login,
+        entry.stars,
+        entry.review,
+        entry.at,
+      );
+      // Keep the JSON mirror current for rollback; SQLite stays primary.
+      const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
+      this.#commit(this.packages, this.reports, { ...this.ratings, [name]: next });
+      return entry;
+    }
     const next = { ...(this.ratings[name] || {}), [author.githubId]: entry };
     this.#commit(this.packages, this.reports, { ...this.ratings, [name]: next });
     return entry;

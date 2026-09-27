@@ -258,3 +258,111 @@ test('malformed persisted reports are dropped on load', () => {
   assert.deepEqual(reviews.listReports().map((report) => report.id), ['rep_aaaaaaaaaaaa']);
   assert.deepEqual(reviews.listDecisions().map((entry) => entry.name), ['demo-pkg']);
 });
+
+// ─── A3 phase 1: ratings in SQLite (SESSION.md 18.2) ──────────────────────
+
+const { Database } = require('../src/db');
+
+/** A store over both files: reviews.json (import/mirror) and registry.db. */
+function sqliteStore(legacy = null) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-reviews-db-'));
+  const dbPath = path.join(dir, 'registry.db');
+  const jsonPath = path.join(dir, 'reviews.json');
+  if (legacy) fs.writeFileSync(jsonPath, JSON.stringify(legacy));
+  const db = new Database({ path: dbPath });
+  return { store: new ReviewStore({ path: jsonPath, db }), db, dbPath, jsonPath };
+}
+
+const LEGACY_RATINGS = {
+  version: '1.1.0',
+  updated_at: '2026-09-01T00:00:00Z',
+  packages: {},
+  reports: {},
+  ratings: {
+    'demo-pkg': {
+      42: { login: 'alice', stars: 5, review: 'clean and small', at: '2026-09-01T00:00:00Z' },
+      7: { login: 'bob', stars: 3, review: '', at: '2026-09-01T01:00:00Z' },
+    },
+  },
+};
+
+test('ratings import from reviews.json into SQLite on first open', () => {
+  const { store: reviews, db, dbPath, jsonPath } = sqliteStore(LEGACY_RATINGS);
+  try {
+    // Read from SQLite: newest first, aggregate over the imported rows.
+    assert.deepEqual(reviews.ratingsFor('demo-pkg').map((entry) => entry.login), ['bob', 'alice']);
+    assert.deepEqual(reviews.ratingSummary('demo-pkg'), { count: 2, average: 4 });
+
+    // New ratings go to SQLite and refresh the JSON mirror.
+    reviews.rate('demo-pkg', { user: { githubId: '9', login: 'carol' }, stars: 4, review: 'works' });
+    assert.deepEqual(reviews.ratingSummary('demo-pkg'), { count: 3, average: 4 });
+    const mirror = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    assert.equal(mirror.ratings['demo-pkg']['9'].stars, 4);
+    assert.equal(mirror.ratings['demo-pkg']['42'].stars, 5);
+
+    // Reopen against the same database: SQLite is primary and persists.
+    const again = new Database({ path: dbPath });
+    try {
+      const reopened = new ReviewStore({ path: jsonPath, db: again });
+      assert.equal(reopened.ratingSummary('demo-pkg').count, 3);
+      assert.equal(reopened.ratingsFor('demo-pkg').find((entry) => entry.login === 'carol').stars, 4);
+    } finally {
+      again.close();
+    }
+  } finally {
+    db.close();
+  }
+});
+
+test('SQLite wins over a stale JSON mirror once it has rows', () => {
+  const { store: reviews, db, dbPath, jsonPath } = sqliteStore(LEGACY_RATINGS);
+  reviews.rate('demo-pkg', { user: { githubId: '42', login: 'alice' }, stars: 5, review: 'updated' });
+  db.close();
+
+  // A stale reviews.json (say, restored from a backup) must not win.
+  fs.writeFileSync(jsonPath, JSON.stringify(LEGACY_RATINGS));
+  const again = new Database({ path: dbPath });
+  try {
+    const reopened = new ReviewStore({ path: jsonPath, db: again });
+    assert.deepEqual(
+      { stars: reopened.ratingsFor('demo-pkg')[0].stars, review: reopened.ratingsFor('demo-pkg')[0].review },
+      { stars: 5, review: 'updated' },
+    );
+    assert.deepEqual(reopened.ratingSummary('demo-pkg'), { count: 2, average: 4 });
+  } finally {
+    again.close();
+  }
+});
+
+test('a rating update never duplicates the row and reports stay on the JSON file', () => {
+  const legacy = structuredClone(LEGACY_RATINGS);
+  legacy.reports = {
+    rep_aaaaaaaaaaaa: {
+      id: 'rep_aaaaaaaaaaaa',
+      package: 'demo-pkg',
+      reporter: { githubId: '5', login: 'carol' },
+      reason: 'other',
+      note: 'valid',
+      status: 'open',
+      createdAt: '2026-09-01T02:00:00Z',
+    },
+  };
+  const { store: reviews, db } = sqliteStore(legacy);
+  try {
+    reviews.rate('demo-pkg', { user: { githubId: '42', login: 'alice' }, stars: 1, review: 'regressed' });
+    const rows = db.all('SELECT * FROM review_ratings WHERE package = ? AND github_id = ?', 'demo-pkg', '42');
+    assert.equal(rows.length, 1, 'upsert keeps one row per package and account');
+    assert.equal(Number(rows[0].stars), 1);
+    assert.equal(reviews.ratingSummary('demo-pkg').count, 2, 'updated, not added');
+
+    // Reports still resolve through the JSON queue.
+    assert.equal(reviews.openReportCount('demo-pkg'), 1);
+    const resolved = reviews.resolveReport('rep_aaaaaaaaaaaa', { actor: 'root', resolution: 'handled' });
+    assert.equal(resolved.status, 'resolved');
+    const mirror = JSON.parse(fs.readFileSync(reviews.path, 'utf-8'));
+    assert.equal(mirror.reports.rep_aaaaaaaaaaaa.status, 'resolved');
+    assert.equal(mirror.ratings['demo-pkg']['42'].stars, 1, 'mirror carries the SQLite truth');
+  } finally {
+    db.close();
+  }
+});

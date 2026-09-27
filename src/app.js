@@ -186,9 +186,17 @@ function createApp(config = loadConfig()) {
   const sessions = config.oauth.enabled
     ? new SessionStore({ key: oauth.deriveSessionKey(config.oauth.clientSecret) })
     : null;
+  // SQLite platform layer (SESSION.md section 18 / A3): notifications, roles,
+  // audit, and now rating storage live here; JSON stores stay for identity and
+  // queue data that has not moved yet.
+  const db = new Database({ path: config.dbPath });
   const accounts = new AccountStore({ path: config.accountsPath, maxBytes: config.maxAccountsBytes });
   const requests = new RequestStore({ path: config.requestsPath, maxBytes: config.maxRequestsBytes });
-  const reviews = new ReviewStore({ path: config.reviewsPath, maxBytes: config.maxReviewsBytes });
+  const reviews = new ReviewStore({
+    path: config.reviewsPath,
+    maxBytes: config.maxReviewsBytes,
+    db,
+  });
   const publisherStore = new PublisherStore({
     path: config.storedPublishersPath,
     maxBytes: config.maxPublishersBytes,
@@ -211,7 +219,6 @@ function createApp(config = loadConfig()) {
   }
   // SQLite platform layer: notification outbox + optional email sender
   // (SESSION.md section 18). In-app notices always work; email needs SMTP_URL.
-  const db = new Database({ path: config.dbPath });
   const notifications = new NotificationStore({ db });
   // User administration (roles, suspension, audit) shares the platform
   // database. Config allowlists stay the bootstrap; stored grants add to them

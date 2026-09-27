@@ -97,6 +97,26 @@ const MIGRATIONS = [
       db.exec("ALTER TABLE notifications ADD COLUMN ref TEXT NOT NULL DEFAULT ''");
     },
   },
+  {
+    id: '005-review-ratings',
+    up(db) {
+      // A3 phase 1 (SESSION.md 18.2): star ratings move off reviews.json into
+      // the platform database. The JSON file stays as the import source and a
+      // best-effort rollback mirror; SQLite is primary whenever it has rows.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_ratings (
+          package TEXT NOT NULL,
+          github_id TEXT NOT NULL,
+          login TEXT NOT NULL,
+          stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+          review TEXT NOT NULL DEFAULT '',
+          at TEXT NOT NULL,
+          PRIMARY KEY (package, github_id)
+        );
+        CREATE INDEX IF NOT EXISTS review_ratings_package ON review_ratings (package, at DESC, github_id);
+      `);
+    },
+  },
 ];
 
 class Database {
