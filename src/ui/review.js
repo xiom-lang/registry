@@ -190,8 +190,9 @@ ${ratings.map((entry) => `  <li class="rating-item">
 </section>`;
 }
 
-/** Pending maintainer claims with verify/reject controls (SESSION.md 21 A1). */
-function claimRow(claim, csrf) {
+/** Pending maintainer claims with verify/reject controls (SESSION.md 21 A1).
+ * `next` lets the admin console get the decision back on its own page. */
+function claimRow(claim, csrf, next = '') {
   return `<li class="request-card">
   <div class="request-head">
     <a class="pkg-name" href="/packages/${encodeURIComponent(claim.package)}#maintainers">${escapeHtml(claim.package)}</a>
@@ -205,6 +206,7 @@ function claimRow(claim, csrf) {
   <form class="decision-form" method="post"
     action="/review/claims/${encodeURIComponent(claim.package)}/${encodeURIComponent(claim.githubId)}/decision">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+    ${next ? `<input type="hidden" name="next" value="${escapeHtml(next)}">` : ''}
     <input name="note" placeholder="Reason (required to reject)" maxlength="500" aria-label="Claim decision note">
     <button class="button primary" type="submit" name="status" value="verified">Verify</button>
     <button class="button danger" type="submit" name="status" value="rejected">Reject</button>
@@ -260,5 +262,6 @@ module.exports = {
   reviewHistory,
   decisionControls,
   ratingsSection,
+  claimRow,
   REASON_LABELS,
 };

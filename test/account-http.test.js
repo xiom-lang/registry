@@ -1105,7 +1105,9 @@ test('maintainer claims are filed, verified by reviewers, and shown publicly', a
   });
   assert.equal(response.status, 401);
 
-  // The reviewer sees the claim, must give a reason to reject, and verifies.
+  // The reviewer sees the claim in the queue, must give a reason to reject,
+  // and verifies. The admin console surfaces the same queue on /admin/claims
+  // and the decision returns there when the form asks for it.
   const reviewer = cookieJar();
   await login(reviewer, 'user-code');
   response = await requestAs(reviewer, '/review', { headers: BROWSER });
@@ -1114,26 +1116,48 @@ test('maintainer claims are filed, verified by reviewers, and shown publicly', a
   assert.match(html, /@plain-user/);
   const reviewCsrf = csrfFrom(html);
 
-  response = await requestAs(reviewer, '/review/claims/readme-pkg/888/decision', {
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/admin/claims', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /Awaiting verification/);
+  assert.match(html, /readme-pkg/);
+  assert.match(html, /@plain-user/);
+  const adminCsrf = csrfFrom(html);
+
+  response = await requestAs(admin, '/review/claims/readme-pkg/888/decision', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: reviewCsrf, status: 'rejected' }),
+    body: new URLSearchParams({ csrf: adminCsrf, status: 'rejected' }),
   });
   assert.equal(response.status, 303);
-  response = await requestAs(reviewer, '/review', { headers: BROWSER });
+  response = await requestAs(admin, '/admin/claims', { headers: BROWSER });
   assert.match(await response.text(), /reason is required/);
 
-  response = await requestAs(reviewer, '/review/claims/readme-pkg/888/decision', {
+  response = await requestAs(admin, '/review/claims/readme-pkg/888/decision', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: reviewCsrf, status: 'verified', note: 'owns the repo' }),
+    body: new URLSearchParams({
+      csrf: adminCsrf, status: 'verified', note: 'owns the repo', next: '/admin/claims',
+    }),
   });
   assert.equal(response.status, 303);
+  assert.match(response.headers.get('location'), /^\/admin\/claims\?claim=888$/);
+  response = await requestAs(admin, '/admin/claims', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /No claims are waiting/, 'the pending queue is empty after the decision');
+  assert.match(html, /Recent decisions/);
+  assert.match(html, /readme-pkg/);
+  assert.match(html, /status-approved">verified/);
 
   // The verified maintainer is public and attributed to the decision.
   response = await requestAs(anonymous, '/packages/readme-pkg', { headers: BROWSER });
   html = await response.text();
   assert.match(html, /@plain-user/);
   assert.match(html, /verified maintainer/);
-  assert.match(html, /verified by @user-user/);
+  assert.match(html, /verified by @admin-user/);
+
+  // The claimant sees that the claim is settled.
+  response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /You are listed as a verified maintainer/);
 
   const claims = app.locals.registry.ownership.listClaims({ packageName: 'readme-pkg' });
   assert.equal(claims.length, 1);

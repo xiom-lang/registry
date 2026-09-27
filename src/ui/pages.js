@@ -673,6 +673,13 @@ function maintainersBlock({ name, ownership, signedIn = false, csrf = '' }) {
     own.push('<p class="pkg-meta">Your maintainer claim was rejected'
       + `${ownership.viewerClaim.note ? `: ${escapeHtml(ownership.viewerClaim.note)}` : '.'}</p>`);
   }
+  if (ownership.viewerClaim && ownership.viewerClaim.status === 'verified') {
+    own.push('<p class="pkg-meta">You are listed as a verified maintainer of this package.</p>');
+  }
+  if (!ownership.viewerClaim && ownership.alreadyListed) {
+    own.push('<p class="pkg-meta">You are already listed as a maintainer of this package '
+      + '(from publish provenance or an approved access request), so no claim is needed.</p>');
+  }
   const reviewerNote = ownership.pending.length > 0
     && (!ownership.viewerClaim || ownership.pending.length > 1)
     ? `<p class="pkg-meta">${ownership.pending.length} maintainer claim`
@@ -902,6 +909,7 @@ module.exports = {
   packageBadge,
   packageIcon,
   packageTrustChips,
+  maintainersBlock,
   setStageOverrides,
   effectiveStage,
   paginatePackages,

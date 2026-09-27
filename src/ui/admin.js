@@ -20,12 +20,13 @@ const {
   requestTarget,
   historyLine,
 } = require('./account');
-const { REASON_LABELS, decisionPill } = require('./review');
+const { REASON_LABELS, decisionPill, claimRow } = require('./review');
 
 const ADMIN_SECTIONS = [
   ['/admin', 'Overview', 'overview'],
   ['/admin/requests', 'Requests', 'requests'],
   ['/admin/packages', 'Packages', 'packages'],
+  ['/admin/claims', 'Claims', 'claims'],
   ['/admin/reports', 'Reports', 'reports'],
   ['/admin/users', 'Users', 'users'],
   ['/admin/audit', 'Audit', 'audit'],
@@ -71,7 +72,7 @@ ${adminTabs('overview')}
   ${card('/admin/packages?filter=flagged', 'Flagged packages', counts.flagged, 'visible warning on the page')}
   ${card('/admin/packages?filter=muted', 'Muted packages', counts.muted, 'hidden from listings and search')}
   ${card('/admin/users', 'Accounts', counts.users, 'roles and restrictions')}
-  ${card('/review#ownership', 'Ownership claims', counts.ownershipClaims, 'awaiting verification')}
+  ${card('/admin/claims', 'Ownership claims', counts.ownershipClaims, 'awaiting verification')}
 </div>
 <section>
   <h2>Recent admin activity</h2>
@@ -516,10 +517,55 @@ ${auditList(entries, 'Nothing has been done from the console yet.')}`;
   return layout({ title: 'Admin audit', body, nav });
 }
 
+// ─── Claims ─────────────────────────────────────────────────────────────────
+
+/** Ownership claims awaiting verification, plus the recent decisions. */
+function adminClaimsPage({
+  account,
+  pending = [],
+  decided = [],
+  csrf,
+  notice = '',
+  error = '',
+  nav = '',
+}) {
+  const decidedRow = (claim) => `<li class="request-card closed">
+  <div class="request-head">
+    <a class="pkg-name" href="/packages/${encodeURIComponent(claim.package)}#maintainers">${escapeHtml(claim.package)}</a>
+    <span class="status-pill status-${claim.status === 'verified' ? 'approved' : 'denied'}">${escapeHtml(claim.status)}</span>
+    <span class="pkg-meta">@${escapeHtml(claim.login)} &middot; by @${escapeHtml(claim.decidedBy || '?')}
+      ${formatWhen(claim.decidedAt || '')}${claim.note ? ` &middot; ${escapeHtml(claim.note)}` : ''}</span>
+  </div>
+</li>`;
+  const body = `<section class="hero">
+  <h1>Ownership claims</h1>
+  <p>Signed-in accounts claim the packages they maintain. Verifying adds the account to the
+     package&rsquo;s Maintainers list; it grants no publishing rights. Only verified claims are
+     public, and every decision is kept in the claim history.</p>
+</section>
+${adminTabs('claims')}
+${noticeBox(notice, error)}
+<section>
+  <h2>Awaiting verification <span class="count">${pending.length}</span></h2>
+  ${pending.length === 0
+    ? '<p class="pkg-meta">No claims are waiting. Claims arrive when a signed-in account clicks '
+      + '&ldquo;I maintain this package&rdquo; on a package page it is not already tied to.</p>'
+    : `<ul class="request-list">\n${pending.map((claim) => claimRow(claim, csrf, '/admin/claims')).join('\n')}\n</ul>`}
+</section>
+<section>
+  <h2>Recent decisions <span class="count">${decided.length}</span></h2>
+  ${decided.length === 0
+    ? '<p class="pkg-meta">Nothing decided yet.</p>'
+    : `<ul class="request-list">\n${decided.map(decidedRow).join('\n')}\n</ul>`}
+</section>`;
+  return layout({ title: 'Admin claims', body, nav });
+}
+
 module.exports = {
   adminDashboardPage,
   adminRequestsPage,
   adminPackagesPage,
+  adminClaimsPage,
   adminReportsPage,
   adminUsersPage,
   adminUserPage,

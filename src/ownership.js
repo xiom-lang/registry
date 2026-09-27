@@ -146,6 +146,9 @@ function maintainerView({ packageName, pkg, requests = [], publishers = [], clai
   });
 
   const liveClaim = Boolean(viewerClaim) && viewerClaim.status !== 'rejected';
+  const viewerLogin = viewer ? String(viewer.login).toLowerCase() : '';
+  const alreadyListed = viewerLogin !== ''
+    && maintainers.some((entry) => entry.login.toLowerCase() === viewerLogin);
   return {
     maintainers,
     // Reviewers see every pending claim; others only their own.
@@ -155,10 +158,13 @@ function maintainerView({ packageName, pkg, requests = [], publishers = [], clai
     rejected: rejected.filter((claim) => reviewer || (viewer && claim.githubId === viewer.githubId)),
     viewerClaim,
     signedIn: Boolean(viewer),
+    viewerLogin,
+    // Already derived/verified from provenance or approved requests: no claim
+    // is needed, and the page says so instead of showing nothing.
+    alreadyListed,
     // A live (pending/verified) claim blocks another; a rejection may be
     // appealed by filing again, and derived maintainers have no form.
-    canClaim: Boolean(viewer) && !liveClaim && !maintainers
-      .some((entry) => entry.login.toLowerCase() === String(viewer.login).toLowerCase()),
+    canClaim: Boolean(viewer) && !liveClaim && !alreadyListed,
   };
 }
 

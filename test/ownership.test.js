@@ -15,6 +15,7 @@ const {
   deriveMaintainers,
   maintainerView,
 } = require('../src/ownership');
+const { maintainersBlock } = require('../src/ui/pages');
 
 function sandboxPath() {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-ownership-')), 'ownership.json');
@@ -120,8 +121,7 @@ test('maintainerView publishes verified claims and scopes pending ones to viewer
   assert.equal(reviewer.canClaim, true);
 });
 
-test('claims store: lifecycle, persistence, and guards', () => {
-  const file = sandboxPath();
+test('claims store: lifecycle, persistence, and guards', () => {  const file = sandboxPath();
   const store = new OwnershipStore({ path: file });
   const alice = { githubId: '1', login: 'alice' };
   const rev = { githubId: '9', login: 'rev' };
@@ -180,4 +180,56 @@ test('claims store normalizes malformed on-disk entries and rejects bad names', 
   assert.equal(store.listClaims()[0].login, 'alice');
   assert.throws(() => store.claim('Bad Name', { user: { githubId: '1', login: 'alice' } }), /not a package name/);
   assert.throws(() => store.claim('my-lib', { user: { githubId: 'x', login: '' } }), /signed-in GitHub account/);
+});
+
+test('a viewer already listed via provenance is told so and sees no claim form', () => {
+  const pkg = {
+    versions: {
+      '1.0.0': { published: '2026-09-01T00:00:00.000Z', publisher: { repository: 'octocat/my-lib' } },
+    },
+  };
+  const listed = maintainerView({
+    packageName: 'my-lib',
+    pkg,
+    viewer: { githubId: '1', login: 'octocat' },
+    reviewer: false,
+  });
+  assert.equal(listed.alreadyListed, true);
+  assert.equal(listed.canClaim, false);
+  assert.equal(listed.viewerLogin, 'octocat');
+
+  const stranger = maintainerView({
+    packageName: 'my-lib',
+    pkg,
+    viewer: { githubId: '2', login: 'bob' },
+    reviewer: false,
+  });
+  assert.equal(stranger.alreadyListed, false);
+  assert.equal(stranger.canClaim, true);
+
+  const html = maintainersBlock({
+    name: 'my-lib',
+    ownership: listed,
+    signedIn: true,
+    csrf: 'x',
+  });
+  assert.match(html, /already listed as a maintainer/);
+  assert.doesNotMatch(html, /I maintain this package/, 'no claim form for a listed account');
+
+  // A verified claimant gets a settled message rather than another form.
+  const settled = maintainerView({
+    packageName: 'my-lib',
+    pkg,
+    claims: {
+      2: {
+        githubId: '2', login: 'bob', status: 'verified', claimedAt: 'c',
+        decidedBy: 'rev', decidedAt: 'd', history: [],
+      },
+    },
+    viewer: { githubId: '2', login: 'bob' },
+    reviewer: false,
+  });
+  const settledHtml = maintainersBlock({ name: 'my-lib', ownership: settled, signedIn: true, csrf: 'x' });
+  assert.match(settledHtml, /You are listed as a verified maintainer/);
+  assert.doesNotMatch(settledHtml, /I maintain this package/);
 });

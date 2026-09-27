@@ -80,6 +80,7 @@ const {
   adminDashboardPage,
   adminRequestsPage,
   adminPackagesPage,
+  adminClaimsPage,
   adminReportsPage,
   adminUsersPage,
   adminUserPage,
@@ -1412,8 +1413,17 @@ function createApp(config = loadConfig()) {
     },
   );
 
-  app.get('/admin/reports', generalLimit, requireAdminPage, (req, res) => {
+  app.get('/admin/claims', generalLimit, requireAdminPage, (req, res) => {
     const context = adminPageContext(req);
+    const decided = ownership.listClaims().filter((claim) => claim.status !== 'pending').slice(0, 20);
+    res.type('html').send(adminClaimsPage({
+      ...context,
+      pending: ownership.listClaims({ status: 'pending' }),
+      decided,
+    }));
+  });
+
+  app.get('/admin/reports', generalLimit, requireAdminPage, (req, res) => {    const context = adminPageContext(req);
     const filter = ['open', 'resolved', 'dismissed'].includes(String(req.query.filter))
       ? String(req.query.filter)
       : '';
@@ -1887,7 +1897,10 @@ function createApp(config = loadConfig()) {
           note: String(req.body.note || ''),
         });
         console.log(`Ownership claim for ${req.params.name} ${claim.status} by ${claim.decidedBy}`);
-        res.redirect(303, `/review?claim=${encodeURIComponent(req.params.githubId)}#ownership`);
+        const back = req.body.next === '/admin/claims'
+          ? `/admin/claims?claim=${encodeURIComponent(req.params.githubId)}`
+          : `/review?claim=${encodeURIComponent(req.params.githubId)}#ownership`;
+        res.redirect(303, back);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
           req.session.flash = { error: err.message };

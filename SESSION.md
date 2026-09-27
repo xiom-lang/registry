@@ -2125,6 +2125,29 @@ Coverage: store toggle/normalization tests, HTTP flow (review -> flag ->
 mute -> unflag -> unmute with pill/art/tag assertions), and badge
 `mutedTag`/icon assertions; 246 unit tests and 20 e2e checks pass.
 
+**21.7 Ownership claims in the admin console (owner report, 2026-09-26).**
+The owner claimed `test-registry-smoke`, saw no form or request, and looked
+under `/admin`. Two findings:
+
+1. They were already listed as a maintainer: the package page derives
+   `@LefterisNotas` from the published provenance plus the approved
+   trusted-publisher and token requests, so `canClaim` is correctly false and
+   no form renders. The gap was silent UI: the block now says "You are already
+   listed as a maintainer of this package (from publish provenance or an
+   approved access request), so no claim is needed", and a verified claimant
+   sees "You are listed as a verified maintainer".
+2. Claims had no console surface: the queue only existed at
+   `/review#ownership`. Added **`/admin/claims`** -- pending claims with
+   Verify/Reject and a "Recent decisions" list -- plus a `Claims` console tab
+   and a dashboard card that now links there. The decision form carries
+   `next=/admin/claims` so the console gets the result back on its own page;
+   reviewers keep the queue on `/review`.
+
+Coverage: an HTTP flow through `/admin/claims` (claim -> pending -> reject
+without reason -> verify with `next` -> recent decisions), plus
+`alreadyListed`/message tests; 247 unit tests and 20 e2e checks pass.
+
+
 
 
 
