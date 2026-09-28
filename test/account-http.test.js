@@ -1829,3 +1829,75 @@ test('the admin console is an account tab and the header carries an account menu
   assert.doesNotMatch(html, /account-tab[^"]*" href="\/admin"/, 'members get no Admin tab');
   assert.match(html, /action="\/logout"/);
 });
+test('only founding admins can manage admins or grant the role', async () => {
+  const root = cookieJar();
+  await login(root, 'admin-code');
+  let response = await requestAs(root, '/admin/users', { headers: BROWSER });
+  const rootCsrf = csrfFrom(await response.text());
+
+  // Grant admin to 777 (user-user), then sign in as that granted admin.
+  response = await requestAs(root, '/admin/users/777/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: rootCsrf, role: 'admin' }),
+  });
+  assert.equal(response.status, 303);
+
+  const granted = cookieJar();
+  await login(granted, 'user-code');
+  response = await requestAs(granted, '/admin/users', { headers: BROWSER });
+  let html = await response.text();
+  assert.doesNotMatch(html, /Make admin/, 'a granted admin cannot grant admin');
+  assert.match(html, /Only a founding administrator can change an admin account/);
+  const grantedCsrf = csrfFrom(html);
+
+  // They cannot demote the founding admin (config protection fires first)...
+  response = await requestAs(granted, '/admin/users/4242/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: grantedCsrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(granted, '/admin/users/4242', { headers: BROWSER });
+  assert.match(await response.text(), /cannot be demoted here/);
+
+  // ...and cannot grant admin to anyone else.
+  response = await requestAs(granted, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: grantedCsrf, role: 'admin' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(app.locals.registry.admin.roleOf('888'), '', 'no admin was granted');
+
+  // The root grants admin to 888; 777 can no longer touch a peer...
+  response = await requestAs(root, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: rootCsrf, role: 'admin' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(app.locals.registry.admin.roleOf('888'), 'admin');
+
+  response = await requestAs(granted, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: grantedCsrf, role: '' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(granted, '/admin/users/888', { headers: BROWSER });
+  assert.match(await response.text(), /only a founding administrator can change an admin/);
+  assert.equal(app.locals.registry.admin.roleOf('888'), 'admin', 'the peer stays admin');
+
+  response = await requestAs(granted, '/admin/users/888/status', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: grantedCsrf, status: 'banned', reason: 'not allowed' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(app.locals.registry.admin.statusOf('888'), 'active', 'the peer stays active');
+
+  // ...while the founding admin still manages admins: demote both back.
+  for (const id of ['888', '777']) {
+    response = await requestAs(root, `/admin/users/${id}/role`, {
+      method: 'POST',
+      body: new URLSearchParams({ csrf: rootCsrf, role: '' }),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(app.locals.registry.admin.roleOf(id), '');
+  }
+});

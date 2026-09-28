@@ -1815,6 +1815,7 @@ function createApp(config = loadConfig()) {
       ...context,
       users: accounts.list().map(accountUserView),
       q: String(req.query.q || '').trim(),
+      viewerIsConfigAdmin: isConfigAdmin(accountOf(req)),
     }));
   });
 
@@ -1828,6 +1829,7 @@ function createApp(config = loadConfig()) {
       ...context,
       user: accountUserView(account),
       audit: admin.auditFor(account.githubId, 30),
+      viewerIsConfigAdmin: isConfigAdmin(accountOf(req)),
     }));
   });
 
@@ -1853,6 +1855,23 @@ function createApp(config = loadConfig()) {
           throw new ConflictError(
             'this account is already a config admin; it cannot be reduced to reviewer here',
             'config_admin_protected',
+          );
+        }
+        // Hierarchy (owner, 2026-09-27): the founding administrators come from
+        // the deployment config and sit above granted admins; only they may
+        // change an admin or grant the role, so a granted admin can never
+        // demote or ban a peer or the founder.
+        const actorIsConfigAdmin = isConfigAdmin(accountOf(req));
+        if (!actorIsConfigAdmin && target.githubId !== actor.githubId && isAdmin(target)) {
+          throw new ConflictError(
+            'only a founding administrator can change an admin account',
+            'admin_peer_protected',
+          );
+        }
+        if (!actorIsConfigAdmin && role === 'admin') {
+          throw new ConflictError(
+            'only a founding administrator can grant admin',
+            'admin_grant_protected',
           );
         }
         // Last-admin guard: never let the console remove the only admin.
@@ -1894,6 +1913,12 @@ function createApp(config = loadConfig()) {
           );
         }
         const status = String(req.body.status || '');
+        if (!isConfigAdmin(actor) && target.githubId !== actor.githubId && isAdmin(target)) {
+          throw new ConflictError(
+            'only a founding administrator can change an admin account',
+            'admin_peer_protected',
+          );
+        }
         admin.setStatus({
           account: target,
           status,

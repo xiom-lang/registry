@@ -15,6 +15,18 @@ The rendered version of this file is at `/whats-new`.
   JSON files on the data volume are rollback mirrors only; no API, protocol, or
   UI change.
 
+## [2.4.2] - 2026-09-28
+
+### Admin hierarchy
+
+- **Founding administrators sit above granted admins**: only config-listed
+  admins can change an admin account or grant the admin role, so a granted
+  admin can never demote or ban a peer or the founder. Granted admins still
+  manage members and reviewers, and self-changes keep their existing
+  protections. The founding account remains untouchable from the console
+  (demotion, suspension, and bans were already blocked at the route level).
+- The users console hides controls a viewer cannot use and explains why.
+
 ## [2.4.1] - 2026-09-27
 
 ### Fixed

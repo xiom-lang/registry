@@ -397,16 +397,19 @@ function statusPillFor(user) {
   return '';
 }
 
-function userActions(user, csrf) {
+function userActions(user, csrf, viewerIsConfigAdmin = false) {
   const protectedAccount = user.configAdmin;
+  const adminTarget = user.role === 'admin';
+  // Hierarchy: only founding (config) admins manage admins or grant the role.
+  const canManageAdmin = viewerIsConfigAdmin;
   const actions = [];
-  if (!protectedAccount && user.role === 'admin') {
+  if (!protectedAccount && adminTarget && canManageAdmin) {
     actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <input type="hidden" name="role" value="">
       <button class="button" type="submit">Demote to member</button>
     </form>`);
-  } else if (!protectedAccount && user.role !== 'admin') {
+  } else if (!protectedAccount && !adminTarget && canManageAdmin) {
     actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <input type="hidden" name="role" value="admin">
@@ -420,7 +423,7 @@ function userActions(user, csrf) {
       <input type="hidden" name="role" value="">
       <button class="button" type="submit">Remove reviewer</button>
     </form>`);
-    } else if (user.role !== 'admin' && !user.configReviewer) {
+    } else if (!adminTarget && !user.configReviewer) {
       actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
       <input type="hidden" name="role" value="reviewer">
@@ -428,7 +431,7 @@ function userActions(user, csrf) {
     </form>`);
     }
   }
-  if (!protectedAccount) {
+  if (!protectedAccount && (!adminTarget || canManageAdmin)) {
     if (user.status === 'active') {
       actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/status">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
@@ -453,8 +456,9 @@ function userActions(user, csrf) {
   return actions.join('\n');
 }
 
-function userCard(user, csrf) {
+function userCard(user, csrf, viewerIsConfigAdmin = false) {
   const protectedAccount = user.configAdmin;
+  const adminTarget = user.role === 'admin';
   return `<li class="request-card user-card">
   <div class="request-head">
     <a class="pkg-name" href="/admin/users/${encodeURIComponent(user.githubId)}">@${escapeHtml(user.login)}</a>
@@ -466,10 +470,13 @@ function userCard(user, csrf) {
     ? `<p class="pkg-meta">${escapeHtml(user.reason || '')} ${user.changedBy ? `&middot; by @${escapeHtml(user.changedBy)} ${formatWhen(user.changedAt)}` : ''}</p>`
     : ''}
   ${protectedAccount ? '<p class="pkg-meta">Admin comes from the deployment config; change it there.</p>' : ''}
+  ${!protectedAccount && adminTarget && !viewerIsConfigAdmin
+    ? '<p class="pkg-meta">Only a founding administrator can change an admin account.</p>'
+    : ''}
   ${user.configReviewer && !protectedAccount
     ? '<p class="pkg-meta">Reviewer comes from the deployment config; grants here can only add admin.</p>'
     : ''}
-  <div class="user-actions">${userActions(user, csrf)}</div>
+  <div class="user-actions">${userActions(user, csrf, viewerIsConfigAdmin)}</div>
 </li>`;
 }
 
@@ -480,6 +487,7 @@ function adminUsersPage({
   notice = '',
   error = '',
   q = '',
+  viewerIsConfigAdmin = false,
   nav = '',
 }) {
   const filtered = q
@@ -499,11 +507,20 @@ ${noticeBox(notice, error)}
 </form>
 ${filtered.length === 0
     ? '<p class="pkg-meta">No accounts match.</p>'
-    : `<ul class="request-list">\n${filtered.map((user) => userCard(user, csrf)).join('\n')}\n</ul>`}`;
+    : `<ul class="request-list">\n${filtered.map((user) => userCard(user, csrf, viewerIsConfigAdmin)).join('\n')}\n</ul>`}`;
   return layout({ title: 'Admin users', body, nav });
 }
 
-function adminUserPage({ account, user, audit = [], csrf, notice = '', error = '', nav = '' }) {
+function adminUserPage({
+  account,
+  user,
+  audit = [],
+  csrf,
+  notice = '',
+  error = '',
+  viewerIsConfigAdmin = false,
+  nav = '',
+}) {
   const body = `<section class="hero account-hero">
   <div>
     <h1>@${escapeHtml(user.login)}</h1>
@@ -521,7 +538,7 @@ ${noticeBox(notice, error)}
 <div class="account-grid">
   <section>
     <h2>Actions</h2>
-    <div class="user-actions">${userActions(user, csrf)}</div>
+    <div class="user-actions">${userActions(user, csrf, viewerIsConfigAdmin)}</div>
   </section>
   <section>
     <h2>Audit trail</h2>

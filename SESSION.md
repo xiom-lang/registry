@@ -2445,9 +2445,9 @@ never hand-edit data files on the VPS.
 
 | Item | Value |
 |---|---|
-| Live version | **2.4.0 live on staging and production** (owner confirmed); **2.4.1 prepared on `main`** (header account-menu styling fix) awaiting the next ops deploy |
+| Live version | **2.4.1 live on staging and production**; **2.4.2 prepared on `main`** (admin hierarchy: only founding admins manage admins) awaiting the next ops deploy |
 | Repo | `main` at the 2.3.1 release commit (A2 + D7 complete + A7 + A8 + A3.1-3 + A9); working tree clean after this session |
-| Tests | `npm test` **284/284**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Tests | `npm test` **285/285**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` shape untouched |
 | Deploy | Ops pulls `main`, `docker compose build registry`, `up -d --no-deps registry`, staging first then production. This machine has **no SSH** to the VPS, so deploys are handed to ops |
 | Notifications | A2 rows for claim/report/review with per-kind mutes; D7 gate: email only to verified addresses, retry/backoff, `/health` + dashboard visibility; A7 `support` rows for community messages; local visual checks at 390px and 1280px |
@@ -2597,6 +2597,13 @@ its own line on phones so it never clips. DEPLOY.md's staging section is
 corrected (separate container/profile/volumes; split deploy commands). 282
 unit tests and 20 e2e checks green; ops deploys staging first, then production,
 and the owner verifies the new surfaces.
+
+**2.4.2 (2026-09-28)** adds the admin hierarchy the owner asked for: the
+config-listed founding admins sit above granted admins. Only a founding admin
+can change an admin account or grant the admin role, so a granted admin can
+never demote or ban a peer or the founder; granted admins still manage members
+and reviewers, self-changes keep their store-level protections, and the users
+console hides controls the viewer cannot use. 285/285 unit tests green.
 
 
 
