@@ -1962,6 +1962,10 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
+**Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
+contributor profiles + Sponsors badge + board, C3 offline export bundle; see
+24.2). Staging and production still run 2.4.2 until ops promotes it.
+
 ### Track A -- finish the community layer (the section 18 expansion)
 
 | Order | Feature | Notes / source | Size |
@@ -1969,13 +1973,13 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A1 | **Package ownership claims** | 15.1: a maintainer list on the package page from OIDC provenance + approved requests. Display/identity only, never publish powers; "claimed" is derived, not granted by the UI. Needs a store + claim flow. **DONE 2026-09-26 (`57be0ba`) -- see 21.1.** | M |
 | A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. **DONE 2026-09-27 (`616a800` store, `2ff1e43` events/UI) -- see 23; owner-verified on staging.** | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. **DONE 2026-09-27 (phases 1-3c):** ratings, reports/decisions, publishers, requests, and accounts all live in SQLite with per-table import + rollback mirrors (`591067f`, `db52657`, `1eeee50`, `1b5e647`, accounts commit this session). The JSON files are mirrors only; `/index.json` untouched. A4 (profiles/feeds) and future pagination/analytics query the new tables. | M (done) |
-| A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. | M |
+| A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. **DONE 2026-09-29 (`67a582f`, 2.5.0) -- see 24.2:** `/account/<login>` public profile (maintained packages, written reviews/ratings, maintainer replies, decision history), opt-in cached `hasSponsorsListing` badge (`GITHUB_SPONSORS_TOKEN`, migration 011), `/contributors` board scored with per-category caps; author/maintainer/decision links now point at profiles. | M (done) |
 | A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
-| A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. | S |
+| A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. **Badge shipped in A4 (`67a582f`); no-payment boundary documented in OFFLINE-style copy and settings.** | S (done) |
 | A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
 | A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. **DONE 2026-09-27 (`7d7e853`).** | S |
 | A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. **DONE 2026-09-27 (`4872cf9`):** `review_votes` + `review_replies` (migration 007), toggle/self-vote/counts, editable labelled reply notifying `review-reply`, newest/helpful sort, text filter, 10-per-page pagination. | M |
-| A10 | **Package discovery: stage and pre-release facets** | Owner request 2026-09-28: add lifecycle facets to `/packages` and search next to the existing `category`/`first_party`/`signed` facets -- `stage` (all/stable/incubating/deprecated, from the manifest stage the badges already use) and `prerelease` (hide by default / only / include, derived from `latest` semver) -- each with counts, shareable query params, mobile chips, and the same fields in the listing JSON (the `/index.json` contract is untouched). Deprecated stays visible but clearly marked; stable remains the default surfacing and incubating stays visually distinct (badge matrix). Sort grows later: rating after A4, downloads after C1. | S/M |
+| A10 | **Package discovery: stage and pre-release facets** | Owner request 2026-09-28: add lifecycle facets to `/packages` and search next to the existing `category`/`first_party`/`signed` facets -- `stage` (all/stable/incubating/deprecated, from the manifest stage the badges already use) and `prerelease` (hide by default / only / include, derived from `latest` semver) -- each with counts, shareable query params, mobile chips, and the same fields in the listing JSON (the `/index.json` contract is untouched). Deprecated stays visible but clearly marked; stable remains the default surfacing and incubating stays visually distinct (badge matrix). Sort grows later: rating after A4, downloads after C1. **DONE 2026-09-29 (`9b10975`, 2.5.0) -- see 24.2:** cross-filter counts on the chips, stage/prerelease echoed + per-package in listing/search JSON, banner search keeps the facets; 5 new tests (`test/discovery.test.js`) + mobile 390px pass. Rating sort is now unblocked (A4 landed). | S/M (done) |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
 `Maintainers` section built from data the registry already holds -- repository
@@ -2294,7 +2298,7 @@ order.
 |---|---|---|---|
 | C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). | M |
 | C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. | S |
-| C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. | L (design answered; exporter queued) |
+| C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. **DONE 2026-09-29 (`62780a3`, 2.5.0):** `scripts/export-bundle.js` + `OFFLINE.md`; every artifact hashed while exporting, `--latest-only`, resume, `--verify`; production export verified: 384 artifacts / 15,516,333 bytes. Client lane owns offline resolution semantics. | L (done) |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
 | C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. | M |
 
@@ -2625,109 +2629,114 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ---
 
-## 24. Session handoff (2026-09-28, registry lane)
+## 24. Session handoff (2026-09-29, registry lane)
 
 ### 24.1 State snapshot
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `2b2bc43`, clean; Registry CI + CodeQL green |
-| Tests | `npm test` **286/286**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.4.1 on staging and production** with `email: enabled` (ops, 2026-09-27). **2.4.2 + publish warnings are on `main` and not deployed yet** |
-| Migrations | `001-notifications` ... `010-stored-accounts`; every JSON store on the data volume is now a rollback mirror (the SQLite move A3 is complete) |
+| Repo | `main` at the 2.5.0 release commit (features `9b10975` A10, `67a582f` A4, `62780a3` C3); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **305/305**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Deployed | **2.4.2 on staging and production** with `email: enabled` (ops, 2026-09-28; production restarted 22:07Z). **2.5.0 is on `main` and awaiting ops** |
+| Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
-| Email | D7 complete (authenticated SMTP, verified-address gate, retry/backoff, `/health` + dashboard visibility) |
-| Admin safety | Founding admins (config) > granted admins > users; only founders manage admins; self-change guards intact |
-| Blocked elsewhere | `xiom-std@0.62.0` canary: stdlib publish run `36438204239` approved but stuck on "wait for release asset" -- no GitHub release/assets for tag `stdlib-v0.62.0` (`80e767bc`); stdlib `release.yml`/`ci.yml`/`heavy.yml` fail with a workflow-file issue at `960b506` |
+| Sponsors badge | Opt-in + cached `hasSponsorsListing` via `GITHUB_SPONSORS_TOKEN` (optional env). Unset = checks disabled, badge stays unverified, everything else works |
+| Offline bundle | Production export verified: 384 artifacts / 15,516,333 bytes, all sha256-checked and `--verify`-clean; regenerate with `npm run export-bundle -- --registry https://registry.xiom-lang.org --out <dir>` |
+| Blocked elsewhere | `xiom-std@0.62.0` canary: stdlib Release run started 2026-09-28T22:55Z after the workflow fix (`80e767b` tree + workflow-only change); the Registry Publish run is waiting on its assets. Re-dispatch/verify when the release exists |
 
-### 24.2 Shipped across the 2.3-2.4 rounds (hashes)
+### 24.2 Shipped in 2.5.0 (hashes)
 
-- 2.3.0 (`748ebe3`): notification coverage, email gate/retry, community contact
-  (A7), repo/issue links (A8), review votes + maintainer reply (A9), SQLite
-  rounds 1-3a.
-- 2.3.1 (`fdedbdb`): clickable email links (`emailLink()`), DEPLOY.md staging
-  correction.
-- 2.4.0 (`550c404`): admin tab, avatar account menu, mobile card fix.
-- 2.4.1 (`27e470d`): account-menu styling fix (overlay panel, scoped CSS).
-- 2.4.2 (`8fbc41f`, includes `4aad1a1`): accounts -> SQLite (migration 010) and
-  the founding-admin hierarchy.
-- `04098a0`: publish warnings when `stage` is missing or contradicts a
-  pre-release version.
-- `86940e8`: answers to the playground's C3 four questions. `2b2bc43`: A10
-  discovery filters + 2.5.0 plan.
+- `9b10975` **A10 -- discovery facets**: `/packages` and `/search` gain
+  `?stage=all|stable|incubating|deprecated` (effective manifest stage, resolved
+  exactly like the badges) and `?prerelease=hide|only|include` (latest semver)
+  with cross-filter counts on the chips, shareable links, banner-search
+  persistence, and per-package `stage`/`prerelease` fields in the listing and
+  search JSON. `/index.json` untouched. `test/discovery.test.js` covers every
+  combination; mobile 390px pass (chips wrap at 44px targets, no overflow).
+- `67a582f` **A4 -- contributor profiles, Sponsors badge, top-contributors
+  board**: public `/account/<login>` (maintained packages, written reviews +
+  ratings, maintainer replies, decision history), opt-in cached GitHub
+  Sponsors badge (migration 011 `contributor_sponsors`, optional
+  `GITHUB_SPONSORS_TOKEN`, `hasSponsorsListing`), `/contributors` with a
+  capped weighted score (reviews 3/10, replies 2/10, packages 2/5, ratings
+  1/20, decisions 1/20; suspended/banned excluded). Review authors,
+  maintainers, claimants, and decision actors now link to profiles.
+- `62780a3` **C3 -- offline export bundle**: `scripts/export-bundle.js` +
+  `OFFLINE.md`; `index.json` copied byte-for-byte, artifacts under
+  `artifacts/<name>/<version>/package.tar.gz`, `bundle.json` with
+  sha256/signature/publicKey/source/generatedAt and the index digest; hashes
+  verified while exporting (mismatch stops the run, no manifest written);
+  `--latest-only`, resume, and offline `--verify`. Production run verified.
+- Release commit on top: version `2.5.0`, CHANGELOG section, this handoff.
+- Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
+  ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
+  `04098a0` publish-stage warnings.
 
 ### 24.3 Next actions, in order
 
-1. **A10 -- stage and pre-release facets** (owner request; spec in the A10
-   roadmap row): `/packages` + search gain `?stage=all|stable|incubating|
-   deprecated` and `?prerelease=hide|only|include` next to the existing
-   category/first-party/signed facets, with counts, shareable params, mobile
-   chips, and listing-JSON fields; `/index.json` untouched; deprecated visible
-   but marked; stable default; pre-release hidden by default.
-2. **A4 -- contributor profiles + Sponsors badges**: per-account page
-   (packages maintained, reviews, audit events), cached opt-in GitHub Sponsors
-   badge, top-contributors board with anti-abuse caps. Queries come from the
-   SQLite tables.
-3. **C3 -- export bundle for the playground**: `scripts/export-bundle.js`
-   producing `<out>/index.json` + `<out>/artifacts/<name>/<version>/
-   package.tar.gz` + `<out>/bundle.json` (per-artifact sha256/signature/
-   publicKey/source/generatedAt), plus `OFFLINE.md`; export from **production**,
-   pin by sha256; the client lane owns offline resolution semantics.
-4. **Cut 2.5.0** after those land: version bump, CHANGELOG section, SESSION
-   note, DCO commits, `npm test` + `npm run test:e2e`, push, watch CI, hand
-   ops the deploy (staging first, then production).
-5. Then: A5 feeds/following, A6 sponsorship badge; C1 download stats (also
-   unlocks a most-downloaded sort for A10), C2 provenance attestation link,
-   C4 object storage/sharding at scale, C5 index digest (discuss first);
-   Track B client items (`pkg` guard, `yank`, `--dry-run` + validate endpoint,
-   publisher self-service edit/revoke, token rotation).
-6. Ops backlog: fulfiller worker confirmation, ops-repo template cleanup,
-   audit pagination, backup drill, rate-limit profile, cap retune.
-7. When stdlib unblocks: re-run/verify the `xiom-std@0.62.0` publish and run
-   the pinned-artifact canary (index entry, provenance `refs/tags/stdlib-v0.62.0`
-   + commit `80e767bc`, sha256, ed25519, badge), staging then production.
+1. **Ops: deploy 2.5.0** (staging first, then production). `git pull`,
+   rebuild, recreate; migration 011 applies on boot; then walk the new
+   surfaces on staging: `/packages?stage=deprecated`, an account profile,
+   `/contributors`, and (when a token is configured) one badge opt-in.
+   Optional env for full badge checks: `GITHUB_SPONSORS_TOKEN` (public-read).
+   Nothing else to configure; JSON stores stay mirrors.
+2. **stdlib canary when the release finishes**: the XIOM Stdlib Release run
+   started 2026-09-28T22:55Z (`80e767b` tree + workflow-only change). Once
+   `stdlib-v0.62.0` has assets, re-dispatch the waiting Registry Publish run,
+   then run the pinned canary (index entry, provenance `refs/tags/stdlib-v0.62.0`
+   + commit `80e767b`, sha256, ed25519, badge), staging then production.
+3. **Tell the playground lane** the C3 deliverable is ready: `npm run
+   export-bundle -- --registry https://registry.xiom-lang.org --out <dir>`
+   (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
+   the client lane owns offline resolution semantics. Production export
+   verified 384 artifacts / 15,516,333 bytes.
+4. **Roadmap next** (section 21 order): A5 feeds/following; C1 download stats
+   (also unlocks the most-downloaded sort; the A10 rating sort is now
+   unblocked since A4 landed); C2 provenance attestation link; C5 index digest
+   (discuss first); C4 object storage/sharding only past a few thousand
+   packages; Track B client items (`pkg` guard, `yank`, `--dry-run` + validate
+   endpoint, publisher self-service edit/revoke, token rotation).
+5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
+   ops-repo template cleanup, audit pagination, backup/restore drill,
+   rate-limit batch profile, resource-cap retune.
 
 ### 24.4 Paste-ready prompt for the next session
 
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 2b2bc43, clean, 286/286 unit
-and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at the 2.5.0 release commit
+(features 9b10975 A10, 67a582f A4, 62780a3 C3; release commit on top), clean,
+305/305 unit and 20/20 e2e green.
 
-State in one line: 2.4.1 is live on staging+production; main carries 2.4.2
-(accounts -> SQLite, founding-admin hierarchy) plus publish-stage warnings,
-undeployed; the SQLite move (A3) is complete; the stdlib 0.62.0 canary is
-blocked on the stdlib release workflow (no release assets for stdlib-v0.62.0).
+State in one line: 2.5.0 (A10 discovery facets, A4 contributor profiles +
+Sponsors badge + board, C3 offline export bundle) is cut on main and awaiting
+ops; staging+production still run 2.4.2; the stdlib 0.62.0 canary depends on
+the stdlib Release run that started 2026-09-28T22:55Z.
 
 First actions:
-1. Verify state: git pull; npm test (expect 286) and npm run test:e2e (expect
-   20); /health on staging and production (expect 2.4.1, email enabled).
-2. Implement A10 (stage + pre-release facets; spec in the A10 roadmap row):
-   server-side facets with counts on /packages and search, shareable query
-   params, mobile chips, listing-JSON fields; /index.json untouched; stage
-   values from the manifest (stable/incubating/deprecated), prerelease from
-   the latest semver; tests for each facet combination; visual check on
-   mobile 390px.
-3. Implement A4 (contributor profiles + Sponsors badges): /account/<login>
-   public profile (packages maintained via maintainerView, reviews from
-   review_ratings, review replies, audit/decision history), opt-in cached
-   GitHub Sponsors badge for the signed-in account, top-contributors board
-   with caps; server-rendered, mobile-first.
-4. Implement C3 (export bundle for the playground): scripts/export-bundle.js
-   + OFFLINE.md producing the documented layout (index.json, artifacts/...,
-   bundle.json with sha256/signature/publicKey/source/generatedAt); verifies
-   every artifact hash while exporting; export from production; unit test with
-   a local registry fixture.
-5. Cut 2.5.0 when 2-4 are green: version bump, CHANGELOG section (what's new
-   wording), SESSION update; DCO-signed conventional commits; push; gh run
-   watch to green; hand ops the deploy (staging first, then production).
+1. Verify state: git pull; npm test (expect 305) and npm run test:e2e (expect
+   20); /health on staging and production (expect 2.4.2 until ops deploys
+   2.5.0, then 2.5.0; email enabled either way).
+2. If 2.5.0 is not deployed, hand ops the deploy: staging first (walk
+   /packages?stage=deprecated, an account profile, /contributors; one badge
+   opt-in when GITHUB_SPONSORS_TOKEN is set), then production. Migration 011
+   applies on boot; JSON stores stay rollback mirrors; never hand-edit data
+   files on the VPS.
+3. stdlib: check the XIOM Stdlib Release run for stdlib-v0.62.0 assets; when
+   they exist, re-dispatch/re-run the waiting Registry Publish run, then run
+   the pinned-artifact canary (index entry, provenance refs/tags/stdlib-v0.62.0
+   + commit 80e767b, sha256, ed25519, badge), staging then production.
+4. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
+   --latest-only, pin by sha256) and take the next feature from the section 21
+   order: A5 feeds/following, then C1 download stats (unblocks the
+   most-downloaded sort; A10's rating sort is now unblocked too).
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
 untouched); use the repo's store patterns (SQLite via src/db.js migrations,
-JSON stores are rollback mirrors); never hand-edit data files on the VPS;
-visual-verify UI changes on mobile before claiming done.
+JSON stores are rollback mirrors); visual-verify UI changes on mobile before
+claiming done.
 ```
 
 

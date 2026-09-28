@@ -6,13 +6,56 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
-### Publish warnings
+## [2.5.0] - 2026-09-29
 
-- **Maturity backstop**: publishes now warn when the manifest declares no
-  `stage` ("set `incubating` or `stable`") or when `stage: "stable"` is
-  combined with a pre-release version. Advisory only — nothing blocks a
-  publish — and it surfaces the source-of-truth gap the packages lane closed
-  in its incubating-by-default policy (packages commit `6b43337`).
+### Discovery
+
+- **Lifecycle facets**: `/packages` and search filter by the manifest stage
+  (`stage=all|stable|incubating|deprecated`, resolved exactly like the badge
+  art: published package, else latest version, else the audited display
+  override) and by whether the latest installable version is a semver
+  pre-release (`prerelease=hide|only|include`). Every chip carries a count
+  computed against the other active filters, links stay shareable, and the
+  banner search form keeps the facets for the next query. Deprecated packages
+  stay visible and marked; pre-releases are hidden by default. The listing and
+  search JSON gain per-package `stage`/`prerelease` fields; `/index.json` is
+  untouched.
+
+### Community
+
+- **Contributor profiles**: `/account/<login>` is a public profile built from
+  data that is already public — packages maintained (publish provenance,
+  approved trusted publishers and tokens, verified claims), written reviews and
+  ratings, maintainer replies, and the reviewer/claim decision history. Review
+  authors, maintainers, and decision actors link to profiles everywhere.
+- **GitHub Sponsors badge**: opt-in per account, verified against GitHub's
+  public `hasSponsorsListing` field with a server-side token, cached in the
+  platform database, cleared on opt-out. The registry handles no money and
+  stores no payment data; without a token configured the badge stays
+  unverified and the settings page says so.
+- **Top contributors**: `/contributors` ranks accounts by a capped, weighted
+  score (written reviews 3/cap 10, maintainer replies 2/cap 10, packages
+  maintained 2/cap 5, ratings 1/cap 20, decisions 1/cap 20), explains the
+  rules, and excludes suspended and banned accounts. Raw volume never wins.
+
+### Publishing
+
+- **Maturity backstop**: publishes warn when the manifest declares no `stage`
+  ("set `incubating` or `stable`") or when `stage: "stable"` is combined with
+  a pre-release version. Advisory only — nothing blocks a publish.
+  (Previously under Unreleased.)
+
+### Operations
+
+- **Offline export bundle**: `npm run export-bundle` (or
+  `scripts/export-bundle.js`) mirrors a registry into the layout documented in
+  `OFFLINE.md` — `index.json` copied byte-for-byte,
+  `artifacts/<name>/<version>/package.tar.gz` per digest-bearing version, and
+  `bundle.json` with each artifact's sha256/signature/publicKey/source and the
+  index digest. Every artifact is hashed while exporting; a mismatch stops the
+  run and writes no manifest. `--verify` re-checks a bundle offline. Exported
+  from production for the playground: 384 artifacts, 15.5 MB, all hashes
+  verified.
 
 ## [2.4.2] - 2026-09-28
 
