@@ -68,6 +68,12 @@ services:
       - SMTP_FROM=${SMTP_FROM:-}
       # Shared secret for the fulfiller worker's internal API (unset = off).
       - FULFILLER_SECRET=${FULFILLER_SECRET:-}
+      # A4 contributor profiles: the opt-in GitHub Sponsors badge. A token
+      # with plain public read access enables live `hasSponsorsListing`
+      # checks (cached in the platform database, cleared on opt-out). Unset
+      # keeps badges unverified and nothing else changes. Declared so a .env
+      # value actually reaches the container.
+      - GITHUB_SPONSORS_TOKEN=${GITHUB_SPONSORS_TOKEN:-}
       # Rate-limit knobs, DECLARED so .env values actually reach the container
       # (compose does not inherit undeclared variables). Empty = built-in
       # default. Disabling the limiter is a load-test move: set
@@ -150,6 +156,9 @@ services:
       - SMTP_URL=${SMTP_URL:-}
       - SMTP_FROM=${SMTP_FROM:-}
       - FULFILLER_SECRET=${FULFILLER_SECRET:-}
+      # Sponsors checks; staging can use its own token or fall back to the
+      # shared one (same pattern as the rate-limit knobs).
+      - GITHUB_SPONSORS_TOKEN=${XIOM_STAGING_GITHUB_SPONSORS_TOKEN:-${GITHUB_SPONSORS_TOKEN:-}}
       # Staging rate-limit knobs. The XIOM_STAGING_* names let a load test
       # relax or disable staging limits without touching production when both
       # services share one env context; each falls back to the shared value.

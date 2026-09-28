@@ -61,3 +61,27 @@ test('every rate-limit knob is declared in compose and documented in both env ex
     );
   }
 });
+
+// A4's Sponsors token is the first non-rate-limit operator knob with the same
+// compose trap: a value in .env alone never reaches the container. It gets
+// the same four-place guard (production declaration, staging override, both
+// env examples) so the gap ops found on the 2.5.0 rollout cannot regress.
+test('the Sponsors token is declared in compose and documented in both env examples', () => {
+  assert.match(CONFIG, /process\.env\.GITHUB_SPONSORS_TOKEN/, 'config reads the variable');
+  assert.match(
+    COMPOSE,
+    /- GITHUB_SPONSORS_TOKEN=\$\{GITHUB_SPONSORS_TOKEN:-\}/,
+    'the production service must declare GITHUB_SPONSORS_TOKEN',
+  );
+  assert.match(
+    COMPOSE,
+    /- GITHUB_SPONSORS_TOKEN=\$\{XIOM_STAGING_GITHUB_SPONSORS_TOKEN:-\$\{GITHUB_SPONSORS_TOKEN:-\}\}/,
+    'the staging service must declare its own override falling back to the shared token',
+  );
+  assert.match(ENV_EXAMPLE, /#\s*GITHUB_SPONSORS_TOKEN=/, 'documented in .env.example');
+  assert.match(
+    ENV_STAGING,
+    /#\s*XIOM_STAGING_GITHUB_SPONSORS_TOKEN=/,
+    'documented in .env.staging.example',
+  );
+});

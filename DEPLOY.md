@@ -419,6 +419,7 @@ env context:
 | `PUBLISH_RATE_MAX` / `XIOM_STAGING_PUBLISH_RATE_MAX` | 20 | publish requests per window |
 | `DOWNLOAD_RATE_WINDOW_MS` / `XIOM_STAGING_DOWNLOAD_RATE_WINDOW_MS` | 60000 | artifact download window |
 | `DOWNLOAD_RATE_MAX` / `XIOM_STAGING_DOWNLOAD_RATE_MAX` | 600 | artifact downloads per window |
+| `GITHUB_SPONSORS_TOKEN` / `XIOM_STAGING_GITHUB_SPONSORS_TOKEN` | unset | A4 Sponsors badge checks: a GitHub token with plain public read access; unset = opt-ins stay unverified and the UI says so |
 
 Before a run, confirm what the container actually has (not what `.env` says):
 
