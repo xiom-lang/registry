@@ -20,7 +20,7 @@ const {
 } = require('./format');
 const { fingerprint, layout } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
-const { categoryCounts } = require('../categories');
+const { categoryCounts, STAGES } = require('../categories');
 const { renderMarkdown } = require('./markdown');
 const { reportForm, decisionPill, reviewHistory, decisionControls, ratingsSection } = require('./review');
 const semver = require('semver');
@@ -30,6 +30,19 @@ const DEFAULT_PER_PAGE = 50;
 const MAX_PER_PAGE = 200;
 /** Cards in the home "recently updated" strip (section 13 phase 2). */
 const HOME_STRIP_SIZE = 6;
+
+/**
+ * Lifecycle facet vocabulary (A10). `stage` filters on the effective manifest
+ * stage -- published package, else latest version, else the audited display
+ * override, the same resolution the badges use -- and `prerelease` on whether
+ * the latest installable version is a semver pre-release. `all` / `hide` are
+ * the defaults and stay out of shareable URLs. Unknown stages appear only
+ * under `stage=all`; deprecated stays visible but carries its badge.
+ */
+const STAGE_FACETS = Object.freeze(['all', 'stable', 'incubating', 'deprecated']);
+const PRERELEASE_FACETS = Object.freeze(['hide', 'only', 'include']);
+const DEFAULT_STAGE = 'all';
+const DEFAULT_PRERELEASE = 'hide';
 
 // Badge matrix assets present in this build. Decision art (reviewed, muted)
 // takes effect the moment the owner drops the files in; until then the
@@ -226,14 +239,17 @@ function categoryChips(categories, limit = 3) {
     .join('')}</span>`;
 }
 
-/** Strip of every category with a package count, for browsing. */
-function categoryStrip(index, activeCategory = '') {
+/** Strip of every category with a package count, for browsing. `params`
+ * (q + lifecycle facets) keeps an active search shareable when changing
+ * category (A10). */
+function categoryStrip(index, activeCategory = '', params = {}) {
   const counts = categoryCounts(index);
   const chips = counts
     .map(({ name, count }) => {
       const active = name === activeCategory ? ' chip-active' : '';
       const zero = count === 0 ? ' chip-empty' : '';
-      return `<a class="chip${active}${zero}" href="/search?category=${encodeURIComponent(name)}">`
+      const href = `/search${searchQueryString({ ...params, category: name })}`;
+      return `<a class="chip${active}${zero}" href="${href}">`
         + `${escapeHtml(name)} <span class="chip-count">${count}</span></a>`;
     })
     .join('');
@@ -262,22 +278,27 @@ function packageCard(name, pkg) {
 
 /**
  * Filter + sort package names for the listing (SESSION.md section 13
- * phase 3): `sort` is 'updated' (newest latest-publish first, the default)
- * or 'name'; facets are category, firstParty, and signed (the latest
- * installable version carries a publisher signature).
+ * phase 3, A10): `sort` is 'updated' (newest latest-publish first, the
+ * default) or 'name'; facets are category, firstParty, signed (the latest
+ * installable version carries a publisher signature), stage, and prerelease.
  */
-function listingNames(index, { sort = 'updated', category = '', firstParty = false, signed = false } = {}) {
+function listingNames(index, {
+  sort = 'updated',
+  category = '',
+  firstParty = false,
+  signed = false,
+  stage = DEFAULT_STAGE,
+  prerelease = DEFAULT_PRERELEASE,
+} = {}) {
   let names = Object.keys(index.packages);
   if (category) {
     const needle = category.toLowerCase();
     names = names.filter((name) => (index.packages[name].categories || []).includes(needle));
   }
   if (firstParty) names = names.filter((name) => isFirstPartyNamespace(name));
-  if (signed) {
-    names = names.filter((name) => {
-      const entry = latestEntry(index.packages[name]);
-      return Boolean(entry && entry.signature && entry.publicKey);
-    });
+  if (signed) names = names.filter((name) => signedLatest(index.packages[name]));
+  if (stage !== DEFAULT_STAGE || prerelease !== 'include') {
+    names = names.filter((name) => lifecycleAllows(index, name, { stage, prerelease }));
   }
   const publishedAt = (name) => {
     const entry = latestEntry(index.packages[name]);
@@ -297,8 +318,10 @@ function paginatePackages(index, {
   category = '',
   firstParty = false,
   signed = false,
+  stage = DEFAULT_STAGE,
+  prerelease = DEFAULT_PRERELEASE,
 } = {}) {
-  const names = listingNames(index, { sort, category, firstParty, signed });
+  const names = listingNames(index, { sort, category, firstParty, signed, stage, prerelease });
   const total = names.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(Math.max(1, page), totalPages);
@@ -313,11 +336,13 @@ function paginatePackages(index, {
     category,
     firstParty: Boolean(firstParty),
     signed: Boolean(signed),
+    stage: STAGE_FACETS.includes(stage) ? stage : DEFAULT_STAGE,
+    prerelease: PRERELEASE_FACETS.includes(prerelease) ? prerelease : DEFAULT_PRERELEASE,
   };
 }
 
 /** Build a /packages query string for a link (HTML-escaped for attributes). */
-function listingQuery({ sort, category, firstParty, signed }, page, perPage) {
+function listingQuery({ sort, category, firstParty, signed, stage, prerelease }, page, perPage) {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('per_page', String(perPage));
@@ -325,7 +350,28 @@ function listingQuery({ sort, category, firstParty, signed }, page, perPage) {
   if (category) params.set('category', category);
   if (firstParty) params.set('first_party', '1');
   if (signed) params.set('signed', '1');
+  if (stage && stage !== DEFAULT_STAGE) params.set('stage', stage);
+  if (prerelease && prerelease !== DEFAULT_PRERELEASE) params.set('prerelease', prerelease);
   return `?${params.toString().replaceAll('&', '&amp;')}`;
+}
+
+/** Build a /search query string for a link (q + category + lifecycle facets). */
+function searchQueryString({
+  q = '',
+  category = '',
+  stage = DEFAULT_STAGE,
+  prerelease = DEFAULT_PRERELEASE,
+} = {}, overrides = {}) {
+  const merged = { q, category, stage, prerelease, ...overrides };
+  const params = new URLSearchParams();
+  if (merged.q) params.set('q', merged.q);
+  if (merged.category) params.set('category', merged.category);
+  if (merged.stage && merged.stage !== DEFAULT_STAGE) params.set('stage', merged.stage);
+  if (merged.prerelease && merged.prerelease !== DEFAULT_PRERELEASE) {
+    params.set('prerelease', merged.prerelease);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs.replaceAll('&', '&amp;')}` : '';
 }
 
 /** Previous/next controls, preserving the active sort and facets. */
@@ -346,13 +392,115 @@ function paginationNav(paged) {
 </nav>`;
 }
 
-/** Shareable sort + facet controls for the listing. */
+/** True when the latest installable version is a semver pre-release (A10). */
+function isPrereleaseLatest(pkg) {
+  return Boolean(pkg && typeof pkg.latest === 'string' && pkg.latest
+    && semver.prerelease(pkg.latest) !== null);
+}
+
+/** True when the latest installable version carries a publisher signature. */
+function signedLatest(pkg) {
+  const entry = latestEntry(pkg);
+  return Boolean(entry && entry.signature && entry.publicKey);
+}
+
+/**
+ * Lifecycle facet filter (A10): `stage` compares against the effective
+ * manifest stage the badges use (published package, else latest version,
+ * else the audited display override); `prerelease` against the latest
+ * version's semver. Unknown stages appear only under `stage=all`.
+ */
+function lifecycleAllows(index, name, {
+  stage = DEFAULT_STAGE,
+  prerelease = DEFAULT_PRERELEASE,
+} = {}) {
+  const pkg = index.packages[name];
+  if (!pkg) return false;
+  if (stage !== DEFAULT_STAGE && effectiveStage(name, pkg, latestEntry(pkg)) !== stage) {
+    return false;
+  }
+  const pre = isPrereleaseLatest(pkg);
+  if (prerelease === 'only') return pre;
+  if (prerelease === DEFAULT_PRERELEASE) return !pre;
+  return true;
+}
+
+/**
+ * Counts for the lifecycle chips. Each facet's numbers honor the other
+ * active filters but ignore their own, so a count always says what clicking
+ * that chip would show (standard faceting). `names` optionally pre-narrows
+ * the pool (search matches before lifecycle filtering).
+ */
+function facetCounts(index, {
+  category = '',
+  firstParty = false,
+  signed = false,
+  stage = DEFAULT_STAGE,
+  prerelease = DEFAULT_PRERELEASE,
+} = {}, names = null) {
+  const stageCounts = { all: 0, stable: 0, incubating: 0, deprecated: 0 };
+  const prereleaseCounts = { hide: 0, only: 0, include: 0 };
+  for (const name of names || Object.keys(index.packages)) {
+    const pkg = index.packages[name];
+    if (!pkg) continue;
+    if (category && !(pkg.categories || []).includes(category)) continue;
+    if (firstParty && !isFirstPartyNamespace(name)) continue;
+    if (signed && !signedLatest(pkg)) continue;
+    const effective = effectiveStage(name, pkg, latestEntry(pkg));
+    const stageValue = STAGES.includes(effective) ? effective : '';
+    const pre = isPrereleaseLatest(pkg);
+    if (prerelease === 'include' || (prerelease === 'only' ? pre : !pre)) {
+      stageCounts.all += 1;
+      if (stageValue) stageCounts[stageValue] += 1;
+    }
+    if (stage === DEFAULT_STAGE || stageValue === stage) {
+      prereleaseCounts.include += 1;
+      if (pre) prereleaseCounts.only += 1;
+      else prereleaseCounts.hide += 1;
+    }
+  }
+  return { stage: stageCounts, prerelease: prereleaseCounts };
+}
+
+/** Stage + pre-release chip groups shared by /packages and /search (A10). */
+function lifecycleChips(counts, active, href) {
+  const chip = (label, value, facet, count) => {
+    const isActive = active[facet] === value;
+    const target = isActive
+      ? (facet === 'stage' ? DEFAULT_STAGE : DEFAULT_PRERELEASE)
+      : value;
+    return `<a class="chip${isActive ? ' chip-active' : ''}" href="${href({ [facet]: target })}">`
+      + `${label} <span class="chip-count">${count}</span></a>`;
+  };
+  const stages = [
+    ['all', 'All stages'],
+    ['stable', 'Stable'],
+    ['incubating', 'Incubating'],
+    ['deprecated', 'Deprecated'],
+  ].map(([value, label]) => chip(label, value, 'stage', counts.stage[value] ?? 0)).join('');
+  const releases = [
+    ['hide', 'Hide pre-releases'],
+    ['only', 'Only pre-releases'],
+    ['include', 'Include pre-releases'],
+  ].map(([value, label]) => chip(label, value, 'prerelease', counts.prerelease[value] ?? 0)).join('');
+  return `<div class="facet-group" role="group" aria-label="Stage">${stages}</div>
+  <div class="facet-group" role="group" aria-label="Pre-releases">${releases}</div>`;
+}
+
+/** Shareable sort + facet controls for the /packages listing (A10). */
 function facetBar(index, paged) {
+  const counts = facetCounts(index, paged);
   const href = (overrides) => `/packages${listingQuery({ ...paged, ...overrides }, 1, paged.perPage)}`;
   const chip = (label, overrides, active) => `<a class="chip${active ? ' chip-active' : ''}" href="${href(overrides)}">${label}</a>`;
   const filters = [
-    chip('All packages', { category: '', firstParty: false, signed: false },
-      !paged.category && !paged.firstParty && !paged.signed),
+    chip('All packages', {
+      category: '',
+      firstParty: false,
+      signed: false,
+      stage: DEFAULT_STAGE,
+      prerelease: DEFAULT_PRERELEASE,
+    }, !paged.category && !paged.firstParty && !paged.signed
+      && paged.stage === DEFAULT_STAGE && paged.prerelease === DEFAULT_PRERELEASE),
     chip('First-party', { firstParty: !paged.firstParty }, paged.firstParty),
     chip('Signed', { signed: !paged.signed }, paged.signed),
   ].join('');
@@ -368,6 +516,7 @@ function facetBar(index, paged) {
     .join('');
   return `<div class="facet-bar">
   <div class="facet-group" role="group" aria-label="Filters">${filters}</div>
+  ${lifecycleChips(counts, paged, href)}
   <div class="facet-group" role="group" aria-label="Categories">${categories}</div>
   <div class="facet-group facet-sort" role="group" aria-label="Sort">${sorts}</div>
 </div>`;
@@ -489,6 +638,9 @@ function packagesPage(index, options = {}) {
   if (paged.category) filters.push(`category "${paged.category}"`);
   if (paged.firstParty) filters.push('first-party');
   if (paged.signed) filters.push('signed');
+  if (paged.stage !== DEFAULT_STAGE) filters.push(`stage "${paged.stage}"`);
+  if (paged.prerelease === 'only') filters.push('pre-releases only');
+  if (paged.prerelease === 'include') filters.push('including pre-releases');
   const summary = `${paged.total} package${paged.total === 1 ? '' : 's'}`
     + (filters.length > 0 ? ` \u00b7 ${filters.join(' \u00b7 ')}` : '');
   return layout({
@@ -508,11 +660,13 @@ ${packageRows(index, options)}`,
  * Search matcher (SESSION.md section 13 phase 4). Matching treats `-` and
  * `.` as equivalent, so `xiom-tar` finds `xiom.tar`; results rank exact
  * name, then name prefix, then name substring, then description / keyword /
- * category hits (alphabetical inside a rank).
+ * category hits (alphabetical inside a rank). Lifecycle facets are applied
+ * by `searchPackages`, after matching, so the facet counts describe the
+ * query's own result pool.
  *
  * @returns {{ name: string, pkg: object, score: number }[]}
  */
-function searchPackages(index, query = '', category = '') {
+function searchMatches(index, query = '', category = '') {
   const needle = String(query).trim().toLowerCase();
   const active = String(category).trim().toLowerCase();
   const tolerant = (value) => value.toLowerCase().replace(/[-.]/g, '.');
@@ -541,17 +695,38 @@ function searchPackages(index, query = '', category = '') {
   return matches;
 }
 
+/** Search with the A10 lifecycle facets applied after matching. */
+function searchPackages(index, query = '', category = '', facets = {}) {
+  const { stage = DEFAULT_STAGE, prerelease = DEFAULT_PRERELEASE } = facets;
+  return searchMatches(index, query, category)
+    .filter(({ name }) => lifecycleAllows(index, name, { stage, prerelease }));
+}
+
 /** Search results (or the full list when the query is empty). */
 function searchPage(index, query = '', category = '', options = {}) {
+  const stage = STAGE_FACETS.includes(options.stage) ? options.stage : DEFAULT_STAGE;
+  const prerelease = PRERELEASE_FACETS.includes(options.prerelease)
+    ? options.prerelease
+    : DEFAULT_PRERELEASE;
   const active = category.trim().toLowerCase();
   const needle = query.trim();
-  const matches = searchPackages(index, query, category);
+  const pool = searchMatches(index, query, category);
+  const matches = pool.filter(({ name }) => lifecycleAllows(index, name, { stage, prerelease }));
+  const counts = facetCounts(index, { stage, prerelease }, pool.map(({ name }) => name));
 
   const parts = [];
   parts.push(`${matches.length} package${matches.length === 1 ? '' : 's'}`);
   if (active) parts.push(`in category "${active}"`);
   if (needle) parts.push(`matching "${query}"`);
+  if (stage !== DEFAULT_STAGE) parts.push(`stage "${stage}"`);
+  if (prerelease === 'only') parts.push('pre-releases only');
+  if (prerelease === 'include') parts.push('including pre-releases');
   const summary = parts.join(' ');
+
+  const href = (overrides) => `/search${searchQueryString({ q: needle, category: active, stage, prerelease }, overrides)}`;
+  const lifecycleBar = `<div class="facet-bar">
+  ${lifecycleChips(counts, { stage, prerelease }, href)}
+</div>`;
 
   const list = matches.length === 0
     ? '<div class="empty">No packages match this search.</div>'
@@ -562,12 +737,18 @@ ${matches.map(({ name, pkg }) => packageCard(name, pkg)).join('\n')}
   return layout({
     title: active ? `Category: ${active}` : 'Search',
     searchQuery: query,
+    searchParams: {
+      category: active,
+      stage: stage !== DEFAULT_STAGE ? stage : '',
+      prerelease: prerelease !== DEFAULT_PRERELEASE ? prerelease : '',
+    },
     nav: options.nav,
     body: `<section class="hero">
   <h1>${active ? `Category: ${escapeHtml(active)}` : 'Search'}</h1>
   <div class="meta-row"><span>${escapeHtml(summary)}</span></div>
-  ${categoryStrip(index, active)}
+  ${categoryStrip(index, active, { q: needle, stage, prerelease })}
 </section>
+${lifecycleBar}
 ${list}`,
   });
 }
@@ -990,8 +1171,15 @@ module.exports = {
   provenanceRepository,
   setStageOverrides,
   effectiveStage,
+  isPrereleaseLatest,
   paginatePackages,
   searchPackages,
+  searchMatches,
+  facetCounts,
+  STAGE_FACETS,
+  PRERELEASE_FACETS,
+  DEFAULT_STAGE,
+  DEFAULT_PRERELEASE,
   DEFAULT_PER_PAGE,
   MAX_PER_PAGE,
 };

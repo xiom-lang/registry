@@ -66,6 +66,12 @@ const {
   notFoundPage,
   paginatePackages,
   setStageOverrides,
+  effectiveStage,
+  isPrereleaseLatest,
+  STAGE_FACETS,
+  PRERELEASE_FACETS,
+  DEFAULT_STAGE,
+  DEFAULT_PRERELEASE,
   DEFAULT_PER_PAGE,
   MAX_PER_PAGE,
 } = require('./ui/pages');
@@ -151,9 +157,10 @@ const UI_ASSETS = {
 
 /**
  * Clamp `?page` / `?per_page` and read the listing facets (sort, category,
- * first_party, signed). Garbage and out-of-range values fall back to the
- * defaults instead of erroring: the listing is a browsing affordance, not a
- * protocol contract (SESSION.md section 13).
+ * first_party, signed, stage, prerelease). Garbage and out-of-range values
+ * fall back to the defaults instead of erroring: the listing is a browsing
+ * affordance, not a protocol contract (SESSION.md section 13). Lifecycle
+ * facets (A10) default to all stages with pre-releases hidden.
  */
 function listingFromQuery(query) {
   const clamp = (value, fallback, max) => {
@@ -169,6 +176,36 @@ function listingFromQuery(query) {
     category: typeof query.category === 'string' ? query.category.trim().toLowerCase() : '',
     firstParty: flag(query.first_party),
     signed: flag(query.signed),
+    ...lifecycleFromQuery(query),
+  };
+}
+
+/** Lifecycle facet params shared by /packages and /search (A10). */
+function lifecycleFromQuery(query) {
+  const pick = (value, allowed, fallback) => {
+    const cleaned = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return allowed.includes(cleaned) ? cleaned : fallback;
+  };
+  return {
+    stage: pick(query.stage, STAGE_FACETS, DEFAULT_STAGE),
+    prerelease: pick(query.prerelease, PRERELEASE_FACETS, DEFAULT_PRERELEASE),
+  };
+}
+
+/** One package as the listing JSON exposes it (A10 adds stage/prerelease). */
+function listingEntry(name, pkg) {
+  const latest = pkg.latest && pkg.versions[pkg.latest] ? pkg.versions[pkg.latest] : null;
+  return {
+    name,
+    description: pkg.description,
+    latest: pkg.latest,
+    versions: Object.keys(pkg.versions).length,
+    categories: pkg.categories || [],
+    keywords: pkg.keywords || [],
+    license: pkg.license || '',
+    repository: pkg.repository || '',
+    stage: effectiveStage(name, pkg, latest) || '',
+    prerelease: isPrereleaseLatest(pkg),
   };
 }
 
@@ -1035,19 +1072,7 @@ function createApp(config = loadConfig()) {
     }
     const paged = paginatePackages(index, listing);
     res.json({
-      packages: paged.names.map((name) => {
-        const pkg = index.packages[name];
-        return {
-          name,
-          description: pkg.description,
-          latest: pkg.latest,
-          versions: Object.keys(pkg.versions).length,
-          categories: pkg.categories || [],
-          keywords: pkg.keywords || [],
-          license: pkg.license || '',
-          repository: pkg.repository || '',
-        };
-      }),
+      packages: paged.names.map((name) => listingEntry(name, index.packages[name])),
       page: paged.page,
       per_page: paged.perPage,
       total: paged.total,
@@ -1056,6 +1081,8 @@ function createApp(config = loadConfig()) {
       category: paged.category,
       first_party: paged.firstParty,
       signed: paged.signed,
+      stage: paged.stage,
+      prerelease: paged.prerelease,
     });
   });
 
@@ -1167,22 +1194,21 @@ function createApp(config = loadConfig()) {
   app.get('/search', generalLimit, (req, res) => {
     const rawQuery = String(req.query.q || '');
     const category = String(req.query.category || '').trim().toLowerCase();
+    const facets = lifecycleFromQuery(req.query);
     const index = publicIndex();
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(searchPage(index, rawQuery, category, { nav: accountNav(req) }));
+        .send(searchPage(index, rawQuery, category, { nav: accountNav(req), ...facets }));
     }
-    const results = searchPackages(index, rawQuery, category).map(({ name, pkg }) => ({
-      name,
-      description: pkg.description,
-      latest: pkg.latest,
-      versions: Object.keys(pkg.versions).length,
-      categories: pkg.categories || [],
-      keywords: pkg.keywords || [],
-      license: pkg.license || '',
-      repository: pkg.repository,
-    }));
-    res.json({ query: rawQuery, category, results });
+    const results = searchPackages(index, rawQuery, category, facets)
+      .map(({ name, pkg }) => listingEntry(name, pkg));
+    res.json({
+      query: rawQuery,
+      category,
+      stage: facets.stage,
+      prerelease: facets.prerelease,
+      results,
+    });
   });
 
   // ─── Accounts and requests (registry 2.0; UI-only, HTML responses) ────────

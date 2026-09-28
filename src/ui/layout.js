@@ -76,11 +76,18 @@ function fingerprint(publicKeyHex) {
  *   - `primary` renders on the right of the bar (Sign in / @account);
  *   - `menu` renders inside the mobile-only "Menu" disclosure (Review/Admin),
  *     so role links are never pushed off-screen on a phone.
+ *
+ * `searchParams` adds hidden fields to the banner search form so a new search
+ * keeps the active category/lifecycle facets (A10).
  */
-function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '', nav = '' }) {
+function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '', searchParams = {}, nav = '' }) {
   const pageTitle = title ? `${escapeHtml(title)} -- ${SITE_NAME}` : SITE_NAME;
   const navPrimary = typeof nav === 'string' ? nav : ((nav && nav.primary) || '');
   const navMenu = typeof nav === 'object' && nav ? (nav.menu || '') : '';
+  const searchHidden = Object.entries(searchParams)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`)
+    .join('\n    ');
   const menuLinks = `
         <a href="/packages">Packages</a>
         <a href="/categories">Categories</a>
@@ -133,7 +140,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
     <span class="xiom-accent" aria-hidden="true"></span>
   </div>
   <form class="banner-search" action="/search" method="get" role="search">
-    <input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
+    ${searchHidden ? `${searchHidden}\n    ` : ''}<input id="q" name="q" type="search" value="${escapeHtml(searchQuery)}"
            placeholder="Search packages" aria-label="Search packages by name or description"
            enterkeyhint="search" autocomplete="off">
     <button type="submit">Search</button>
