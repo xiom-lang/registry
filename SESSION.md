@@ -1975,6 +1975,7 @@ email, community->maintainer contact, review votes/replies) is recorded in
 | A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
 | A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. **DONE 2026-09-27 (`7d7e853`).** | S |
 | A9 | **Review votes, maintainer reply, list UX** | **Agreed with owner 2026-09-27** (21.9.3): one vote per account per review (toggle, unique index; counts public, voter identity private, review author excluded, rate-limited); no public vote justifications for now; one flat maintainer reply per review, labelled and notified to the review author (new kind); filters + pagination for reviews. **DONE 2026-09-27 (`4872cf9`):** `review_votes` + `review_replies` (migration 007), toggle/self-vote/counts, editable labelled reply notifying `review-reply`, newest/helpful sort, text filter, 10-per-page pagination. | M |
+| A10 | **Package discovery: stage and pre-release facets** | Owner request 2026-09-28: add lifecycle facets to `/packages` and search next to the existing `category`/`first_party`/`signed` facets -- `stage` (all/stable/incubating/deprecated, from the manifest stage the badges already use) and `prerelease` (hide by default / only / include, derived from `latest` semver) -- each with counts, shareable query params, mobile chips, and the same fields in the listing JSON (the `/index.json` contract is untouched). Deprecated stays visible but clearly marked; stable remains the default surfacing and incubating stays visually distinct (badge matrix). Sort grows later: rating after A4, downloads after C1. | S/M |
 
 **21.1 A1 shipped (2026-09-26, `57be0ba`).** Package pages carry a
 `Maintainers` section built from data the registry already holds -- repository
@@ -2495,22 +2496,29 @@ scope change needed).
 
 ### 23.3 Next actions, in order
 
-1. **Next up: A3 phase 3** -- requests/accounts/publishers into SQLite behind
-   their existing interfaces (same per-table import + mirror contract).
-2. A4 contributor profiles + sponsors; A5 feeds; A6 sponsorship badge.
-3. C1 download stats; C2 provenance attestation link; **C3 mirror/offline
-   bundle** (this is what the playground's C3 waits on).
-4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run`).
+1. **Next release (2.5.0) contents, pending owner order:** owner-requested discovery
+   filters **A10** (stage + pre-release facets), **A4** contributor profiles +
+   Sponsors badges, the **C3 export bundle** the playground is waiting on, plus
+   what is already on `main` but unreleased (stage-mismatch publish warnings).
+   **A3 is complete** (accounts were the last JSON store; everything now lives
+   in SQLite with rollback mirrors).
+2. **A9 follow-ups** ride the same release if cheap; A5 feeds/following and A6
+   sponsorship badge follow.
+3. C1 download stats (also unlocks a "most downloaded" sort for A10); C2
+   provenance attestation link; C4 object storage/sharding at scale; C5 index
+   digest (discuss first).
+4. Track B client-side items (`pkg` packaging guard, `yank`, `--dry-run` +
+   validate endpoint, trusted-publisher self-service edit/revoke, token
+   rotation self-service).
 5. Ops: D1 fulfilment worker confirmed/enabled on the VPS, D2 ops-repo issue
    template removal, D3 audit pagination when tables grow, D4 backup drill,
-   D5 batch rate-limit profile documented, D6 cap retune after L0, **D7 SMTP
-   enablement (xiom-lang.org from-address; the pre-gate backlog is already
-   skipped, verify with `/health` `email: enabled`)**.
-6. Ops deploy for this session: `git pull`, rebuild, recreate; staging first,
-   then production; confirm `/health`, the contact section, the reviews with
-   votes/replies, and the dashboard email card. Migrations 003-007 import the
-   existing data on first boot (watch for the `imported reviews.json into
-   SQLite` log line).
+   D5 batch rate-limit profile documented, D6 cap retune after L0; D7 SMTP is
+   done (email enabled on both).
+6. Pending deploy: `main` carries 2.4.2 (accounts -> SQLite, admin hierarchy)
+   and the publish warnings; ops deploys staging first, then production.
+7. Blocked elsewhere: `xiom-std@0.62.0` canary waits on the stdlib release
+   workflow (no GitHub release/assets for `stdlib-v0.62.0`); registry lane
+   verifies as soon as it publishes.
 
 ### 23.4 A2 + D7 + A7 + A8 + A3 + A9 implementation notes
 
