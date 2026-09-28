@@ -2623,6 +2623,113 @@ starts after the fleet sweep. The registry accepted the backstop offer: publish
 now warns when the manifest declares no stage or marks a pre-release version
 `stable` (advisory, nothing blocks; ships with the next release).
 
+---
+
+## 24. Session handoff (2026-09-28, registry lane)
+
+### 24.1 State snapshot
+
+| Item | Value |
+|---|---|
+| Repo | `main` at `2b2bc43`, clean; Registry CI + CodeQL green |
+| Tests | `npm test` **286/286**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Deployed | **2.4.1 on staging and production** with `email: enabled` (ops, 2026-09-27). **2.4.2 + publish warnings are on `main` and not deployed yet** |
+| Migrations | `001-notifications` ... `010-stored-accounts`; every JSON store on the data volume is now a rollback mirror (the SQLite move A3 is complete) |
+| Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
+| Email | D7 complete (authenticated SMTP, verified-address gate, retry/backoff, `/health` + dashboard visibility) |
+| Admin safety | Founding admins (config) > granted admins > users; only founders manage admins; self-change guards intact |
+| Blocked elsewhere | `xiom-std@0.62.0` canary: stdlib publish run `36438204239` approved but stuck on "wait for release asset" -- no GitHub release/assets for tag `stdlib-v0.62.0` (`80e767bc`); stdlib `release.yml`/`ci.yml`/`heavy.yml` fail with a workflow-file issue at `960b506` |
+
+### 24.2 Shipped across the 2.3-2.4 rounds (hashes)
+
+- 2.3.0 (`748ebe3`): notification coverage, email gate/retry, community contact
+  (A7), repo/issue links (A8), review votes + maintainer reply (A9), SQLite
+  rounds 1-3a.
+- 2.3.1 (`fdedbdb`): clickable email links (`emailLink()`), DEPLOY.md staging
+  correction.
+- 2.4.0 (`550c404`): admin tab, avatar account menu, mobile card fix.
+- 2.4.1 (`27e470d`): account-menu styling fix (overlay panel, scoped CSS).
+- 2.4.2 (`8fbc41f`, includes `4aad1a1`): accounts -> SQLite (migration 010) and
+  the founding-admin hierarchy.
+- `04098a0`: publish warnings when `stage` is missing or contradicts a
+  pre-release version.
+- `86940e8`: answers to the playground's C3 four questions. `2b2bc43`: A10
+  discovery filters + 2.5.0 plan.
+
+### 24.3 Next actions, in order
+
+1. **A10 -- stage and pre-release facets** (owner request; spec in the A10
+   roadmap row): `/packages` + search gain `?stage=all|stable|incubating|
+   deprecated` and `?prerelease=hide|only|include` next to the existing
+   category/first-party/signed facets, with counts, shareable params, mobile
+   chips, and listing-JSON fields; `/index.json` untouched; deprecated visible
+   but marked; stable default; pre-release hidden by default.
+2. **A4 -- contributor profiles + Sponsors badges**: per-account page
+   (packages maintained, reviews, audit events), cached opt-in GitHub Sponsors
+   badge, top-contributors board with anti-abuse caps. Queries come from the
+   SQLite tables.
+3. **C3 -- export bundle for the playground**: `scripts/export-bundle.js`
+   producing `<out>/index.json` + `<out>/artifacts/<name>/<version>/
+   package.tar.gz` + `<out>/bundle.json` (per-artifact sha256/signature/
+   publicKey/source/generatedAt), plus `OFFLINE.md`; export from **production**,
+   pin by sha256; the client lane owns offline resolution semantics.
+4. **Cut 2.5.0** after those land: version bump, CHANGELOG section, SESSION
+   note, DCO commits, `npm test` + `npm run test:e2e`, push, watch CI, hand
+   ops the deploy (staging first, then production).
+5. Then: A5 feeds/following, A6 sponsorship badge; C1 download stats (also
+   unlocks a most-downloaded sort for A10), C2 provenance attestation link,
+   C4 object storage/sharding at scale, C5 index digest (discuss first);
+   Track B client items (`pkg` guard, `yank`, `--dry-run` + validate endpoint,
+   publisher self-service edit/revoke, token rotation).
+6. Ops backlog: fulfiller worker confirmation, ops-repo template cleanup,
+   audit pagination, backup drill, rate-limit profile, cap retune.
+7. When stdlib unblocks: re-run/verify the `xiom-std@0.62.0` publish and run
+   the pinned-artifact canary (index entry, provenance `refs/tags/stdlib-v0.62.0`
+   + commit `80e767bc`, sha256, ed25519, badge), staging then production.
+
+### 24.4 Paste-ready prompt for the next session
+
+```
+Registry lane continuation. Read SESSION.md section 24 first (state, order,
+paste-ready handoff); sections 21-23 carry the roadmap and implementation
+notes. This is E:\xiom-lang\registry on main at 2b2bc43, clean, 286/286 unit
+and 20/20 e2e green.
+
+State in one line: 2.4.1 is live on staging+production; main carries 2.4.2
+(accounts -> SQLite, founding-admin hierarchy) plus publish-stage warnings,
+undeployed; the SQLite move (A3) is complete; the stdlib 0.62.0 canary is
+blocked on the stdlib release workflow (no release assets for stdlib-v0.62.0).
+
+First actions:
+1. Verify state: git pull; npm test (expect 286) and npm run test:e2e (expect
+   20); /health on staging and production (expect 2.4.1, email enabled).
+2. Implement A10 (stage + pre-release facets; spec in the A10 roadmap row):
+   server-side facets with counts on /packages and search, shareable query
+   params, mobile chips, listing-JSON fields; /index.json untouched; stage
+   values from the manifest (stable/incubating/deprecated), prerelease from
+   the latest semver; tests for each facet combination; visual check on
+   mobile 390px.
+3. Implement A4 (contributor profiles + Sponsors badges): /account/<login>
+   public profile (packages maintained via maintainerView, reviews from
+   review_ratings, review replies, audit/decision history), opt-in cached
+   GitHub Sponsors badge for the signed-in account, top-contributors board
+   with caps; server-rendered, mobile-first.
+4. Implement C3 (export bundle for the playground): scripts/export-bundle.js
+   + OFFLINE.md producing the documented layout (index.json, artifacts/...,
+   bundle.json with sha256/signature/publicKey/source/generatedAt); verifies
+   every artifact hash while exporting; export from production; unit test with
+   a local registry fixture.
+5. Cut 2.5.0 when 2-4 are green: version bump, CHANGELOG section (what's new
+   wording), SESSION update; DCO-signed conventional commits; push; gh run
+   watch to green; hand ops the deploy (staging first, then production).
+
+Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
+approval/decision audited, one-click trusted publishers, /index.json protocol
+untouched); use the repo's store patterns (SQLite via src/db.js migrations,
+JSON stores are rollback mirrors); never hand-edit data files on the VPS;
+visual-verify UI changes on mobile before claiming done.
+```
+
 
 
 
