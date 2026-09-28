@@ -1964,7 +1964,8 @@ email, community->maintainer contact, review votes/replies) is recorded in
 
 **Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
 contributor profiles + Sponsors badge + board, C3 offline export bundle; see
-24.2). Staging and production still run 2.4.2 until ops promotes it.
+24.2) and is **live on staging and production** (ops, 2026-09-28 23:14/23:18Z;
+registry-lane verification green, see 24.1).
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2635,14 +2636,14 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.5.0 release commit (features `9b10975` A10, `67a582f` A4, `62780a3` C3); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **305/305**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.4.2 on staging and production** with `email: enabled` (ops, 2026-09-28; production restarted 22:07Z). **2.5.0 is on `main` and awaiting ops** |
+| Repo | `main` at `3c5d76b` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **306/306**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
-| Sponsors badge | Opt-in + cached `hasSponsorsListing` via `GITHUB_SPONSORS_TOKEN` (optional env). Unset = checks disabled, badge stays unverified, everything else works |
+| Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
 | Offline bundle | Production export verified: 384 artifacts / 15,516,333 bytes, all sha256-checked and `--verify`-clean; regenerate with `npm run export-bundle -- --registry https://registry.xiom-lang.org --out <dir>` |
-| Blocked elsewhere | `xiom-std@0.62.0` canary: stdlib Release run started 2026-09-28T22:55Z after the workflow fix (`80e767b` tree + workflow-only change); the Registry Publish run is waiting on its assets. Re-dispatch/verify when the release exists |
+| Blocked elsewhere | `xiom-std@0.62.0` canary: stdlib Release run `36495200067` still in release gates (ubuntu+windows) at 23:40Z; the Registry Publish run is waiting on its assets. Re-dispatch/verify when the release exists |
 
 ### 24.2 Shipped in 2.5.0 (hashes)
 
@@ -2674,17 +2675,13 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ### 24.3 Next actions, in order
 
-1. **Ops: deploy 2.5.0** (staging first, then production). `git pull`,
-   rebuild, recreate; migration 011 applies on boot; then walk the new
-   surfaces on staging: `/packages?stage=deprecated`, an account profile,
-   `/contributors`, and (when a token is configured) one badge opt-in.
-   Optional env for full badge checks: `GITHUB_SPONSORS_TOKEN` (public-read).
-   Nothing else to configure; JSON stores stay mirrors.
+1. **2.5.0 deploy: DONE** (ops, staging 23:14Z, production 23:18Z). Registry-lane verification passed: `/health` 2.5.0 + `email: enabled` on both; live-check green on both (every latest artifact digest verified); all 384 exported version entries byte-identical in the live production index (13 new packages since the export = normal publish drift); facets/profile/board surfaces respond; prerelease facet confirmed live on staging (`xiom.canary-oidc` hidden by default, `prerelease=only` returns it). Ops-side pastes still to record: migrations end `011`, `contributor_sponsors` 0 rows, publishers 2, `PUBLISH_RATE_MAX=20`, `TRUST_PROXY=1`. Optional next: set `GITHUB_SPONSORS_TOKEN` and recreate to enable live badge checks (`3c5d76b` declares it).
 2. **stdlib canary when the release finishes**: the XIOM Stdlib Release run
-   started 2026-09-28T22:55Z (`80e767b` tree + workflow-only change). Once
-   `stdlib-v0.62.0` has assets, re-dispatch the waiting Registry Publish run,
-   then run the pinned canary (index entry, provenance `refs/tags/stdlib-v0.62.0`
-   + commit `80e767b`, sha256, ed25519, badge), staging then production.
+   `36495200067` was still in release gates (ubuntu+windows) at 23:40Z; the
+   Registry Publish run is waiting on its assets. Once `stdlib-v0.62.0` has
+   assets, re-dispatch the waiting publish run, then run the pinned canary
+   (index entry, provenance `refs/tags/stdlib-v0.62.0` + commit `80e767b`,
+   sha256, ed25519, badge), staging then production.
 3. **Tell the playground lane** the C3 deliverable is ready: `npm run
    export-bundle -- --registry https://registry.xiom-lang.org --out <dir>`
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
@@ -2705,32 +2702,29 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.5.0 release commit
-(features 9b10975 A10, 67a582f A4, 62780a3 C3; release commit on top), clean,
-305/305 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at 3c5d76b (2.5.0 ddd4b42;
+features 9b10975 A10, 67a582f A4, 62780a3 C3; compose sponsors fix 3c5d76b),
+clean, 306/306 unit and 20/20 e2e green.
 
 State in one line: 2.5.0 (A10 discovery facets, A4 contributor profiles +
-Sponsors badge + board, C3 offline export bundle) is cut on main and awaiting
-ops; staging+production still run 2.4.2; the stdlib 0.62.0 canary depends on
-the stdlib Release run that started 2026-09-28T22:55Z.
+Sponsors badge + board, C3 offline export bundle) is live on staging and
+production and verified; the stdlib 0.62.0 publish wait on the stdlib Release
+run 36495200067 is the only open relay.
 
 First actions:
-1. Verify state: git pull; npm test (expect 305) and npm run test:e2e (expect
-   20); /health on staging and production (expect 2.4.2 until ops deploys
-   2.5.0, then 2.5.0; email enabled either way).
-2. If 2.5.0 is not deployed, hand ops the deploy: staging first (walk
-   /packages?stage=deprecated, an account profile, /contributors; one badge
-   opt-in when GITHUB_SPONSORS_TOKEN is set), then production. Migration 011
-   applies on boot; JSON stores stay rollback mirrors; never hand-edit data
-   files on the VPS.
-3. stdlib: check the XIOM Stdlib Release run for stdlib-v0.62.0 assets; when
-   they exist, re-dispatch/re-run the waiting Registry Publish run, then run
-   the pinned-artifact canary (index entry, provenance refs/tags/stdlib-v0.62.0
-   + commit 80e767b, sha256, ed25519, badge), staging then production.
-4. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
+1. Verify state: git pull; npm test (expect 306) and npm run test:e2e (expect
+   20); /health on staging and production (expect 2.5.0, email enabled).
+2. stdlib: check the XIOM Stdlib Release run 36495200067 for stdlib-v0.62.0
+   assets; when they exist, re-dispatch/re-run the waiting Registry Publish
+   run, then run the pinned-artifact canary (index entry, provenance
+   refs/tags/stdlib-v0.62.0 + commit 80e767b, sha256, ed25519, badge),
+   staging then production.
+3. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
    --latest-only, pin by sha256) and take the next feature from the section 21
    order: A5 feeds/following, then C1 download stats (unblocks the
    most-downloaded sort; A10's rating sort is now unblocked too).
+4. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
+   enable live Sponsors checks (declared in compose since 3c5d76b).
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
