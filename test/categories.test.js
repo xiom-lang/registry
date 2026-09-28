@@ -236,3 +236,38 @@ test('category pages render chips, keywords, and the vocabulary', async () => {
   assert.match(categoriesHtml, /Categories/);
   assert.match(categoriesHtml, /chip-active|<a class="chip"/);
 });
+
+test('missing or contradictory stage is reported as a publish warning', async () => {
+  const missing = await publish({
+    name: 'stage-demo',
+    version: '0.1.0',
+    manifestText: 'name: "stage-demo";\nversion: "0.1.0";\ncategories: ["tooling"];\n',
+  });
+  assert.equal(missing.status, 201);
+  assert.ok(
+    missing.body.warnings.some((warning) => warning.includes('no stage declared')),
+    'missing stage is surfaced at publish time',
+  );
+
+  const contradictory = await publish({
+    name: 'stage-demo-pre',
+    version: '0.2.0-rc.1',
+    manifestText: 'name: "stage-demo-pre";\nversion: "0.2.0-rc.1";\nstage: "stable";\ncategories: ["tooling"];\n',
+  });
+  assert.equal(contradictory.status, 201);
+  assert.ok(
+    contradictory.body.warnings.some((warning) => warning.includes('pre-release version')),
+    'stable + pre-release is surfaced',
+  );
+
+  const incubating = await publish({
+    name: 'stage-demo-inc',
+    version: '0.3.0-rc.1',
+    manifestText: 'name: "stage-demo-inc";\nversion: "0.3.0-rc.1";\nstage: "incubating";\ncategories: ["tooling"];\n',
+  });
+  assert.equal(incubating.status, 201);
+  assert.ok(
+    !incubating.body.warnings.some((warning) => warning.includes('stage')),
+    'a pre-release carrying incubating is clean',
+  );
+});

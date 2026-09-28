@@ -2825,6 +2825,21 @@ function publish(req, { config, indexStore, artifacts, token }) {
       `unknown stage "${packageMeta.unknownStage}" ignored; valid stages: ${STAGES.join(', ')}`,
     );
   }
+  // Maturity backstop (packages-lane relay, 2026-09-28): the packages pipeline
+  // now writes the real stage from STATUS.json (incubating|stable), and the
+  // registry shows maturity from this field. Warn at the source when it is
+  // missing or contradicts a pre-release version; nothing blocks the publish.
+  if (!packageMeta.stage) {
+    warnings.push(
+      'no stage declared; set "stage": "incubating" or "stable" in package.xi '
+      + '(the registry shows maturity from this field)',
+    );
+  } else if (packageMeta.stage === 'stable' && semver.prerelease(version) !== null) {
+    warnings.push(
+      `stage "stable" with the pre-release version ${version}; `
+      + 'use stage "incubating" or publish a stable version',
+    );
+  }
 
   // Move the artifact into place, then index it. If indexing fails (e.g. a
   // race lost to a concurrent publish), remove the artifact again.

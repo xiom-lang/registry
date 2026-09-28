@@ -6,6 +6,16 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Publish warnings
+
+- **Maturity backstop**: publishes now warn when the manifest declares no
+  `stage` ("set `incubating` or `stable`") or when `stage: "stable"` is
+  combined with a pre-release version. Advisory only — nothing blocks a
+  publish — and it surfaces the source-of-truth gap the packages lane closed
+  in its incubating-by-default policy (packages commit `6b43337`).
+
+## [2.4.2] - 2026-09-28
+
 ### Storage
 
 - **The SQLite move is complete**: token and trusted-publisher requests
@@ -14,8 +24,6 @@ The rendered version of this file is at `/whats-new`.
   rollback-mirror contract as ratings, reports, decisions, and publishers. The
   JSON files on the data volume are rollback mirrors only; no API, protocol, or
   UI change.
-
-## [2.4.2] - 2026-09-28
 
 ### Admin hierarchy
 

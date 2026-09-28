@@ -2605,6 +2605,16 @@ never demote or ban a peer or the founder; granted admins still manage members
 and reviewers, self-changes keep their store-level protections, and the users
 console hides controls the viewer cannot use. 285/285 unit tests green.
 
+**Packages-lane relay (2026-09-28):** the incubating-by-default policy is
+implemented on their side (`6b43337`: `status.ps1` allows incubating|stable,
+`allowlist-guard.ps1` requires incubating|stable + green, `publish-registry.yml`
+writes the real stage from STATUS.json) with a correction plan: today's 53
+packages get patch-bumped and recorded incubating; the other 239 stable and 38
+empty-stage entries ride their next natural version bump; the correction batch
+starts after the fleet sweep. The registry accepted the backstop offer: publish
+now warns when the manifest declares no stage or marks a pre-release version
+`stable` (advisory, nothing blocks; ships with the next release).
+
 
 
 
