@@ -9,6 +9,7 @@
     "test": "node --test \"test/*.test.js\"",
     "test:e2e": "node test/e2e/run-e2e.js",
     "live-check": "node scripts/live-check.js",
+    "export-bundle": "node scripts/export-bundle.js",
     "keygen": "node scripts/keygen.js"
   },
   "dependencies": {
