@@ -253,6 +253,13 @@ function loadConfig() {
       || path.join(__dirname, '..', 'PUBLISHING.md'),
     oauth: loadOAuthConfig(),
     tokens: loadTokens(),
+    // A4: opt-in GitHub Sponsors badge. The check needs a server-side GitHub
+    // token with plain public read access; empty disables checks (the badge
+    // stays unverified and the UI says so). apiUrl is overridable for tests.
+    sponsors: {
+      token: process.env.GITHUB_SPONSORS_TOKEN || '',
+      apiUrl: process.env.GITHUB_SPONSORS_API_URL || 'https://api.github.com/graphql',
+    },
     // Path used by the hot-reload watcher (empty when API_KEY is the source).
     tokensFile: process.env.TOKENS_FILE || '',
     // Shared secret for the internal fulfilment API (empty = API disabled).

@@ -440,6 +440,153 @@ class ReviewStore {
     return { count: list.length, average: Math.round((total / list.length) * 10) / 10 };
   }
 
+  /**
+   * Ratings this account wrote, newest first (A4 contributor profiles).
+   *
+   * @returns {Array<{ package: string, stars: number, review: string, at: string }>}
+   */
+  ratingsBy(githubId, { limit = 20 } = {}) {
+    const id = String(githubId);
+    const capped = Math.max(1, Math.min(Number(limit) || 20, 100));
+    if (this.db) {
+      return this.db.all(
+        'SELECT package, stars, review, at FROM review_ratings WHERE github_id = ? ORDER BY at DESC, package LIMIT ?',
+        id,
+        capped,
+      ).map((row) => ({
+        package: row.package,
+        stars: Number(row.stars),
+        review: row.review || '',
+        at: row.at || '',
+      }));
+    }
+    const rows = [];
+    for (const [name, byUser] of Object.entries(this.ratings)) {
+      const rating = byUser[id];
+      if (rating) rows.push({ package: name, stars: rating.stars, review: rating.review, at: rating.at });
+    }
+    return rows.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, capped);
+  }
+
+  /**
+   * Maintainer replies this account wrote, newest first (A4). Replies exist
+   * only in SQLite, so the JSON fallback is empty.
+   *
+   * @returns {Array<{ package: string, reviewGithubId: string, body: string, at: string, updatedAt: string }>}
+   */
+  repliesBy(githubId, { limit = 20 } = {}) {
+    if (!this.db) return [];
+    const capped = Math.max(1, Math.min(Number(limit) || 20, 100));
+    return this.db.all(
+      `SELECT package, review_github_id, body, at, updated_at FROM review_replies
+       WHERE author_id = ? ORDER BY at DESC, package LIMIT ?`,
+      String(githubId),
+      capped,
+    ).map((row) => ({
+      package: row.package,
+      reviewGithubId: String(row.review_github_id),
+      body: row.body,
+      at: row.at || '',
+      updatedAt: row.updated_at || '',
+    }));
+  }
+
+  /**
+   * Reviewer decisions this account took, newest first (A4). The actor is
+   * stored as a login in the decision history (the audit trail the package
+   * pages already show).
+   *
+   * @returns {Array<{ package: string, action: string, note: string, at: string }>}
+   */
+  decisionsBy(actor, { limit = 20 } = {}) {
+    const login = clean(actor, 64);
+    const capped = Math.max(1, Math.min(Number(limit) || 20, 100));
+    if (!login) return [];
+    if (this.db) {
+      return this.db.all(
+        `SELECT package, action, note, at FROM review_decision_history
+         WHERE actor = ? ORDER BY id DESC LIMIT ?`,
+        login,
+        capped,
+      ).map((row) => ({
+        package: row.package,
+        action: row.action,
+        note: row.note || '',
+        at: row.at || '',
+      }));
+    }
+    const needle = login.toLowerCase();
+    const rows = [];
+    for (const [name, record] of Object.entries(this.packages)) {
+      for (const item of record.history || []) {
+        if (String(item.actor || '').toLowerCase() !== needle) continue;
+        rows.push({ package: name, action: item.action, note: item.note || '', at: item.at || '' });
+      }
+    }
+    return rows.reverse().slice(0, capped);
+  }
+
+  /**
+   * Per-account contribution counters for the A4 board and profiles:
+   * ratings (all), reviews (ratings with text), maintainer replies, and
+   * reviewer decisions. The board applies the caps; this is raw counting.
+   *
+   * @returns {Array<{ githubId: string, login: string, ratings: number,
+   *                   reviews: number, replies: number, decisions: number }>}
+   */
+  contributionCounts() {
+    const rows = new Map();
+    const entry = (githubId, login) => {
+      const normalized = String(login || '').trim();
+      // Login is the merge key: a reviewer with ratings has one row, and the
+      // stable githubId is carried along when the row has one.
+      const key = normalized ? `login:${normalized.toLowerCase()}` : `id:${String(githubId || '')}`;
+      if (!rows.has(key)) {
+        rows.set(key, { githubId: String(githubId || ''), login: normalized, ratings: 0, reviews: 0, replies: 0, decisions: 0 });
+      }
+      const record = rows.get(key);
+      if (!record.login && normalized) record.login = normalized;
+      if (!record.githubId && githubId) record.githubId = String(githubId);
+      return record;
+    };
+    if (this.db) {
+      for (const row of this.db.all(
+        `SELECT github_id, MAX(login) AS login, COUNT(*) AS count,
+                SUM(CASE WHEN review <> '' THEN 1 ELSE 0 END) AS with_text
+         FROM review_ratings GROUP BY github_id`,
+      )) {
+        const record = entry(row.github_id, row.login);
+        record.ratings = Number(row.count) || 0;
+        record.reviews = Number(row.with_text) || 0;
+      }
+      for (const row of this.db.all(
+        'SELECT author_id, MAX(author_login) AS login, COUNT(*) AS count FROM review_replies GROUP BY author_id',
+      )) {
+        entry(row.author_id, row.login).replies = Number(row.count) || 0;
+      }
+      for (const row of this.db.all(
+        `SELECT actor, COUNT(*) AS count FROM review_decision_history
+         WHERE actor <> '' GROUP BY actor`,
+      )) {
+        entry('', row.actor).decisions = Number(row.count) || 0;
+      }
+      return [...rows.values()];
+    }
+    for (const byUser of Object.values(this.ratings)) {
+      for (const rating of Object.values(byUser)) {
+        const record = entry(rating.githubId, rating.login);
+        record.ratings += 1;
+        if (rating.review) record.reviews += 1;
+      }
+    }
+    for (const record of Object.values(this.packages)) {
+      for (const item of record.history || []) {
+        if (item.actor) entry('', item.actor).decisions += 1;
+      }
+    }
+    return [...rows.values()];
+  }
+
   /** Create or replace this account's rating for a package. */
   rate(packageName, { user, stars, review = '' }) {
     const name = clean(packageName, 128).toLowerCase();

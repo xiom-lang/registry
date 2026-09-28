@@ -76,6 +76,14 @@ const {
   MAX_PER_PAGE,
 } = require('./ui/pages');
 const {
+  ContributorStore,
+  checkSponsorListing,
+  contributorScore,
+  maintainerCounts,
+  CONTRIBUTORS_LIMIT,
+} = require('./contributors');
+const { profilePage, contributorsPage } = require('./ui/profile');
+const {
   loginPage,
   accountOverviewPage,
   accountRequestsPage,
@@ -272,6 +280,8 @@ function createApp(config = loadConfig()) {
   const admin = new AdminStore({ db });
   const configAdminLogins = new Set(config.oauth.adminLogins.map((login) => String(login).toLowerCase()));
   const configReviewerLogins = new Set(config.oauth.reviewerLogins.map((login) => String(login).toLowerCase()));
+  // A4: the opt-in Sponsors badge state and the profile/board queries.
+  const contributors = new ContributorStore({ db });
 
   // Audited display-stage overrides (SESSION.md 21.4): generated from the
   // publisher repo's STATUS.json files at a pinned commit and reviewed as a
@@ -411,6 +421,7 @@ function createApp(config = loadConfig()) {
   const isReviewer = (account) => Boolean(account)
     && (isAdmin(account) || isConfigReviewer(account) || admin.roleOf(account.githubId) === 'reviewer');
   const accountStatus = (account) => (account ? admin.statusOf(account.githubId) : 'active');
+  const roleFor = (account) => (isAdmin(account) ? 'admin' : (isReviewer(account) ? 'reviewer' : 'member'));
 
   /** Suspended accounts keep browsing but cannot create content. */
   function requireWriteAccess(req, _res, next) {
@@ -922,6 +933,86 @@ function createApp(config = loadConfig()) {
     return { ...index, packages };
   }
 
+  // ─── Contributor profiles and Sponsors badge (A4) ─────────────────────────
+  // The board and profiles read public data only: contribution counters from
+  // the platform DB, maintainership from the index overlay. Ranking is the
+  // capped, weighted score in src/contributors.js -- never raw volume.
+
+  /** Suspended and banned accounts are not ranked on the board. */
+  function contributorBoard(limit = CONTRIBUTORS_LIMIT) {
+    const maintainers = maintainerCounts(indexStore.snapshot(), {
+      requests: requests.list(),
+      publishers: publisherStore.list(),
+      claims: ownership.listClaims(),
+    });
+    const rows = [];
+    for (const counter of reviews.contributionCounts()) {
+      const account = counter.login ? accounts.getByLogin(counter.login) : null;
+      if (!account || accountStatus(account) !== 'active') continue;
+      const counts = {
+        reviews: counter.reviews,
+        ratings: counter.ratings,
+        replies: counter.replies,
+        decisions: counter.decisions,
+        packages: maintainers.get(account.login.toLowerCase()) || 0,
+      };
+      const score = contributorScore(counts);
+      if (score <= 0) continue;
+      const sponsor = contributors.sponsorOf(account.githubId);
+      rows.push({
+        login: account.login,
+        score,
+        counts,
+        sponsor: sponsor.optedIn && sponsor.state === 'sponsor',
+      });
+    }
+    rows.sort((a, b) => b.score - a.score || a.login.localeCompare(b.login));
+    const capped = Math.max(1, Math.min(Number(limit) || CONTRIBUTORS_LIMIT, CONTRIBUTORS_LIMIT));
+    return rows.slice(0, capped);
+  }
+
+  /** Everything the public profile renders, scoped to public data. */
+  function profileData(account) {
+    const maintained = maintainedPackages({
+      login: account.login,
+      githubId: account.githubId,
+      index: publicIndex(),
+      requests: requests.list(),
+      publishers: publisherStore.list(),
+      claims: ownership.listClaims(),
+    }).filter((entry) => entry.sources.length > 0 || entry.claimStatus === 'verified');
+
+    const ratings = reviews.ratingsBy(account.githubId, { limit: 100 });
+    const written = ratings.filter((entry) => entry.review !== '').slice(0, 20);
+    const counter = reviews.contributionCounts()
+      .find((row) => row.githubId === account.githubId
+        || (row.login && row.login.toLowerCase() === account.login.toLowerCase()));
+
+    const decisions = reviews.decisionsBy(account.login, { limit: 20 })
+      .map((entry) => ({ ...entry, action: `package ${entry.action}` }));
+    // Verified claim decisions are already public on the package page;
+    // rejected claims stay private to the claimant and reviewers.
+    for (const claim of ownership.listClaims()) {
+      if (!claim || claim.status !== 'verified') continue;
+      if (String(claim.decidedBy || '').toLowerCase() !== account.login.toLowerCase()) continue;
+      decisions.push({
+        package: claim.package,
+        action: 'claim verified',
+        note: '',
+        at: claim.decidedAt || '',
+      });
+    }
+    decisions.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+
+    return {
+      maintained,
+      reviews: written,
+      ratingsTotal: counter ? counter.ratings : ratings.length,
+      replies: reviews.repliesBy(account.githubId, { limit: 20 }),
+      decisions: decisions.slice(0, 20),
+    };
+  }
+
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
@@ -1095,6 +1186,18 @@ function createApp(config = loadConfig()) {
         .send(categoriesPage(index, { nav: accountNav(req) }));
     }
     res.json({ categories: categoryCounts(index) });
+  });
+
+  // Top-contributors board (A4): capped, weighted public contribution counts.
+  app.get('/contributors', generalLimit, (req, res) => {
+    const entries = contributorBoard();
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=120')
+        .send(contributorsPage({ entries, nav: accountNav(req) }));
+    }
+    res.json({
+      contributors: entries.map(({ login, score, counts, sponsor }) => ({ login, score, counts, sponsor })),
+    });
   });
 
   app.get('/packages/:name', generalLimit, (req, res) => {
@@ -1417,17 +1520,28 @@ function createApp(config = loadConfig()) {
   app.get('/account/settings', generalLimit, requireAccount, (req, res) => {
     const context = accountContext(req);
     const { account } = context;
-    const notice = req.query.prefs === '1'
-      ? 'Notification preferences saved.'
-      : (req.query.email === '1'
-        ? (account.notifyEmail && !account.notifyEmailVerifiedAt
-          ? 'Notification email saved. Open the confirmation link we sent it before email delivery starts.'
-          : 'Notification email saved.')
-        : (req.query.verified === '1'
-          ? 'Notification email verified.'
-          : (req.query.verified === '0'
-            ? 'That confirmation link is not valid or has expired. Save the address again for a new link.'
-            : '')));
+    const sponsorState = contributors.sponsorOf(account.githubId);
+    const sponsorNotices = {
+      on: 'Sponsors badge saved. When GitHub confirms a public sponsors listing, the badge appears on your profile.',
+      off: 'Sponsors badge turned off and the cached check cleared.',
+      sponsor: 'GitHub confirmed a public sponsors listing: the badge is live on your profile.',
+      not: 'GitHub reports no public sponsors listing for your account yet. Create one at github.com/sponsors, then refresh.',
+      unknown: 'The GitHub Sponsors check did not answer; the badge stays unverified. Try again later.',
+      disabled: 'Sponsors checks are not configured on this registry, so the badge stays unverified.',
+    };
+    const notice = typeof req.query.sponsors === 'string' && sponsorNotices[req.query.sponsors]
+      ? sponsorNotices[req.query.sponsors]
+      : (req.query.prefs === '1'
+        ? 'Notification preferences saved.'
+        : (req.query.email === '1'
+          ? (account.notifyEmail && !account.notifyEmailVerifiedAt
+            ? 'Notification email saved. Open the confirmation link we sent it before email delivery starts.'
+            : 'Notification email saved.')
+          : (req.query.verified === '1'
+            ? 'Notification email verified.'
+            : (req.query.verified === '0'
+              ? 'That confirmation link is not valid or has expired. Save the address again for a new link.'
+              : ''))));
     res.type('html').send(accountSettingsPage({
       ...context,
       notifyEmail: account.notifyEmail || '',
@@ -1437,6 +1551,8 @@ function createApp(config = loadConfig()) {
         && account.notifyEmailTokenHash && account.notifyEmailTokenExpires,
       ),
       notifyKinds: account.notifyKinds,
+      sponsor: sponsorState,
+      sponsorCheckEnabled: Boolean(config.sponsors.token),
       notice,
     }));
   });
@@ -1497,6 +1613,45 @@ function createApp(config = loadConfig()) {
     }
   });
 
+  // Public contributor profile (A4). Registered after every static /account
+  // route so `/account/requests` & co. keep winning; unknown logins are a
+  // plain 404. Renders public data only.
+  app.get('/account/:login', generalLimit, (req, res) => {
+    const requested = String(req.params.login || '').trim();
+    const account = /^[A-Za-z0-9-]{1,64}$/.test(requested) ? accounts.getByLogin(requested) : null;
+    if (!account) {
+      if (wantsHtml(req)) {
+        return res.status(404).type('html')
+          .send(notFoundPage(`No account "@${requested}" was found.`, { nav: accountNav(req) }));
+      }
+      throw new NotFoundError(`account "@${requested}" not found`, 'account_not_found');
+    }
+    const viewer = accountOf(req);
+    const sponsorState = contributors.sponsorOf(account.githubId);
+    const sponsor = sponsorState.optedIn && sponsorState.state === 'sponsor';
+    const data = profileData(account);
+    if (wantsHtml(req)) {
+      return res.type('html').set('Cache-Control', 'public, max-age=60').send(profilePage({
+        account,
+        role: roleFor(account),
+        sponsor,
+        isSelf: Boolean(viewer && viewer.githubId === account.githubId),
+        ...data,
+        nav: accountNav(req),
+      }));
+    }
+    res.json({
+      login: account.login,
+      name: account.name,
+      joined: account.createdAt,
+      sponsor,
+      maintained: data.maintained.map((entry) => entry.name),
+      reviews: data.reviews,
+      replies: data.replies,
+      decisions: data.decisions,
+    });
+  });
+
   // Per-kind notification preferences (SESSION.md 22.4 A2). Checkboxes: a
   // present field means on, an absent one means muted; the store re-applies
   // the allowlist so only claim/report/review are stored. In-app rows and
@@ -1516,6 +1671,44 @@ function createApp(config = loadConfig()) {
           support: Boolean(req.body.support),
         });
         return res.redirect(303, '/account/settings?prefs=1');
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
+
+  // Opt-in GitHub Sponsors badge (A4). The registry stores only the opt-in
+  // and the cached public `hasSponsorsListing` answer; it handles no money.
+  // `refresh=1` re-runs the check for an already opted-in account.
+  app.post(
+    '/account/sponsors',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    async (req, res, next) => {
+      try {
+        const actor = accountOf(req);
+        const stored = accounts.get(actor.githubId) || actor;
+        if (req.body.badge !== '1') {
+          contributors.setSponsorOptIn(stored.githubId, stored.login, false);
+          return res.redirect(303, '/account/settings?sponsors=off');
+        }
+        contributors.setSponsorOptIn(stored.githubId, stored.login, true);
+        if (!config.sponsors.token) {
+          return res.redirect(303, '/account/settings?sponsors=disabled');
+        }
+        const state = await checkSponsorListing({
+          login: stored.login,
+          token: config.sponsors.token,
+          apiUrl: config.sponsors.apiUrl,
+        });
+        if (state === 'unknown') {
+          return res.redirect(303, '/account/settings?sponsors=unknown');
+        }
+        contributors.recordSponsorCheck(stored.githubId, state);
+        return res.redirect(303, `/account/settings?sponsors=${state === 'sponsor' ? 'sponsor' : 'not'}`);
       } catch (err) {
         return next(err);
       }
@@ -2685,6 +2878,8 @@ function createApp(config = loadConfig()) {
     admin,
     ownership,
     support,
+    contributors,
+    sessions,
   };
   return app;
 }

@@ -28,6 +28,7 @@ let fakeBase;
 const loginCodes = new Map();
 
 const BROWSER = { Accept: 'text/html,application/xhtml+xml' };
+const API = { Accept: '*/*' };
 
 function listen(instance) {
   return new Promise((resolve) => {
@@ -136,8 +137,19 @@ test.before(async () => {
     }
     res.status(401).json({ message: 'Bad credentials' });
   });
+  // A4: the public Sponsors check (GitHub GraphQL `hasSponsorsListing`).
+  // plain-user is sponsorable; everyone else is not; a wrong token 401s.
+  fake.post('/graphql', express.json(), (req, res) => {
+    if (req.headers.authorization !== 'Bearer sponsors-test-token') {
+      return res.status(401).json({ message: 'Bad credentials' });
+    }
+    const login = String(req.body && req.body.variables ? req.body.variables.login : '');
+    return res.json({ data: { user: { hasSponsorsListing: login === 'plain-user' } } });
+  });
   fakeServer = await listen(fake);
   fakeBase = originOf(fakeServer);
+  process.env.GITHUB_SPONSORS_TOKEN = 'sponsors-test-token';
+  process.env.GITHUB_SPONSORS_API_URL = `${fakeBase}/graphql`;
 
   // One package in the index so the package page (report form) renders; the
   // artifact itself is absent, which only hides the readme block.
@@ -1294,7 +1306,7 @@ test('maintainer claims are filed, verified by reviewers, and shown publicly', a
   html = await response.text();
   assert.match(html, /@plain-user/);
   assert.match(html, /verified maintainer/);
-  assert.match(html, /verified by @admin-user/);
+  assert.match(html, /verified by <a class="profile-link" href="\/account\/admin-user">@admin-user<\/a>/);
 
   // The claimant sees that the claim is settled.
   response = await requestAs(plain, '/packages/readme-pkg', { headers: BROWSER });
@@ -1900,4 +1912,119 @@ test('only founding admins can manage admins or grant the role', async () => {
     assert.equal(response.status, 303);
     assert.equal(app.locals.registry.admin.roleOf(id), '');
   }
+});
+
+// --- A4 contributor profiles, Sponsors badge, top-contributors board -------
+
+test('public contributor profiles show maintained packages, reviews, replies, and decisions', async () => {
+  // A fresh reviewer decision so the decision history is deterministic.
+  const reviewer = cookieJar();
+  await login(reviewer, 'user-code'); // 777
+  let response = await requestAs(reviewer, '/packages/notify-report-pkg', { headers: BROWSER });
+  const csrf = csrfFrom(await response.text());
+  response = await requestAs(reviewer, '/review/packages/notify-report-pkg/decision', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, action: 'review' }),
+  });
+  assert.equal(response.status, 303);
+
+  // The profile is public: no cookie.
+  response = await fetch(`${baseUrl}/account/plain-user`, { headers: BROWSER });
+  assert.equal(response.status, 200);
+  let html = await response.text();
+  assert.match(html, /<h1>@plain-user<\/h1>/);
+  assert.match(html, /Packages maintained/);
+  assert.match(html, /readme-pkg/);
+  assert.match(html, /Maintainer replies/);
+  assert.match(html, /fixed in 1\.0\.2/);
+  assert.match(html, /No written reviews yet/);
+  assert.match(html, /github\.com\/plain-user/);
+
+  response = await fetch(`${baseUrl}/account/user-user`, { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /registry reviewer/);
+  assert.match(html, /notify-decision-pkg/);
+  assert.match(html, /revised/);
+  assert.match(html, /Decision history/);
+  assert.match(html, /package review/);
+
+  const json = await (await fetch(`${baseUrl}/account/plain-user`, { headers: API })).json();
+  assert.equal(json.login, 'plain-user');
+  assert.equal(json.sponsor, false);
+  assert.ok(json.maintained.includes('readme-pkg'));
+  assert.equal(json.replies.length, 1);
+  assert.equal(json.replies[0].body, 'Thanks, fixed in 1.0.2.');
+
+  // Lookup is case-insensitive; unknown logins are a 404 in both formats.
+  response = await fetch(`${baseUrl}/account/Plain-User`, { headers: BROWSER });
+  assert.equal(response.status, 200);
+  response = await fetch(`${baseUrl}/account/ghost-nobody`, { headers: BROWSER });
+  assert.equal(response.status, 404);
+  response = await fetch(`${baseUrl}/account/ghost-nobody`, { headers: API });
+  assert.equal(response.status, 404);
+});
+
+test('the Sponsors badge is opt-in, cached, verified, and removable', async () => {
+  const jar = cookieJar();
+  await login(jar, 'plain-code'); // 888
+  let response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  let html = await response.text();
+  assert.match(html, /GitHub Sponsors badge/);
+  const csrf = csrfFrom(html);
+
+  // Opt in: the fake GitHub confirms a listing and the answer is cached.
+  response = await requestAs(jar, '/account/sponsors', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, badge: '1' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/settings?sponsors=sponsor');
+
+  response = await requestAs(jar, '/account/settings?sponsors=sponsor', { headers: BROWSER });
+  html = await response.text();
+  assert.match(html, /status-approved">verified/);
+  assert.match(html, /sponsor-badge/);
+  assert.match(html, /github\.com\/sponsors\/plain-user/);
+
+  // The badge shows on the public profile and on the board.
+  response = await fetch(`${baseUrl}/account/plain-user`, { headers: BROWSER });
+  assert.match(await response.text(), /class="sponsor-badge"/);
+  const profile = await (await fetch(`${baseUrl}/account/plain-user`, { headers: API })).json();
+  assert.equal(profile.sponsor, true);
+  response = await fetch(`${baseUrl}/contributors`, { headers: BROWSER });
+  const boardHtml = await response.text();
+  assert.match(boardHtml, /Top contributors/);
+  assert.match(boardHtml, /href="\/account\/plain-user"[\s\S]{0,200}?sponsor-badge/);
+
+  // The ranking is capped, ordered, and exposes the public counts.
+  const board = await (await fetch(`${baseUrl}/contributors`, { headers: API })).json();
+  assert.ok(board.contributors.length >= 2);
+  const plain = board.contributors.find((entry) => entry.login === 'plain-user');
+  assert.ok(plain, 'a contributor with a reply and a maintained package ranks');
+  assert.equal(plain.sponsor, true);
+  assert.ok(plain.counts.packages >= 1);
+  assert.ok(plain.counts.replies >= 1);
+  const reviewer = board.contributors.find((entry) => entry.login === 'user-user');
+  assert.ok(reviewer.counts.decisions >= 1, 'reviewer decisions rank');
+  assert.ok(reviewer.counts.packages >= 1, 'provenance maintainership ranks');
+  for (let i = 1; i < board.contributors.length; i++) {
+    assert.ok(
+      board.contributors[i - 1].score >= board.contributors[i].score,
+      'scores never increase down the board',
+    );
+  }
+
+  // Opting out clears the cached answer and the badge everywhere.
+  response = await requestAs(jar, '/account/settings', { headers: BROWSER });
+  const offCsrf = csrfFrom(await response.text());
+  response = await requestAs(jar, '/account/sponsors', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: offCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/settings?sponsors=off');
+  response = await fetch(`${baseUrl}/account/plain-user`, { headers: BROWSER });
+  assert.doesNotMatch(await response.text(), /sponsor-badge/);
+  const cleared = await (await fetch(`${baseUrl}/account/plain-user`, { headers: API })).json();
+  assert.equal(cleared.sponsor, false);
 });

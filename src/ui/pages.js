@@ -23,6 +23,7 @@ const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts, STAGES } = require('../categories');
 const { renderMarkdown } = require('./markdown');
 const { reportForm, decisionPill, reviewHistory, decisionControls, ratingsSection } = require('./review');
+const { profileLink } = require('./profile');
 const semver = require('semver');
 
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
@@ -835,10 +836,10 @@ function maintainersBlock({ name, ownership, signedIn = false, csrf = '' }) {
     return parts.join(' &middot; ');
   };
   const rows = ownership.maintainers.map((entry) => `<li class="maintainer-row">
-  <a class="pkg-name" href="https://github.com/${encodeURIComponent(entry.login)}" rel="noopener">@${escapeHtml(entry.login)}</a>
+  <a class="pkg-name" href="/account/${encodeURIComponent(entry.login)}">@${escapeHtml(entry.login)}</a>
   <span class="pkg-meta">${sourceLabel(entry)}</span>
   ${entry.claim && entry.claim.decidedBy
-    ? `<span class="pkg-meta">verified by @${escapeHtml(entry.claim.decidedBy)}`
+    ? `<span class="pkg-meta">verified by ${profileLink(entry.claim.decidedBy)}`
       + ` ${formatWhen(entry.claim.decidedAt || '')}</span>`
     : ''}
 </li>`).join('\n');

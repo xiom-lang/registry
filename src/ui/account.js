@@ -10,6 +10,7 @@
 
 const { escapeHtml, formatWhen, shortId } = require('./format');
 const { layout } = require('./layout');
+const { sponsorBadge } = require('./profile');
 
 const STATUS_LABELS = {
   pending: 'pending review',
@@ -428,6 +429,8 @@ function accountSettingsPage({
   notifyEmailVerified = false,
   notifyEmailPending = false,
   notifyKinds = null,
+  sponsor = { optedIn: false, state: '', checkedAt: '' },
+  sponsorCheckEnabled = false,
   csrf,
   notice = '',
   error = '',
@@ -479,6 +482,33 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('review-reply', 'Replies to your reviews')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
+    <h3 id="sponsors" class="account-subhead">GitHub Sponsors badge</h3>
+    <p class="pkg-meta">Optional and off by default. Opting in asks GitHub whether your
+       account has a public sponsors listing (cached, refreshed only when you ask) and
+       shows a badge on your public profile. The registry handles no money and stores
+       no payment data.</p>
+    <form method="post" action="/account/sponsors" class="email-form" id="sponsor-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <label class="radio-row"><input type="checkbox" name="badge" value="1"
+        ${sponsor.optedIn ? 'checked' : ''}>
+        <span>Show a Sponsors badge on my profile</span></label>
+      <button class="button primary" type="submit">Save badge</button>
+      ${sponsor.optedIn ? '<button class="button" type="submit" name="refresh" value="1">Refresh check</button>' : ''}
+    </form>
+    ${!sponsor.optedIn
+    ? '<p class="pkg-meta">The badge is off.</p>'
+    : (sponsor.state === 'sponsor'
+      ? `<p class="pkg-meta"><span class="status-pill status-approved">verified</span> `
+        + `${sponsorBadge(account.login)} confirmed${sponsor.checkedAt ? ` ${formatWhen(sponsor.checkedAt)}` : ''}.</p>`
+      : (sponsor.state === 'not'
+        ? '<p class="pkg-meta"><span class="status-pill status-pending">not listed</span> '
+          + `GitHub reports no public sponsors listing${sponsor.checkedAt ? ` (checked ${formatWhen(sponsor.checkedAt)})` : ''}. `
+          + 'Create one at <a href="https://github.com/sponsors" rel="noopener">github.com/sponsors</a>, then refresh.</p>'
+        : (!sponsorCheckEnabled
+          ? '<p class="pkg-meta"><span class="status-pill status-muted">unverified</span> '
+            + 'Sponsors checks are not configured on this registry, so the badge stays hidden.</p>'
+          : '<p class="pkg-meta"><span class="status-pill status-muted">unverified</span> '
+            + 'No check has landed yet; save or refresh to run one.</p>')))}
   </section>
   <section>
     <h2>Account</h2>

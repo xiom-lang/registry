@@ -577,3 +577,63 @@ test('one maintainer reply per review upserts; pages sort and paginate', () => {
     db.close();
   }
 });
+
+// ─── A4: contributor profile queries (SESSION.md 21 A4) ────────────────────
+
+test('profile queries: ratings, replies, decisions, and counters by account', () => {
+  const { store: reviews, db } = sqliteStore();
+  try {
+    reviews.rate('demo-pkg', { user: { githubId: '1', login: 'alice' }, stars: 5, review: 'great docs' });
+    reviews.rate('other-pkg', { user: { githubId: '1', login: 'alice' }, stars: 4, review: '' });
+    reviews.rate('demo-pkg', { user: { githubId: '2', login: 'bob' }, stars: 2, review: 'meh' });
+    reviews.replyTo('demo-pkg', '2', { author: { githubId: '9', login: 'maint' }, body: 'Fixed.' });
+    reviews.setDecision('demo-pkg', { action: 'review', actor: 'carol' });
+    reviews.setDecision('other-pkg', { action: 'flag', actor: 'carol', note: 'spam' });
+
+    assert.deepEqual(
+      reviews.ratingsBy('1', {}).map((entry) => entry.package).sort(),
+      ['demo-pkg', 'other-pkg'],
+    );
+    assert.equal(reviews.ratingsBy('1', { limit: 1 }).length, 1, 'the limit caps the list');
+
+    const replies = reviews.repliesBy('9', {});
+    assert.deepEqual(replies.map((entry) => entry.package), ['demo-pkg']);
+    assert.equal(replies[0].reviewGithubId, '2');
+    assert.equal(replies[0].body, 'Fixed.');
+    assert.equal(reviews.repliesBy('1', {}).length, 0);
+
+    const decisions = reviews.decisionsBy('carol', {});
+    assert.deepEqual(decisions.map((entry) => entry.action).sort(), ['flag', 'review']);
+    assert.deepEqual(decisions.map((entry) => entry.package).sort(), ['demo-pkg', 'other-pkg']);
+    assert.equal(reviews.decisionsBy('nobody', {}).length, 0);
+
+    const counters = reviews.contributionCounts();
+    const alice = counters.find((row) => row.githubId === '1');
+    assert.deepEqual(
+      { ratings: alice.ratings, reviews: alice.reviews, replies: alice.replies, decisions: alice.decisions },
+      { ratings: 2, reviews: 1, replies: 0, decisions: 0 },
+    );
+    const maint = counters.find((row) => row.githubId === '9');
+    assert.equal(maint.replies, 1);
+    const carol = counters.find((row) => row.login === 'carol');
+    assert.equal(carol.decisions, 2);
+    assert.equal(carol.githubId, '', 'decision-only actors merge by login');
+  } finally {
+    db.close();
+  }
+});
+
+test('profile queries fall back to the JSON store without the database', () => {
+  const reviews = store();
+  reviews.rate('demo-pkg', { user: { githubId: '1', login: 'alice' }, stars: 5, review: 'great' });
+  reviews.setDecision('demo-pkg', { action: 'review', actor: 'alice' });
+  assert.deepEqual(reviews.ratingsBy('1', {}).map((entry) => entry.package), ['demo-pkg']);
+  assert.deepEqual(reviews.decisionsBy('alice', {}).map((entry) => entry.action), ['review']);
+  const counters = reviews.contributionCounts();
+  const alice = counters.find((row) => row.githubId === '1');
+  assert.deepEqual(
+    { ratings: alice.ratings, reviews: alice.reviews, decisions: alice.decisions },
+    { ratings: 1, reviews: 1, decisions: 1 },
+  );
+  assert.equal(reviews.repliesBy('1', {}).length, 0, 'replies need the platform database');
+});

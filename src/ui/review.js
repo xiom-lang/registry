@@ -10,6 +10,7 @@
 
 const { escapeHtml, formatWhen, shortId } = require('./format');
 const { layout } = require('./layout');
+const { profileLink } = require('./profile');
 
 const REASON_LABELS = {
   malware: 'malware or unsafe code',
@@ -201,7 +202,7 @@ ${ratings.map((entry) => {
     const reply = entry.reply
       ? `<div class="review-reply">
       <p class="pkg-meta"><span class="status-pill status-approved">maintainer</span>
-        @${escapeHtml(entry.reply.author.login)} &middot; ${formatWhen(entry.reply.at)}${entry.reply.updatedAt ? ' &middot; edited' : ''}</p>
+        ${profileLink(entry.reply.author.login)} &middot; ${formatWhen(entry.reply.at)}${entry.reply.updatedAt ? ' &middot; edited' : ''}</p>
       <p class="pkg-desc">${escapeHtml(entry.reply.body)}</p>
     </div>`
       : '';
@@ -215,7 +216,7 @@ ${ratings.map((entry) => {
       : '';
     return `  <li class="rating-item">
     <div class="request-head">
-      <span class="mono">@${escapeHtml(entry.login)}</span>
+      <span class="mono">${profileLink(entry.login)}</span>
       <span class="rating-stars" title="${entry.stars} of 5">${stars(entry.stars)}</span>
       <span class="pkg-meta">${formatWhen(entry.at)}</span>
     </div>
@@ -274,7 +275,7 @@ function claimRow(claim, csrf, next = '') {
     <a class="pkg-name" href="/packages/${encodeURIComponent(claim.package)}#maintainers">${escapeHtml(claim.package)}</a>
     <span class="status-pill status-pending">claim</span>
     <span class="pkg-meta">claimed by
-      <a href="https://github.com/${encodeURIComponent(claim.login)}" rel="noopener">@${escapeHtml(claim.login)}</a>
+      ${profileLink(claim.login)}
       &middot; ${formatWhen(claim.claimedAt)}</span>
   </div>
   <p class="pkg-meta">Verifying adds this account to the package&apos;s Maintainers list.
@@ -308,7 +309,7 @@ function reviewPage({ account, reports, decisions = [], claims = [], csrf, notic
     return `<li class="review-decision-row">
   <a class="pkg-name" href="/packages/${encodeURIComponent(entry.name)}">${escapeHtml(entry.name)}</a>
   ${decisionPill(entry)}
-  <span class="pkg-meta">@${escapeHtml(last.actor || '?')} &middot; ${formatWhen(last.at || '')}</span>
+  <span class="pkg-meta">${last.actor ? profileLink(last.actor) : '@?'} &middot; ${formatWhen(last.at || '')}</span>
 </li>`;
   };
   const body = `<section class="hero">

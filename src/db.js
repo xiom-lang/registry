@@ -255,6 +255,26 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '011-contributor-sponsors',
+    up(db) {
+      // A4 (SESSION.md 21): the opt-in GitHub Sponsors badge state. A row
+      // exists only after an account opts in; `state` is the cached answer
+      // from the public GitHub GraphQL `hasSponsorsListing` check ('sponsor'
+      // or 'not'), '' until a check lands. Nothing here handles money: the
+      // registry only renders a badge that links to the GitHub profile.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS contributor_sponsors (
+          github_id TEXT PRIMARY KEY,
+          login TEXT NOT NULL,
+          opted_in INTEGER NOT NULL DEFAULT 0,
+          state TEXT NOT NULL DEFAULT '',
+          checked_at TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT ''
+        );
+      `);
+    },
+  },
 ];
 
 class Database {
