@@ -215,6 +215,7 @@ test('footer carries the website social row and the registry contact', async () 
     ['https://news.ycombinator.com/user?id=xiom-lang', 'XIOM on Hacker News', 'Hacker News', 'noopener'],
     ['https://www.linkedin.com/company/145216062/', 'XIOM on LinkedIn', 'LinkedIn', 'noopener'],
     ['https://www.facebook.com/profile.php?id=61594524426045', 'XIOM on Facebook', 'Facebook', 'noopener'],
+    ['https://www.instagram.com/xiom.language/', 'XIOM on Instagram', 'Instagram', 'noopener'],
   ];
   const positions = social.map(([href, label, title, rel]) => {
     const anchor = `<a href="${href}" aria-label="${label}" title="${title}" target="_blank" rel="${rel}"`;

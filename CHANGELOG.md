@@ -6,6 +6,12 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Interface
+
+- **Footer social row**: added Instagram (`@xiom.language`) to match the
+  xiom-lang.org footer -- same order, labels, and `rel` rules, guarded by the
+  footer test.
+
 ### Provenance
 
 - **Index digest sidecar (C5)**: `GET /index-digest.json` describes the exact
