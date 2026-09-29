@@ -13,6 +13,9 @@ The rendered version of this file is at `/whats-new`.
 - **Footer social row**: added Instagram (`@xiom.language`) to match the
   xiom-lang.org footer -- same order, labels, and `rel` rules, guarded by the
   footer test.
+- **Sponsors opt-in discoverability**: on your own profile, a badge that is
+  still off now says so with a direct link to
+  `/account/settings#sponsors` instead of leaving the opt-in a mystery.
 
 ### Provenance
 

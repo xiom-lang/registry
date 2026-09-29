@@ -1990,6 +1990,11 @@ test('the Sponsors badge is opt-in, cached, verified, and removable', async () =
   assert.match(html, /GitHub Sponsors badge/);
   const csrf = csrfFrom(html);
 
+  // The signed-in owner sees the off-state hint on their own profile, so the
+  // opt-in is discoverable instead of a mystery.
+  response = await requestAs(jar, '/account/plain-user', { headers: BROWSER });
+  assert.match(await response.text(), /Sponsors badge: off &mdash; enable it in Settings/);
+
   // Opt in: the fake GitHub confirms a listing and the answer is cached.
   response = await requestAs(jar, '/account/sponsors', {
     method: 'POST',

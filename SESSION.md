@@ -2721,6 +2721,10 @@ now warns when the manifest declares no stage or marks a pre-release version
   generates keys. 335/335 unit; e2e re-run.
 - `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
   registry footer matches the updated xiom-lang.org social row.
+- Profile fix after the release commit (same 2.7.0 deploy): the signed-in
+  owner's profile shows "Sponsors badge: off -- enable it in Settings" when
+  the opt-in is still off (owner report: the badge looked missing), with a
+  test pinning the hint.
 - Release commit on top of `b04a955`: version `2.7.0`, CHANGELOG promotion
   ([Unreleased] -> [2.7.0]), this handoff.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it

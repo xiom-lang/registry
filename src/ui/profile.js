@@ -58,6 +58,11 @@ function profileHero({ account, role, sponsor, isSelf }) {
     pieces.push(`<span class="status-pill status-approved">${escapeHtml(ROLE_PILLS[role])}</span>`);
   }
   if (sponsor) pieces.push(sponsorBadge(account.login));
+  if (isSelf && !sponsor) {
+    // The badge is opt-in: a signed-in owner who has not enabled it gets a
+    // direct pointer instead of a mystery ("why is my badge missing?").
+    pieces.push('<span><a href="/account/settings#sponsors">Sponsors badge: off &mdash; enable it in Settings</a></span>');
+  }
   if (isSelf) pieces.push('<span><a href="/account/settings">Manage your profile</a></span>');
   return `<section class="hero account-hero">
   ${avatar}
