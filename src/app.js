@@ -227,6 +227,16 @@ function listingEntry(name, pkg) {
  */
 function createApp(config = loadConfig()) {
   const app = express();
+  // Every HTML page renders the signed-in account in the nav, so dynamic
+  // responses must never be publicly cached: a browser or shared cache that
+  // keeps the anonymous page would still show "Sign in" right after a
+  // successful sign-in (owner report 2026-09-29). This default is private
+  // and revalidates; genuinely public surfaces (index.json, assets, readme)
+  // opt back in with their own Cache-Control.
+  app.use((_req, res, next) => {
+    res.set('Cache-Control', 'private, no-cache');
+    next();
+  });
   const indexStore = new IndexStore(config);
   const artifacts = new ArtifactStore(config);
   // Registry 2.0: sign-in sessions, GitHub identities, and the request queue.
@@ -458,11 +468,23 @@ function createApp(config = loadConfig()) {
       // No self-link on the sign-in page: it reloads the same page and reads
       // as a dead control.
       if (req.path === '/login') return { primary: '', menu: '' };
+      // One click into GitHub, like the playground: the nav link starts the
+      // OAuth round-trip directly (the /login page stays for explanations,
+      // errors, and returnTo redirects) and comes back to where the user was.
+      const returnTo = encodeURIComponent(req.originalUrl || req.path);
       return {
-        primary: '<a class="nav-account nav-button nav-button-primary" href="/login">Sign in</a>',
+        primary: `<a class="nav-account nav-button nav-button-primary" href="/auth/github/start?returnTo=${returnTo}">Sign in</a>`,
         menu: '',
       };
     }
+    // The session carries identity only (githubId + login); the avatar and
+    // display name live in the stored account, so refresh from there. A
+    // missing profile still renders the initial fallback.
+    const stored = accounts.get(account.githubId) || account;
+    const login = stored.login || account.login;
+    const label = typeof stored.name === 'string' && stored.name.trim() !== ''
+      ? stored.name.trim()
+      : `@${login}`;
     const menu = [
       isReviewer(account)
         ? `<a href="/review"${req.path.startsWith('/review') ? ' aria-current="page"' : ''}>Review queue</a>`
@@ -487,12 +509,15 @@ function createApp(config = loadConfig()) {
         <button class="nav-account-signout" type="submit">Sign out</button>
       </form>`,
     ].filter(Boolean).join('\n        ');
-    const avatar = account.avatarUrl
-      ? `<img class="nav-avatar" src="${escapeHtml(account.avatarUrl)}" alt="" width="24" height="24">`
-      : `<span class="nav-avatar nav-avatar--fallback" aria-hidden="true">${escapeHtml(account.login.slice(0, 1).toUpperCase())}</span>`;
+    const avatarUrl = typeof stored.avatarUrl === 'string' && stored.avatarUrl.startsWith('https://')
+      ? stored.avatarUrl
+      : '';
+    const avatar = avatarUrl
+      ? `<img class="nav-avatar" src="${escapeHtml(avatarUrl)}" alt="" width="24" height="24" referrerpolicy="no-referrer">`
+      : `<span class="nav-avatar nav-avatar--fallback" aria-hidden="true">${escapeHtml(login.slice(0, 1).toUpperCase())}</span>`;
     return {
       primary: `<details class="nav-account">
-      <summary>${avatar}<span${current}>@${escapeHtml(account.login)}</span></summary>
+      <summary>${avatar}<span${current}>${escapeHtml(label)}</span></summary>
       <nav class="nav-account-panel" aria-label="Account">${panel}</nav>
     </details>`,
       menu,
@@ -1084,8 +1109,7 @@ function createApp(config = loadConfig()) {
   app.get('/', generalLimit, (req, res) => {
     const index = indexStore.snapshot();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
-        .send(homePage(publicIndex(), { nav: accountNav(req) }));
+      return res.type('html').send(homePage(publicIndex(), { nav: accountNav(req) }));
     }
     res.json({
       name: SERVICE_NAME,
@@ -1118,7 +1142,7 @@ function createApp(config = loadConfig()) {
   // Release notes: the changelog rendered with the readme pipeline, with the
   // deployed version first so "am I on the latest?" is one glance.
   app.get('/whats-new', generalLimit, (req, res) => {
-    res.type('html').set('Cache-Control', 'public, max-age=300')
+    res.type('html')
       .send(whatsNewPage({
         version: SERVICE_VERSION,
         changelogHtml: renderMarkdown(CHANGELOG_MD),
@@ -1172,7 +1196,7 @@ function createApp(config = loadConfig()) {
   app.get('/publish', generalLimit, async (req, res, next) => {
     try {
       const doc = await publishingDoc();
-      res.type('html').set('Cache-Control', 'public, max-age=300')
+      res.type('html')
         .send(publishGuidePage({ ...doc, nav: accountNav(req) }));
     } catch (err) {
       next(err);
@@ -1226,7 +1250,7 @@ function createApp(config = loadConfig()) {
     const index = publicIndex();
     const listing = withListingAggregates(listingFromQuery(req.query));
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
+      return res.type('html')
         .send(packagesPage(index, { nav: accountNav(req), ...listing }));
     }
     const paged = paginatePackages(index, listing);
@@ -1250,7 +1274,7 @@ function createApp(config = loadConfig()) {
   app.get('/categories', generalLimit, (req, res) => {
     const index = publicIndex();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
+      return res.type('html')
         .send(categoriesPage(index, { nav: accountNav(req) }));
     }
     res.json({ categories: categoryCounts(index) });
@@ -1260,7 +1284,7 @@ function createApp(config = loadConfig()) {
   app.get('/contributors', generalLimit, (req, res) => {
     const entries = contributorBoard();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=120')
+      return res.type('html')
         .send(contributorsPage({ entries, nav: accountNav(req) }));
     }
     res.json({
@@ -1285,7 +1309,7 @@ function createApp(config = loadConfig()) {
     }
     if (wantsHtml(req)) {
       const view = reviewedIndex();
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
+      return res.type('html')
         .send(packagePage(view.packages[name] || pkg, view.registry, '', {
           nav: accountNav(req),
           readme: readmeFor(pkg),
@@ -1315,7 +1339,7 @@ function createApp(config = loadConfig()) {
         return res.status(404).type('html')
           .send(notFoundPage(`Version "${version}" of "${name}" was not found.`));
       }
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
+      return res.type('html')
         .send(packagePage(pkg, view.registry, version, {
           nav: accountNav(req),
           readme: readmeFor(pkg),
@@ -1388,7 +1412,7 @@ function createApp(config = loadConfig()) {
     const facets = lifecycleFromQuery(req.query);
     const index = publicIndex();
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60')
+      return res.type('html')
         .send(searchPage(index, rawQuery, category, { nav: accountNav(req), ...facets }));
     }
     const results = searchPackages(index, rawQuery, category, facets)
@@ -1731,7 +1755,7 @@ function createApp(config = loadConfig()) {
     const sponsor = sponsorState.optedIn && sponsorState.state === 'sponsor';
     const data = profileData(account);
     if (wantsHtml(req)) {
-      return res.type('html').set('Cache-Control', 'public, max-age=60').send(profilePage({
+      return res.type('html').send(profilePage({
         account,
         role: roleFor(account),
         sponsor,

@@ -130,7 +130,12 @@ test.before(async () => {
       return res.json({ id: 4242, login: 'admin-user', name: 'Admin', avatar_url: '' });
     }
     if (req.headers.authorization === 'Bearer user-token') {
-      return res.json({ id: 777, login: 'user-user', name: 'User', avatar_url: '' });
+      return res.json({
+        id: 777,
+        login: 'user-user',
+        name: 'User',
+        avatar_url: 'https://avatars.githubusercontent.com/u/777?v=4',
+      });
     }
     if (req.headers.authorization === 'Bearer plain-token') {
       return res.json({ id: 888, login: 'plain-user', name: 'Plain', avatar_url: '' });
@@ -358,13 +363,22 @@ test('anonymous users are redirected to sign-in, not served account pages', asyn
   assert.equal(response.status, 302);
   assert.equal(response.headers.get('location'), '/login?returnTo=%2Faccount');
 
-  // The nav shows Sign in as a button next to the text menu.
+  // The nav shows Sign in as a button that starts OAuth directly (one click),
+  // carrying the current page as the return target.
   response = await requestAs(jar, '/packages', { headers: BROWSER });
   assert.equal(response.status, 200);
+  const listingHtml = await response.text();
   assert.match(
-    await response.text(),
-    /class="nav-account nav-button nav-button-primary" href="\/login"/,
+    listingHtml,
+    /class="nav-account nav-button nav-button-primary" href="\/auth\/github\/start\?returnTo=%2Fpackages"/,
   );
+  // Session-aware HTML is never publicly cached: that is what made a signed-in
+  // browser still show "Sign in" on a page it had visited before (owner report).
+  assert.match(response.headers.get('cache-control') || '', /private/);
+  assert.doesNotMatch(response.headers.get('cache-control') || '', /public/);
+  // The protocol document stays publicly cacheable.
+  response = await fetch(`${baseUrl}/index.json`);
+  assert.match(response.headers.get('cache-control') || '', /public/);
 
   response = await requestAs(jar, '/admin/requests');
   assert.equal(response.status, 302);
@@ -1522,6 +1536,10 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   assert.match(html, /name="support" checked/);
   assert.match(html, /name="review-reply" checked/);
   assert.match(html, /name="release" checked/);
+  // The account menu shows the GitHub avatar + display name, refreshed from
+  // the stored account (the session carries identity only).
+  assert.match(html, /<img class="nav-avatar" src="https:\/\/avatars\.githubusercontent\.com\/u\/777\?v=4"/);
+  assert.match(html, /<span aria-current="page">User<\/span>/);
   const csrf = csrfFrom(html);
 
   // Turn review notices off; claim, report, and support stay on.

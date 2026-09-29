@@ -6,6 +6,24 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stale "Sign in" in the header after signing in**: session-aware HTML is no
+  longer publicly cacheable. The registry now defaults responses to
+  `Cache-Control: private, no-cache`, so a browser or shared cache can never
+  serve the anonymous page (with its Sign in button) after a successful
+  sign-in. `/index.json`, assets, and version READMEs keep their public
+  caching.
+- **One-click sign-in**: the header button now starts the GitHub round-trip
+  directly and returns you to the page you were on, instead of routing
+  through the sign-in page first. `/login` remains for explanations, error
+  results, and account-page redirects.
+- **Account menu identity**: the header shows the GitHub avatar and the
+  account's display name (falling back to the first letter and @login) from
+  the stored profile -- the session carries identity only, which is why the
+  first-letter fallback used to appear. The Sign in button styling now also
+  covers the header slot, so it reads as a button, not menu text.
+
 ### Discovery
 
 - **Download stats (C1)**: artifact requests are counted per package,
