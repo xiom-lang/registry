@@ -6,6 +6,21 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Provenance
+
+- **Index digest sidecar (C5)**: `GET /index-digest.json` describes the exact
+  bytes `GET /index.json` serves -- sha256, size, registry, timestamp -- and,
+  when an operator-held `INDEX_SIGNING_KEY` (64-hex ed25519 seed or PKCS8
+  PEM) is configured at boot, carries an ed25519 signature over a
+  domain-separated payload (`xiom-index-digest:v1\n<sha256>`). Clients that
+  pin the published public key can detect a swapped or stale index; the
+  unsigned digest alone still gives stable change detection. `/index.json`
+  gains no fields and is now served byte-for-byte from disk (the empty index
+  is materialized at boot), so `sha256sum data/index.json` equals the
+  published digest. A malformed key fails boot instead of downgrading.
+  Generate keys with `node scripts/index-key.js`; DEPLOY.md/compose/env
+  examples document the four-place wiring.
+
 ### Self-service
 
 - **Grant changes without emailing the maintainers (B4/B5)**: `/account/requests`

@@ -84,6 +84,41 @@ function fingerprint(publicKeyHex) {
     .join(':');
 }
 
+/** RFC 8410 PKCS8 prefix for a raw Ed25519 private seed. */
+const ED25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+/**
+ * Build an ed25519 private KeyObject from a 32-byte seed in hex (the shape
+ * `xiom pkg keygen` writes) or a PKCS8 PEM string. Server-side use only
+ * (C5 index signing); throws a plain Error on anything else so a bad boot
+ * configuration fails fast instead of silently downgrading.
+ */
+function privateKeyFromSeed(seed) {
+  const value = String(seed || '').trim();
+  if (/^[0-9a-fA-F]{64}$/.test(value)) {
+    return crypto.createPrivateKey({
+      key: Buffer.concat([ED25519_PKCS8_PREFIX, Buffer.from(value, 'hex')]),
+      format: 'der',
+      type: 'pkcs8',
+    });
+  }
+  if (value.includes('BEGIN PRIVATE KEY')) {
+    return crypto.createPrivateKey({ key: value, format: 'pem', type: 'pkcs8' });
+  }
+  throw new Error('ed25519 key must be a 32-byte hex seed or a PKCS8 PEM block');
+}
+
+/** Raw 32-byte hex public key for a private KeyObject. */
+function publicKeyHexFromPrivate(privateKey) {
+  const der = crypto.createPublicKey(privateKey).export({ format: 'der', type: 'spki' });
+  return der.subarray(ED25519_SPKI_PREFIX.length).toString('hex');
+}
+
+/** Sign bytes with an ed25519 private KeyObject; returns lowercase hex. */
+function sign(privateKey, data) {
+  return crypto.sign(null, data, privateKey).toString('hex');
+}
+
 /**
  * Validate the (signature, publicKey) pair as stored in a version entry:
  * both empty (unsigned) or both well-formed hex. Throws BadRequestError.
@@ -117,8 +152,11 @@ function validateTokenKey(signatureHex, publicKeyHex) {
 
 module.exports = {
   verify,
+  sign,
   fingerprint,
   publicKeyFromHex,
+  privateKeyFromSeed,
+  publicKeyHexFromPrivate,
   isValidPublicKeyHex,
   isValidSignatureHex,
   validateTokenKey,

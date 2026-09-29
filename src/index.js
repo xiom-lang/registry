@@ -48,6 +48,12 @@ class IndexStore {
     this.maxVersionsPerPackage = config.maxVersionsPerPackage;
     this.registryUrl = config.registryUrl || '';
     this.index = this.#readFromDisk();
+    if (!fs.existsSync(this.indexPath)) {
+      // The index file is the served document: /index.json sends its exact
+      // bytes and /index-digest.json (C5) signs them, so the empty index is
+      // materialized at boot instead of existing only in memory.
+      atomicWriteFile(this.indexPath, JSON.stringify(this.index, null, 2));
+    }
   }
 
   #emptyIndex() {

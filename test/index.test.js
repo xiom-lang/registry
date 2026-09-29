@@ -115,8 +115,11 @@ test('package-count limit throws IndexLimitError', () => {
 
 test('index byte limit throws before writing', () => {
   const store = tmpStore({ maxIndexBytes: 400 });
+  // The empty document is materialized at boot (C5 serves and signs the file
+  // bytes); a failed commit must leave those bytes untouched.
+  const before = fs.readFileSync(store.indexPath, 'utf-8');
   assert.throws(() => store.publishVersion('my-pkg', versionEntry('0.1.0')), IndexLimitError);
-  assert.equal(fs.existsSync(store.indexPath), false, 'nothing may be written on limit');
+  assert.equal(fs.readFileSync(store.indexPath, 'utf-8'), before, 'nothing may be written on limit');
 });
 
 test('normalizeIndex upgrades legacy shapes', () => {
@@ -166,9 +169,15 @@ test('computeLatest ignores invalid semver', () => {
 
 test('metadata with malformed signature pair is rejected', () => {
   const store = tmpStore();
+  const before = fs.readFileSync(store.indexPath, 'utf-8');
   assert.throws(
     () => store.publishVersion('my-pkg', versionEntry('0.1.0', { signature: 'zz', publicKey: '' })),
     /signature/i,
   );
-  assert.equal(fs.existsSync(store.indexPath), false, 'invalid metadata must not persist');
+  assert.equal(
+    fs.readFileSync(store.indexPath, 'utf-8'),
+    before,
+    'invalid metadata must not persist',
+  );
+  assert.deepEqual(JSON.parse(before).packages, {});
 });

@@ -86,6 +86,7 @@ const { profilePage, contributorsPage } = require('./ui/profile');
 const { WatchStore } = require('./watches');
 const { DownloadStats } = require('./stats');
 const { isAttestationUrl, discoverAttestation } = require('./attestations');
+const { indexDigest, createIndexSigner } = require('./index-digest');
 const { packageActivity, watchedFeed } = require('./activity');
 const {
   loginPage,
@@ -239,6 +240,12 @@ function createApp(config = loadConfig()) {
     next();
   });
   const indexStore = new IndexStore(config);
+  // C5: built once at boot. A malformed INDEX_SIGNING_KEY throws here, on
+  // purpose: a broken security configuration must not boot quietly.
+  const indexSigner = createIndexSigner(config.indexSigningKey);
+  if (indexSigner) {
+    console.log(`xiom-registry: index digest signing enabled (key fp ${indexSigner.fingerprint})`);
+  }
   const artifacts = new ArtifactStore(config);
   // Registry 2.0: sign-in sessions, GitHub identities, and the request queue.
   // Sessions and the queue are display/audit data only; none of it can
@@ -1012,6 +1019,18 @@ function createApp(config = loadConfig()) {
     return { ...index, packages };
   }
 
+  /**
+   * Exact bytes of the served index document (C5): /index.json sends them
+   * and /index-digest.json signs them, so both must come from one source.
+   */
+  function indexDocumentBytes() {
+    try {
+      return fs.readFileSync(indexStore.indexPath);
+    } catch {
+      return Buffer.from(JSON.stringify(indexStore.snapshot(), null, 2), 'utf-8');
+    }
+  }
+
   // ─── Contributor profiles and Sponsors badge (A4) ─────────────────────────
   // The board and profiles read public data only: contribution counters from
   // the platform DB, maintainership from the index overlay. Ranking is the
@@ -1137,7 +1156,21 @@ function createApp(config = loadConfig()) {
 
   app.get('/index.json', generalLimit, (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
-    res.json(indexStore.snapshot());
+    // The exact bytes of the index document: /index-digest.json signs these,
+    // so ops can compare `sha256sum data/index.json` with the published
+    // digest. A missing file (freak deletion) falls back to the serialized
+    // in-memory document so the two endpoints always agree.
+    res.type('application/json').send(indexDocumentBytes());
+  });
+
+  // C5: the sidecar digest of the exact /index.json bytes, signed when
+  // INDEX_SIGNING_KEY is configured. /index.json gains no fields.
+  app.get('/index-digest.json', generalLimit, (req, res) => {
+    res.set('Cache-Control', 'public, max-age=60').json(indexDigest({
+      bytes: indexDocumentBytes(),
+      registry: indexStore.snapshot().registry || config.registryUrl,
+      signer: indexSigner,
+    }));
   });
 
   // Release notes: the changelog rendered with the readme pipeline, with the

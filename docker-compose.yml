@@ -74,6 +74,9 @@ services:
       # keeps badges unverified and nothing else changes. Declared so a .env
       # value actually reaches the container.
       - GITHUB_SPONSORS_TOKEN=${GITHUB_SPONSORS_TOKEN:-}
+      # C5: signs /index-digest.json (the exact /index.json bytes). Unset
+      # serves the unsigned digest. Generate with scripts/index-key.js.
+      - INDEX_SIGNING_KEY=${INDEX_SIGNING_KEY:-}
       # Rate-limit knobs, DECLARED so .env values actually reach the container
       # (compose does not inherit undeclared variables). Empty = built-in
       # default. Disabling the limiter is a load-test move: set
@@ -159,6 +162,8 @@ services:
       # Sponsors checks; staging can use its own token or fall back to the
       # shared one (same pattern as the rate-limit knobs).
       - GITHUB_SPONSORS_TOKEN=${XIOM_STAGING_GITHUB_SPONSORS_TOKEN:-${GITHUB_SPONSORS_TOKEN:-}}
+      # C5 index digest signing; a staging seed can differ from production.
+      - INDEX_SIGNING_KEY=${XIOM_STAGING_INDEX_SIGNING_KEY:-${INDEX_SIGNING_KEY:-}}
       # Staging rate-limit knobs. The XIOM_STAGING_* names let a load test
       # relax or disable staging limits without touching production when both
       # services share one env context; each falls back to the shared value.

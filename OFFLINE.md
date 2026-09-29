@@ -57,7 +57,10 @@ can never be mistaken for a verified one. Legacy index entries without a
 digest are listed in `bundle.json.skipped` and are not downloaded: an offline
 mirror that cannot prove integrity is worse than a gap.
 
-Consumers should pin by `sha256`, never by version string alone. To check a
+Consumers should pin by `sha256`, never by version string alone. The live
+registry also publishes `/index-digest.json` (the sha256 of the exact index
+bytes, ed25519-signed when `INDEX_SIGNING_KEY` is configured), so a bundle's
+`index.sha256` can be compared against the registry's own claim. To check a
 bundle by hand:
 
 ```sh

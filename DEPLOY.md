@@ -420,6 +420,7 @@ env context:
 | `DOWNLOAD_RATE_WINDOW_MS` / `XIOM_STAGING_DOWNLOAD_RATE_WINDOW_MS` | 60000 | artifact download window |
 | `DOWNLOAD_RATE_MAX` / `XIOM_STAGING_DOWNLOAD_RATE_MAX` | 600 | artifact downloads per window |
 | `GITHUB_SPONSORS_TOKEN` / `XIOM_STAGING_GITHUB_SPONSORS_TOKEN` | unset | A4 Sponsors badge checks: a GitHub token with plain public read access; unset = opt-ins stay unverified and the UI says so |
+| `INDEX_SIGNING_KEY` | unset | C5 index digest: a 64-hex ed25519 seed (or PKCS8 PEM). When set, `/index-digest.json` signs the exact `/index.json` bytes; generate with `node scripts/index-key.js` and pin the printed public key in clients. Declared in both compose services |
 
 Before a run, confirm what the container actually has (not what `.env` says):
 

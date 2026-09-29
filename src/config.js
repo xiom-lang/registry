@@ -267,6 +267,10 @@ function loadConfig() {
       token: process.env.GITHUB_ATTESTATIONS_TOKEN || process.env.GITHUB_SPONSORS_TOKEN || '',
       apiUrl: process.env.GITHUB_ATTESTATIONS_API_URL || 'https://api.github.com',
     },
+    // C5: the index digest sidecar. A 64-hex ed25519 seed (or PKCS8 PEM)
+    // lets /index-digest.json sign the exact /index.json bytes; unset serves
+    // the unsigned digest. Generate with `node scripts/index-key.js`.
+    indexSigningKey: process.env.INDEX_SIGNING_KEY || '',
     // Path used by the hot-reload watcher (empty when API_KEY is the source).
     tokensFile: process.env.TOKENS_FILE || '',
     // Shared secret for the internal fulfilment API (empty = API disabled).

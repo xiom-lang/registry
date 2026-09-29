@@ -85,3 +85,26 @@ test('the Sponsors token is declared in compose and documented in both env examp
     'documented in .env.staging.example',
   );
 });
+
+// C5: the index signing key follows the same four-place rule (config read,
+// production declaration, staging override, both env examples) so it cannot
+// be set in .env and silently never reach the container.
+test('the index signing key is declared in compose and documented in both env examples', () => {
+  assert.match(CONFIG, /process\.env\.INDEX_SIGNING_KEY/, 'config reads the variable');
+  assert.match(
+    COMPOSE,
+    /- INDEX_SIGNING_KEY=\$\{INDEX_SIGNING_KEY:-\}/,
+    'the production service must declare INDEX_SIGNING_KEY',
+  );
+  assert.match(
+    COMPOSE,
+    /- INDEX_SIGNING_KEY=\$\{XIOM_STAGING_INDEX_SIGNING_KEY:-\$\{INDEX_SIGNING_KEY:-\}\}/,
+    'the staging service must declare its own override falling back to the shared key',
+  );
+  assert.match(ENV_EXAMPLE, /#\s*INDEX_SIGNING_KEY=/, 'documented in .env.example');
+  assert.match(
+    ENV_STAGING,
+    /#\s*XIOM_STAGING_INDEX_SIGNING_KEY=/,
+    'documented in .env.staging.example',
+  );
+});
