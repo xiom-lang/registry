@@ -597,18 +597,18 @@ ${accountBanner({ account, status, notice, error })}
       ${sponsor.optedIn ? '<button class="button" type="submit" name="refresh" value="1">Refresh check</button>' : ''}
     </form>
     ${!sponsor.optedIn
-    ? '<p class="pkg-meta">The badge is off.</p>'
+    ? '<p class="sponsor-state pkg-meta">The badge is off.</p>'
     : (sponsor.state === 'sponsor'
-      ? `<p class="pkg-meta"><span class="status-pill status-approved">verified</span> `
+      ? `<p class="sponsor-state pkg-meta"><span class="status-pill status-approved">verified</span> `
         + `${sponsorBadge(account.login)} confirmed${sponsor.checkedAt ? ` ${formatWhen(sponsor.checkedAt)}` : ''}.</p>`
       : (sponsor.state === 'not'
-        ? '<p class="pkg-meta"><span class="status-pill status-pending">not listed</span> '
+        ? '<p class="sponsor-state pkg-meta"><span class="status-pill status-pending">not listed</span> '
           + `GitHub reports no public sponsors listing${sponsor.checkedAt ? ` (checked ${formatWhen(sponsor.checkedAt)})` : ''}. `
           + 'Create one at <a href="https://github.com/sponsors" rel="noopener">github.com/sponsors</a>, then refresh.</p>'
         : (!sponsorCheckEnabled
-          ? '<p class="pkg-meta"><span class="status-pill status-muted">unverified</span> '
+          ? '<p class="sponsor-state pkg-meta"><span class="status-pill status-muted">unverified</span> '
             + 'Sponsors checks are not configured on this registry, so the badge stays hidden.</p>'
-          : '<p class="pkg-meta"><span class="status-pill status-muted">unverified</span> '
+          : '<p class="sponsor-state pkg-meta"><span class="status-pill status-muted">unverified</span> '
             + 'No check has landed yet; save or refresh to run one.</p>')))}
   </section>
   <section>

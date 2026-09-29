@@ -1404,9 +1404,13 @@ textarea:focus-visible {
   gap: 5px;
   padding: 2px 10px;
   text-decoration: none;
+  vertical-align: middle;
   white-space: nowrap;
 }
 .sponsor-badge:hover { background: rgba(105, 184, 255, 0.2); }
+
+/* The opt-in state line sits below the badge form with room to breathe. */
+.sponsor-state { margin-top: var(--space-md); }
 
 .profile-link { color: var(--paper); font-weight: 600; text-decoration: none; }
 .profile-link:hover { text-decoration: underline; }
