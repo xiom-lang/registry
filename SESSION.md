@@ -2731,7 +2731,21 @@ now warns when the manifest declares no stage or marks a pre-release version
    production. Migrations 012 (`package_watches`) and 013
    (`download_counts`/`download_markers`) apply on boot; nothing new to
    configure. Production is on 2.5.0 until then, so the header fixes are not
-   visible there yet.
+   visible there yet. **DONE: live 16:38Z; boots 2.6.0, migrations through
+   013, new tables at 0, index sha unchanged, live-check green on both.**
+7. **README staleness ruling (for the packages lane, 2026-09-29): no
+   version-less refresh.** Package pages render the README from the stored
+   immutable artifact (`src/readme.js`: "from the stored artifact, never from
+   a GitHub fetch"), and the page shows the viewed version's README (latest
+   by default). A refresh would either fetch GitHub at render time (SSRF,
+   availability, contradicts artifacts-as-source-of-truth) or rewrite an
+   existing version's bytes (breaks sha256 pins, the ed25519 signature, and
+   the OIDC provenance record) -- both rejected, and an index-level overlay
+   was rejected as display text detached from what users install. Direction
+   for packages: proceed with the chunked `0.1.1` republishes from
+   `packages@da3289f`, latest-version scope, ~50/batch with the
+   `PUBLISH_RATE_MAX` window and staging-first checks; no registry code
+   change needed. The republish hold can lift.
 
 ### 24.4 Paste-ready prompt for the next session
 
