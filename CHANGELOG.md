@@ -6,6 +6,20 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Self-service
+
+- **Grant changes without emailing the maintainers (B4/B5)**: `/account/requests`
+  gains **Your grants** -- approved trusted publishers with *Request a
+  change* (repository, workflow, refs, scopes) and *Request revocation*, and
+  fulfilled tokens with *Request rotation*. Every action files a request
+  (`publisher-edit`, `publisher-revoke`, `token-rotation`) that carries the
+  grant it targets; an admin executes it from the queue in one click:
+  approved edits update the live entry in place (original request id and
+  approval kept, conflicts refused), approved revocations remove it
+  immediately, and rotations end approved for host-side minting. Ownership
+  is checked against the target record, a grant can only have one pending
+  change at a time, and the whole chain is in the requester's history.
+
 ### Publishing
 
 - **Validate before publishing (B3, registry side)**: `POST /validate` runs

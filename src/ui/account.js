@@ -59,14 +59,22 @@ function statusPill(status) {
 
 /** Human summary of what a request asks for (never a secret). */
 function requestTarget(record) {
-  if (record.kind === 'publisher') {
+  if (String(record.kind).startsWith('publisher')) {
     return `${record.repository} / ${record.workflow} @ ${record.refs.join(', ')}`;
   }
   return record.scopes.join(', ');
 }
 
+const REQUEST_KIND_LABELS = {
+  token: 'token',
+  publisher: 'trusted publisher',
+  'publisher-edit': 'publisher change',
+  'publisher-revoke': 'publisher revocation',
+  'token-rotation': 'token rotation',
+};
+
 function kindLabel(record) {
-  return record.kind === 'publisher' ? 'trusted publisher' : 'token';
+  return REQUEST_KIND_LABELS[record.kind] || record.kind;
 }
 
 /** Shared tabs for the account pages; the Admin tab is admin-only. */
@@ -369,6 +377,83 @@ ${role === 'reviewer'
   return layout({ title: `@${account.login}`, body, nav });
 }
 
+/**
+ * "Your grants" (B4/B5): approved/fulfilled publisher entries and fulfilled
+ * token requests, with owner-facing change, revocation, and rotation
+ * requests. Nothing here executes anything: each form files a request an
+ * admin confirms from the queue, and a pending change hides the forms for
+ * its target until it is decided.
+ */
+function grantsBlock(requests, { csrf }) {
+  const pendingTargets = new Set(requests
+    .filter((record) => record.status === 'pending' && record.targetRequestId)
+    .map((record) => record.targetRequestId));
+  const grants = requests
+    .filter((record) => (record.status === 'approved' || record.status === 'fulfilled')
+      && (record.kind === 'publisher' || record.kind === 'token'))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (grants.length === 0) {
+    return '<p class="pkg-meta">Nothing to manage yet: approved trusted publishers and '
+      + 'fulfilled tokens appear here.</p>';
+  }
+  return `<ul class="request-list">
+${grants.map((record) => {
+    const pending = pendingTargets.has(record.id)
+      ? '<span class="status-pill status-pending">change pending</span>'
+      : '';
+    if (record.kind === 'token') {
+      return `  <li class="request-card">
+    <div class="request-head">
+      <span class="pkg-name">token grant</span>
+      <span class="mono request-id">${shortId(record.id)}</span>
+      ${statusPill(record.status)}
+      ${pending}
+    </div>
+    <p class="mono request-target">${escapeHtml(record.scopes.join(', '))}</p>
+    ${pending ? '' : `<form method="post" action="/account/tokens/${encodeURIComponent(record.id)}/rotate" class="inline-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <input name="note" maxlength="500" placeholder="Why rotate? (optional)" autocomplete="off">
+      <button class="button" type="submit">Request rotation</button>
+    </form>`}
+  </li>`;
+    }
+    return `  <li class="request-card">
+    <div class="request-head">
+      <span class="pkg-name">${escapeHtml(record.repository)}</span>
+      <span class="pkg-meta">${escapeHtml(record.workflow)}</span>
+      ${statusPill(record.status)}
+      ${pending}
+    </div>
+    <p class="mono request-target">${escapeHtml(record.refs.join(', '))} &middot; scopes: ${escapeHtml(record.scopes.join(', '))}</p>
+    ${pending ? '' : `<details class="grant-change">
+      <summary>Request a change</summary>
+      <form method="post" action="/account/publishers/${encodeURIComponent(record.id)}/edit">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+        <div class="form-grid">
+          <label class="form-field"><span>Repository (owner/repo)</span>
+            <input name="repository" value="${escapeHtml(record.repository)}" autocomplete="off" required></label>
+          <label class="form-field"><span>Workflow file</span>
+            <input name="workflow" value="${escapeHtml(record.workflow)}" autocomplete="off" required></label>
+          <label class="form-field"><span>Refs</span>
+            <input name="refs" value="${escapeHtml(record.refs.join(', '))}" autocomplete="off" required></label>
+          <label class="form-field"><span>Package names or namespaces</span>
+            <input name="scopes" value="${escapeHtml(record.scopes.join(', '))}" autocomplete="off" required></label>
+          <label class="form-field"><span>Note (optional)</span>
+            <input name="note" maxlength="500" autocomplete="off"></label>
+        </div>
+        <button class="button primary" type="submit">Request change</button>
+      </form>
+    </details>
+    <form method="post" action="/account/publishers/${encodeURIComponent(record.id)}/revoke" class="inline-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <input name="note" maxlength="500" placeholder="Why revoke? (optional)" autocomplete="off">
+      <button class="button" type="submit">Request revocation</button>
+    </form>`}
+  </li>`;
+  }).join('\n')}
+</ul>`;
+}
+
 /** Request form + history. */
 function accountRequestsPage({
   account,
@@ -389,7 +474,9 @@ ${status === 'active'
     ? requestForm({ csrf, defaults: form })
     : '<p class="notice notice-muted">Requests are disabled while this account is suspended.</p>'}
 <h2>My requests <span class="count">${requests.length}</span></h2>
-${requestTable(requests)}`;
+${requestTable(requests)}
+<h2>Your grants</h2>
+${grantsBlock(requests, { csrf })}`;
   return layout({ title: 'Requests', body, nav });
 }
 

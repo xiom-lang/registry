@@ -2046,3 +2046,188 @@ test('the Sponsors badge is opt-in, cached, verified, and removable', async () =
   const cleared = await (await fetch(`${baseUrl}/account/plain-user`, { headers: API })).json();
   assert.equal(cleared.sponsor, false);
 });
+
+// --- B4/B5: owner-facing grant changes ---------------------------------------
+
+test('owners request changes and revocations of their own grants', async () => {
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+
+  // A publisher grant to manage: request it, have the admin approve it.
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: userCsrf,
+      kind: 'publisher',
+      scopes: 'grant-demo',
+      repository: 'alice/grant-demo',
+      workflow: 'publish-registry.yml',
+      refs: 'refs/heads/main',
+    }),
+  });
+  assert.equal(response.status, 303);
+  const grantId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/account');
+  const adminCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, `/admin/requests/${grantId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+
+  // The owner sees the grant with the change/revoke actions.
+  response = await requestAs(user, '/account/requests');
+  let html = await response.text();
+  assert.match(html, /Your grants/);
+  assert.match(html, /alice\/grant-demo/);
+  assert.match(html, /Request a change/);
+  assert.match(html, /Request revocation/);
+
+  // Another account cannot touch it, and no request is filed.
+  const other = cookieJar();
+  await login(other, 'plain-code'); // 888
+  response = await requestAs(other, '/account/requests');
+  const otherCsrf = csrfFrom(await response.text());
+  response = await requestAs(other, `/account/publishers/${grantId}/edit`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: otherCsrf, repository: 'evil/grant', workflow: 'x.yml',
+      refs: 'refs/heads/main', scopes: 'grant-demo',
+    }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/requests');
+  assert.equal(
+    app.locals.registry.requests.list({ requesterId: '888' })
+      .filter((record) => record.kind === 'publisher-edit').length,
+    0,
+  );
+
+  // The owner files a change.
+  response = await requestAs(user, `/account/publishers/${grantId}/edit`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: userCsrf,
+      repository: 'alice/grant-demo',
+      workflow: 'release.yml',
+      refs: 'refs/tags/v*',
+      scopes: 'grant-demo, grant-extra',
+      note: 'moving to tags',
+    }),
+  });
+  assert.equal(response.status, 303);
+  const editId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  // A second pending change for the same grant is refused and explained.
+  response = await requestAs(user, `/account/publishers/${grantId}/edit`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: userCsrf, repository: 'alice/grant-demo', workflow: 'other.yml',
+      refs: 'refs/heads/main', scopes: 'grant-demo',
+    }),
+  });
+  assert.equal(response.status, 303);
+  html = await (await requestAs(user, '/account/requests')).text();
+  assert.match(html, /already have a pending change/);
+  assert.match(html, /change pending/);
+  assert.doesNotMatch(html, new RegExp(`href="/account/publishers/${grantId}/revoke"`));
+
+  // The admin queue labels the new kind and executing it updates the live
+  // entry in place, keeping the original request id and approval.
+  response = await requestAs(admin, '/admin/requests');
+  assert.match(await response.text(), /publisher change/);
+  response = await requestAs(admin, `/admin/requests/${editId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+  const { config } = app.locals.registry;
+  const entry = config.publishers.find((candidate) => candidate.requestId === grantId);
+  assert.equal(entry.workflow, 'release.yml');
+  assert.deepEqual(entry.refs, ['refs/tags/v*']);
+  assert.deepEqual(entry.scopes, ['grant-demo', 'grant-extra']);
+  assert.equal(entry.refMatchers[0].test('refs/tags/v1.0.0'), true);
+  assert.equal(entry.refMatchers[0].test('refs/heads/main'), false);
+  assert.equal(app.locals.registry.requests.get(editId).status, 'fulfilled');
+  assert.equal(app.locals.registry.requests.get(editId).targetRequestId, grantId);
+
+  // The owner files a revocation; the admin executes it and both records
+  // carry the audit trail.
+  response = await requestAs(user, `/account/publishers/${grantId}/revoke`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, note: 'repo archived' }),
+  });
+  assert.equal(response.status, 303);
+  const revokeId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  response = await requestAs(admin, `/admin/requests/${revokeId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(config.publishers.find((candidate) => candidate.requestId === grantId), undefined);
+  const original = app.locals.registry.requests.get(grantId);
+  assert.equal(original.history.at(-1).action, 'revoked');
+  assert.match(original.history.at(-1).note, new RegExp(revokeId));
+  const notices = app.locals.registry.notifications.listFor('777');
+  assert.equal(notices[0].kind, 'publisher-revoked');
+  assert.equal(notices[0].subject, 'Trusted publisher revoked');
+});
+
+test('fulfilled token grants can request rotation', async () => {
+  const user = cookieJar();
+  await login(user, 'user-code');
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'rotate-demo' }),
+  });
+  assert.equal(response.status, 303);
+  const tokenId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/account');
+  const adminCsrf = csrfFrom(await response.text());
+  await requestAs(admin, `/admin/requests/${tokenId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  await requestAs(admin, `/admin/requests/${tokenId}/fulfil`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, reference: 'minted rotate-demo token' }),
+  });
+
+  // Unknown or foreign ids never file anything.
+  response = await requestAs(user, '/account/tokens/req_aaaaaaaaaaaa/rotate', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/requests');
+
+  response = await requestAs(user, `/account/tokens/${tokenId}/rotate`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, note: 'laptop lost' }),
+  });
+  assert.equal(response.status, 303);
+  const rotationId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  const rotation = app.locals.registry.requests.get(rotationId);
+  assert.equal(rotation.kind, 'token-rotation');
+  assert.deepEqual(rotation.scopes, ['rotate-demo']);
+  assert.equal(rotation.targetRequestId, tokenId);
+
+  // Admin approval; minting stays host-side, so it ends approved.
+  await requestAs(admin, `/admin/requests/${rotationId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(app.locals.registry.requests.get(rotationId).status, 'approved');
+  const notices = app.locals.registry.notifications.listFor('777');
+  assert.equal(notices[0].subject, 'Token rotation approved');
+});

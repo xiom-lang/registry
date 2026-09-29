@@ -27,7 +27,17 @@ const MAX_REQUESTS_BYTES = 4 * 1024 * 1024;
 const MAX_SCOPES = 8;
 const MAX_NOTE = 500;
 const MAX_PENDING_PER_REQUESTER = 20;
-const REQUEST_KINDS = new Set(['token', 'publisher']);
+const REQUEST_KINDS = new Set([
+  'token',
+  'publisher',
+  // B4/B5 (SESSION.md 21): owner-facing changes to something already
+  // granted. They carry `targetRequestId` -- the approved/fulfilled request
+  // they want changed -- and are executed by an admin, never by the owner.
+  'publisher-edit',
+  'publisher-revoke',
+  'token-rotation',
+]);
+const TARGET_KINDS = new Set(['publisher-edit', 'publisher-revoke', 'token-rotation']);
 const REQUEST_STATUSES = new Set(['pending', 'approved', 'denied', 'fulfilled']);
 
 function clean(value, maxLength) {
@@ -221,12 +231,23 @@ class RequestStore {
   create(input) {
     const kind = String(input.kind || '');
     if (!REQUEST_KINDS.has(kind)) {
-      throw new BadRequestError('request kind must be "token" or "publisher"', 'invalid_kind');
+      throw new BadRequestError(
+        'request kind must be "token", "publisher", "publisher-edit", '
+        + '"publisher-revoke", or "token-rotation"',
+        'invalid_kind',
+      );
     }
     const requester = normalizeRequester(input.requester);
     const scopes = parseScopeList(input.scopes);
     const note = clean(input.note, MAX_NOTE);
-    const details = kind === 'token'
+    const targetRequestId = clean(input.targetRequestId, 32);
+    if (TARGET_KINDS.has(kind) && !/^req_[0-9a-f]{12}$/.test(targetRequestId)) {
+      throw new BadRequestError(
+        'this request must target an existing request id',
+        'invalid_target',
+      );
+    }
+    const details = kind === 'token' || kind === 'token-rotation'
       ? { scopes }
       : normalizePublisherRequest({ ...input, scopes });
 
@@ -238,6 +259,16 @@ class RequestStore {
         'request_limit',
       );
     }
+    if (TARGET_KINDS.has(kind)) {
+      const duplicate = pending.find((entry) => entry.targetRequestId === targetRequestId);
+      if (duplicate) {
+        throw new ConflictError(
+          `you already have a pending change for ${targetRequestId} (${duplicate.id}); `
+          + 'wait for a decision',
+          'duplicate_pending_change',
+        );
+      }
+    }
 
     const now = new Date().toISOString();
     const id = this.#newId();
@@ -247,6 +278,7 @@ class RequestStore {
       status: 'pending',
       requester,
       ...details,
+      ...(TARGET_KINDS.has(kind) ? { targetRequestId } : {}),
       ...(note ? { note } : {}),
       createdAt: now,
       history: [{ at: now, actor: requester.login, action: 'created' }],
@@ -415,7 +447,7 @@ function normalizeRecord(id, entry) {
         }))
       : [],
   };
-  if (entry.kind === 'publisher') {
+  if (entry.kind.startsWith('publisher')) {
     const repository = clean(entry.repository, 200);
     const workflow = clean(entry.workflow, 200);
     const refs = Array.isArray(entry.refs) ? entry.refs.map((ref) => clean(ref, 200)).filter(Boolean) : [];
@@ -423,6 +455,9 @@ function normalizeRecord(id, entry) {
     record.repository = repository;
     record.workflow = workflow;
     record.refs = refs;
+  }
+  if (/^req_[0-9a-f]{12}$/.test(String(entry.targetRequestId || ''))) {
+    record.targetRequestId = String(entry.targetRequestId);
   }
   if (clean(entry.note, MAX_NOTE)) record.note = clean(entry.note, MAX_NOTE);
   for (const field of ['decidedAt', 'decidedBy', 'fulfilledAt', 'fulfilledBy', 'mintReference']) {

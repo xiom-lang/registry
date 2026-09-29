@@ -218,6 +218,52 @@ class PublisherStore {
     return entry;
   }
 
+  /**
+   * Apply an approved edit (B4) to the live entry for a request: the new
+   * repository / workflow / refs / scopes replace the old ones while the
+   * original approval provenance stays. The edit audit lives in the request
+   * queue (the edit request's own history), so nothing extra is persisted.
+   *
+   * @returns {object} the updated entry
+   */
+  update(requestId, { repository, workflow, refs, scopes }) {
+    const entry = this.find(requestId);
+    if (!entry) {
+      throw new NotFoundError(
+        `no live publisher entry for request ${requestId}`,
+        'publisher_not_found',
+      );
+    }
+    const [normalized] = normalizePublishers([{
+      label: entry.label,
+      repository,
+      workflow,
+      refs,
+      scopes,
+      // Community entries are never first-party; only the operator file is.
+      firstParty: false,
+    }], 'publisher edit');
+    const clash = this.entries.find((item) => item.requestId !== requestId
+      && item.repository === normalized.repository
+      && item.workflow === normalized.workflow);
+    if (clash) {
+      throw new ConflictError(
+        `"${normalized.repository}" + "${normalized.workflow}" is already configured `
+        + `(${clash.label}); revoke it first`,
+        'publisher_conflict',
+      );
+    }
+    const updated = {
+      ...normalized,
+      requestId: entry.requestId,
+      approvedBy: entry.approvedBy,
+      approvedAt: entry.approvedAt,
+    };
+    this.entries = this.entries.map((item) => (item.requestId === requestId ? updated : item));
+    this.#persist();
+    return updated;
+  }
+
   /** Deactivate the entry created for a request. */
   remove(requestId) {
     const entry = this.find(requestId);

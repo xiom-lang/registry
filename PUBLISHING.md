@@ -183,6 +183,15 @@ ref and keep the version bump + tag in the same push. The OIDC claims include
 the ref, so a workflow run from an unapproved ref is refused with
 `publisher_not_mapped`.
 
+**Changing or revoking a trusted publisher.** Open **Requests**
+(`/account/requests`) and find **Your grants**. Each approved trusted
+publisher has **Request a change** (repository, workflow, refs, scopes) and
+**Request revocation**; each fulfilled token has **Request rotation**.
+Nothing changes until a maintainer approves the request from the queue, and
+the request history records who asked and who executed it. Revocation takes
+effect on approval: the entry stops matching and the next publish from that
+repo/workflow/ref is refused with `publisher_not_mapped`.
+
 ---
 
 ## 3. The manual token lane

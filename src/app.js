@@ -1881,6 +1881,136 @@ function createApp(config = loadConfig()) {
     },
   );
 
+  // B4/B5: owner-facing changes to something already granted. The owner
+  // asks; an admin executes from the queue, so these routes create requests
+  // only. Ownership is checked against the target request -- never trusted
+  // from the URL -- and the store refuses a target that already has a
+  // pending change.
+  function ownGrant(req, requestId, kind, statuses = ['approved', 'fulfilled']) {
+    const account = accountOf(req);
+    let record = null;
+    try {
+      record = requests.get(String(requestId));
+    } catch {
+      return null;
+    }
+    if (!record || record.kind !== kind) return null;
+    if (record.requester.githubId !== account.githubId) return null;
+    if (!statuses.includes(record.status)) return null;
+    return record;
+  }
+
+  function changeTargetOrRedirect(req, res, kind, statuses) {
+    const target = ownGrant(req, req.params.id, kind, statuses);
+    if (!target) {
+      req.session.flash = {
+        error: 'No grant of yours matches that request id, or it is not in a changeable state.',
+      };
+      res.redirect(303, '/account/requests');
+      return null;
+    }
+    return target;
+  }
+
+  app.post(
+    '/account/publishers/:id/edit',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '64kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const target = changeTargetOrRedirect(req, res, 'publisher');
+      if (!target) return;
+      try {
+        const account = accountOf(req);
+        const created = requests.create({
+          kind: 'publisher-edit',
+          requester: { githubId: account.githubId, login: account.login },
+          targetRequestId: target.id,
+          repository: String(req.body.repository || ''),
+          workflow: String(req.body.workflow || ''),
+          refs: String(req.body.refs || ''),
+          scopes: String(req.body.scopes || ''),
+          note: String(req.body.note || ''),
+        });
+        return res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/account/requests');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/account/publishers/:id/revoke',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const target = changeTargetOrRedirect(req, res, 'publisher');
+      if (!target) return;
+      try {
+        const account = accountOf(req);
+        const created = requests.create({
+          kind: 'publisher-revoke',
+          requester: { githubId: account.githubId, login: account.login },
+          targetRequestId: target.id,
+          // Copied from the grant so the queue row shows exactly what goes.
+          repository: target.repository,
+          workflow: target.workflow,
+          refs: target.refs,
+          scopes: target.scopes,
+          note: String(req.body.note || ''),
+        });
+        return res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/account/requests');
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/account/tokens/:id/rotate',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      // Rotation only makes sense once a token exists (fulfilled), not for a
+      // still-pending approval.
+      const target = changeTargetOrRedirect(req, res, 'token', ['fulfilled']);
+      if (!target) return;
+      try {
+        const account = accountOf(req);
+        const created = requests.create({
+          kind: 'token-rotation',
+          requester: { githubId: account.githubId, login: account.login },
+          targetRequestId: target.id,
+          scopes: target.scopes,
+          note: String(req.body.note || ''),
+        });
+        return res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, '/account/requests');
+        }
+        return next(err);
+      }
+    },
+  );
+
   app.post(
     '/logout',
     writeLimit,
@@ -2305,7 +2435,51 @@ function createApp(config = loadConfig()) {
         const note = String(req.body.note || '');
         const request = requests.get(req.params.id);
         let updated;
-        if (request.kind === 'publisher' && action === 'approve') {
+        if (request.kind === 'publisher-revoke' && action === 'approve') {
+          // B4: execute the owner's revocation request against the live entry
+          // it targets, then close both records with the audit trail.
+          const target = requests.get(request.targetRequestId);
+          publisherStore.remove(target.id);
+          config.publishers = config.publishers.filter((entry) => entry.requestId !== target.id);
+          requests.revoke(target.id, { actor, note: `revoked via request ${request.id}` });
+          requests.decide(request.id, { action, actor, note });
+          updated = requests.fulfil(request.id, {
+            actor,
+            reference: `trusted publisher revoked (${target.repository} / ${target.workflow})`,
+          });
+          notifyRequester(
+            request,
+            'publisher-revoked',
+            'Trusted publisher revoked',
+            `${target.repository} / ${target.workflow} is no longer accepted.`,
+          );
+          console.log(`Trusted publisher ${target.repository} / ${target.workflow} revoked via ${request.id} by ${actor}`);
+        } else if (request.kind === 'publisher-edit' && action === 'approve') {
+          // B4: apply the approved change to the live entry and to the running
+          // config. PublisherStore.update keeps the original approval and
+          // refuses a clash with another entry.
+          const target = requests.get(request.targetRequestId);
+          const entry = publisherStore.update(target.id, {
+            repository: request.repository,
+            workflow: request.workflow,
+            refs: request.refs,
+            scopes: request.scopes,
+          });
+          config.publishers = config.publishers
+            .map((existing) => (existing.requestId === target.id ? entry : existing));
+          requests.decide(request.id, { action, actor, note });
+          updated = requests.fulfil(request.id, {
+            actor,
+            reference: `trusted publisher updated (${entry.repository} / ${entry.workflow})`,
+          });
+          notifyRequester(
+            request,
+            'publisher-approved',
+            'Trusted publisher updated',
+            `${entry.repository} / ${entry.workflow} is live with the new settings.`,
+          );
+          console.log(`Trusted publisher entry for ${target.id} updated via ${request.id} by ${actor}`);
+        } else if (request.kind === 'publisher' && action === 'approve') {
           // Approving a trusted publisher *is* the host action: activate the
           // entry now and auto-fulfil, so the admin's job is one click.
           const entry = publisherStore.add({
@@ -2335,8 +2509,10 @@ function createApp(config = loadConfig()) {
             notifyRequester(
               request,
               'request-approved',
-              'Token request approved',
-              'The maintainers will mint your token on the host and deliver it privately.',
+              request.kind === 'token-rotation' ? 'Token rotation approved' : 'Token request approved',
+              request.kind === 'token-rotation'
+                ? 'The maintainers will mint the replacement token on the host and deliver it privately.'
+                : 'The maintainers will mint your token on the host and deliver it privately.',
             );
           } else if (action === 'deny') {
             notifyRequester(

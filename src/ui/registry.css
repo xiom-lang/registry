@@ -1471,3 +1471,10 @@ textarea:focus-visible {
   .activity-detail { flex-basis: 100%; order: 2; }
   .activity-when { margin-left: 0; order: 3; }
 }
+
+/* ---------- Grant changes (B4/B5) ---------- */
+
+.grant-change { margin: var(--space-sm) 0; }
+.grant-change summary { color: var(--signal); cursor: pointer; }
+.grant-change[open] summary { color: var(--paper); margin-bottom: var(--space-sm); }
+.request-card .inline-form { margin-top: var(--space-sm); }

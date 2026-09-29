@@ -126,3 +126,58 @@ test('entries import from publishers.json into SQLite and then live there', () =
     db.close();
   }
 });
+
+// ─── B4: approved edits (SESSION.md 21) ───────────────────────────────────
+
+test('update applies an approved edit and keeps the approval provenance', () => {
+  const publishers = store();
+  publishers.add(APPROVAL);
+  const updated = publishers.update(APPROVAL.requestId, {
+    repository: 'alice/demo',
+    workflow: 'release.yml',
+    refs: ['refs/tags/v*'],
+    scopes: ['demo'],
+  });
+  assert.equal(updated.workflow, 'release.yml');
+  assert.deepEqual(updated.refs, ['refs/tags/v*']);
+  assert.equal(updated.requestId, APPROVAL.requestId);
+  assert.equal(updated.approvedBy, 'root', 'the original approval stays on the record');
+  assert.equal(updated.refMatchers[0].test('refs/tags/v1.2.3'), true);
+  assert.equal(updated.refMatchers[0].test('refs/heads/main'), false, 'the old ref no longer matches');
+  assert.equal(updated.firstParty, false);
+
+  const reloaded = new PublisherStore({ path: publishers.path });
+  assert.equal(reloaded.list()[0].workflow, 'release.yml');
+  assert.equal(reloaded.list()[0].refMatchers[0].test('refs/tags/v9.9.9'), true);
+});
+
+test('update refuses unknown requests, clashes, and malformed input', () => {
+  const publishers = store();
+  publishers.add(APPROVAL);
+  publishers.add({
+    requestId: 'req_bbbbbbbbbbbb',
+    repository: 'bob/demo',
+    workflow: 'release.yml',
+    refs: ['refs/heads/main'],
+    scopes: ['demo'],
+    approvedBy: 'root',
+  });
+  assert.throws(
+    () => publishers.update(APPROVAL.requestId, {
+      repository: 'bob/demo', workflow: 'release.yml', refs: ['refs/heads/main'], scopes: ['demo'],
+    }),
+    (err) => err.code === 'publisher_conflict',
+  );
+  assert.throws(
+    () => publishers.update('req_cccccccccccc', {
+      repository: 'alice/demo', workflow: 'x.yml', refs: ['refs/heads/main'], scopes: ['demo'],
+    }),
+    (err) => err.code === 'publisher_not_found',
+  );
+  assert.throws(
+    () => publishers.update(APPROVAL.requestId, {
+      repository: 'not a repo', workflow: 'x.yml', refs: ['refs/heads/main'], scopes: ['demo'],
+    }),
+  );
+  assert.equal(publishers.list().length, 2, 'a refused edit changes nothing');
+});

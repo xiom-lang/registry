@@ -220,3 +220,81 @@ test('requests import from requests.json into SQLite and then live there', () =>
     db.close();
   }
 });
+
+// --- B4/B5: owner-facing change requests (SESSION.md 21) ------------------
+
+test('change requests require a valid target and refuse duplicate pendings', () => {
+  const requests = store();
+  const base = requests.create({
+    kind: 'publisher',
+    requester: REQUESTER,
+    scopes: 'pkg-a',
+    repository: 'alice/pkg-a',
+    workflow: 'publish-registry.yml',
+    refs: 'refs/heads/main',
+  });
+
+  assert.throws(
+    () => requests.create({
+      kind: 'publisher-edit',
+      requester: REQUESTER,
+      scopes: 'pkg-a',
+      targetRequestId: 'nope',
+      repository: 'alice/pkg-a',
+      workflow: 'release.yml',
+      refs: 'refs/tags/v*',
+    }),
+    (err) => err.code === 'invalid_target',
+  );
+  assert.throws(
+    () => requests.create({ kind: 'token-rotation', requester: REQUESTER, scopes: 'pkg-a' }),
+    (err) => err.code === 'invalid_target',
+  );
+  assert.throws(
+    () => requests.create({ kind: 'publisher-delete', requester: REQUESTER, scopes: 'pkg-a' }),
+    (err) => err.code === 'invalid_kind',
+  );
+
+  const edit = requests.create({
+    kind: 'publisher-edit',
+    requester: REQUESTER,
+    scopes: 'pkg-a, pkg-extra',
+    targetRequestId: base.id,
+    repository: 'alice/pkg-a',
+    workflow: 'release.yml',
+    refs: 'refs/tags/v*',
+    note: 'moving to tags',
+  });
+  assert.equal(edit.targetRequestId, base.id);
+  assert.deepEqual(edit.scopes, ['pkg-a', 'pkg-extra']);
+
+  // A second pending change for the same grant is refused.
+  assert.throws(
+    () => requests.create({
+      kind: 'publisher-revoke',
+      requester: REQUESTER,
+      scopes: 'pkg-a',
+      targetRequestId: base.id,
+      repository: 'alice/pkg-a',
+      workflow: 'publish-registry.yml',
+      refs: 'refs/heads/main',
+    }),
+    (err) => err.code === 'duplicate_pending_change',
+  );
+
+  // Rotation targets a token grant and carries its scopes.
+  const tokenBase = requests.create({ kind: 'token', requester: REQUESTER, scopes: 'pkg-b' });
+  const rotation = requests.create({
+    kind: 'token-rotation',
+    requester: REQUESTER,
+    scopes: 'pkg-b',
+    targetRequestId: tokenBase.id,
+  });
+  assert.equal(rotation.targetRequestId, tokenBase.id);
+
+  // A fresh store keeps the new fields (normalizeRecord round-trip).
+  const reloaded = new RequestStore({ path: requests.path });
+  assert.equal(reloaded.get(edit.id).targetRequestId, base.id);
+  assert.equal(reloaded.get(rotation.id).kind, 'token-rotation');
+  assert.equal(reloaded.get(rotation.id).targetRequestId, tokenBase.id);
+});
