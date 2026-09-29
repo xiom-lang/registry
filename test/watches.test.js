@@ -91,21 +91,23 @@ test('packageActivity merges releases, reviews, replies, decisions, and claims',
     };
 
     const events = packageActivity({ name: 'demo-pkg', pkg, reviews, ownership });
-    // Pending claims and foreign packages stay out; newest first (the rating,
-    // reply, and decision happened "now", the claim and releases carry
-    // explicit dates).
-    assert.deepEqual(
-      events.map((event) => event.type),
-      ['decision', 'reply', 'review', 'claim', 'release', 'release'],
-    );
-    assert.equal(events[0].action, 'flag');
-    assert.equal(events[0].actor, 'carol');
-    assert.equal(events[1].body, 'thanks');
-    assert.equal(events[2].stars, 4);
-    assert.equal(events[3].login, 'maint');
-    assert.equal(events[4].version, '1.0.0');
-    assert.equal(events[4].repository, 'owner/demo');
-    assert.equal(events[5].yanked, true);
+    // Pending claims and foreign packages stay out. The review, reply, and
+    // decision happen "now": their relative order within one millisecond is
+    // not a contract, so compare them as a set. Everything else is ordered by
+    // its explicit date (the claim, then the two releases).
+    const types = events.map((event) => event.type);
+    assert.deepEqual([...types.slice(0, 3)].sort(), ['decision', 'reply', 'review']);
+    assert.deepEqual(types.slice(3), ['claim', 'release', 'release']);
+    const byType = Object.fromEntries(events.map((event) => [event.type, event]));
+    assert.equal(byType.decision.action, 'flag');
+    assert.equal(byType.decision.actor, 'carol');
+    assert.equal(byType.reply.body, 'thanks');
+    assert.equal(byType.review.stars, 4);
+    assert.equal(byType.claim.login, 'maint');
+    const releases = events.filter((event) => event.type === 'release');
+    assert.deepEqual(releases.map((event) => event.version), ['1.0.0', '0.9.0']);
+    assert.equal(releases[0].repository, 'owner/demo');
+    assert.equal(releases[1].yanked, true);
 
     // The per-package cap keeps the newest events.
     assert.equal(packageActivity({ name: 'demo-pkg', pkg, reviews, ownership, limit: 2 }).length, 2);
@@ -131,9 +133,15 @@ test('watchedFeed merges watched packages and skips unknown names', () => {
       reviews,
       ownership: { listClaims: () => [] },
     });
+    // Both reviews happen "now" (order within a millisecond is not a
+    // contract); the releases order by their explicit dates, newest first.
     assert.deepEqual(
-      entries.map((event) => `${event.package}:${event.type}`),
-      ['beta-pkg:review', 'alpha-pkg:review', 'beta-pkg:release', 'alpha-pkg:release'],
+      entries.map((entry) => `${entry.package}:${entry.type}`).sort(),
+      ['alpha-pkg:release', 'alpha-pkg:review', 'beta-pkg:release', 'beta-pkg:review'],
+    );
+    assert.deepEqual(
+      entries.filter((entry) => entry.type === 'release').map((entry) => entry.package),
+      ['beta-pkg', 'alpha-pkg'],
     );
     assert.equal(watchedFeed({
       packages: ['alpha-pkg'], index, reviews, ownership: { listClaims: () => [] }, limit: 1,
