@@ -239,6 +239,18 @@ xiom pkg publish --tarball dist/my-lib-0.1.0.tar.gz   # upload exact bytes
 xiom pkg publish --compiler v0.61.3                   # record the toolchain tag
 ```
 
+### Build provenance
+
+If your workflow generates GitHub build provenance with
+`actions/attest-build-provenance`, you do not need to send anything extra:
+after a trusted-publisher publish the registry asks GitHub for an
+attestation on the exact tarball digest and links it on the package page as
+*build attestation* when one exists. API publishers may also send an
+optional `attestation` form field with a canonical
+`https://github.com/<owner>/<repo>/attestations/<id>` URL; any other value
+is rejected. The link is display metadata: it never changes the artifact,
+its digest, or its signature.
+
 ### Token hygiene
 
 - One token per purpose; ask for the smallest scope that works.

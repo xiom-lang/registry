@@ -6,6 +6,20 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Provenance
+
+- **Build attestation links (C2)**: a version published through a trusted
+  publisher can carry its GitHub build-attestation URL next to the OIDC
+  provenance (`publisher.attestation` in `/index.json`, optional and
+  additive; artifacts, digests, and signatures are untouched). The publisher
+  may supply it at publish time -- canonical
+  `https://github.com/<owner>/<repo>/attestations/<id>` URLs only -- or the
+  registry asks GitHub's public attestations API by subject digest right
+  after a provenance publish, best-effort. Package pages render it as
+  *build attestation*. Discovery never blocks or fails a publish, needs no
+  token for public repositories, and reuses `GITHUB_ATTESTATIONS_TOKEN`
+  (falling back to the Sponsors token) only to raise rate limits.
+
 ## [2.6.0] - 2026-09-29
 
 ### Fixed

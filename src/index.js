@@ -210,6 +210,37 @@ class IndexStore {
     return updated;
   }
 
+  /**
+   * Attach a GitHub build-attestation URL to an existing version's publisher
+   * provenance (C2). Additive display metadata: the artifact, digest, and
+   * signature are untouched, and a version published with a static token has
+   * no publisher object to attach to (returns null).
+   *
+   * @returns {object|null} the updated version entry, or null when skipped.
+   */
+  setAttestation(name, version, url) {
+    const pkg = this.requirePackage(name);
+    const existing = pkg.versions[version];
+    if (!existing) {
+      throw new NotFoundError(
+        `version "${version}" of "${name}" not found`,
+        'version_not_found',
+      );
+    }
+    if (!existing.publisher || typeof existing.publisher.repository !== 'string') return null;
+    const updated = {
+      ...existing,
+      publisher: { ...existing.publisher, attestation: String(url) },
+    };
+    this.#commit({
+      packages: {
+        ...this.index.packages,
+        [name]: { ...pkg, versions: { ...pkg.versions, [version]: updated } },
+      },
+    });
+    return updated;
+  }
+
   /** Remove a package entirely (admin/tests only; not exposed as HTTP). */
   removePackage(name) {
     if (!this.index.packages[name]) {

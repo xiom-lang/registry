@@ -21,6 +21,7 @@ const {
 const { fingerprint, layout } = require('./layout');
 const { isFirstPartyNamespace } = require('../names');
 const { categoryCounts, STAGES } = require('../categories');
+const { isAttestationUrl } = require('../attestations');
 const { renderMarkdown } = require('./markdown');
 const { reportForm, decisionPill, reviewHistory, decisionControls, ratingsSection } = require('./review');
 const { profileLink } = require('./profile');
@@ -840,8 +841,14 @@ function publisherCell(publisher) {
   const run = publisher.runUrl
     ? ` <a href="${escapeHtml(publisher.runUrl)}" rel="noopener">run</a>`
     : '';
+  // C2: the build-provenance attestation link, when the publisher supplied
+  // one or the registry found one by subject digest. Validated again at
+  // render time: stored data must never become an arbitrary link.
+  const attestation = isAttestationUrl(publisher.attestation)
+    ? ` &middot; <a href="${escapeHtml(publisher.attestation.trim())}" rel="noopener">build attestation</a>`
+    : '';
   return `<div class="detail"><dt>Published by</dt><dd>${escapeHtml(publisher.repository)}`
-    + `${workflow}${ref}${run}</dd></div>`;
+    + `${workflow}${ref}${run}${attestation}</dd></div>`;
 }
 
 /** Package detail: metadata, install command, trust instructions, versions. */

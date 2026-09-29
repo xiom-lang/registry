@@ -260,6 +260,13 @@ function loadConfig() {
       token: process.env.GITHUB_SPONSORS_TOKEN || '',
       apiUrl: process.env.GITHUB_SPONSORS_API_URL || 'https://api.github.com/graphql',
     },
+    // C2: build-attestation discovery. Optional token (public read) raises
+    // GitHub API rate limits; the sponsors token doubles for it. apiUrl is
+    // overridable so tests can point at a local stub.
+    attestations: {
+      token: process.env.GITHUB_ATTESTATIONS_TOKEN || process.env.GITHUB_SPONSORS_TOKEN || '',
+      apiUrl: process.env.GITHUB_ATTESTATIONS_API_URL || 'https://api.github.com',
+    },
     // Path used by the hot-reload watcher (empty when API_KEY is the source).
     tokensFile: process.env.TOKENS_FILE || '',
     // Shared secret for the internal fulfilment API (empty = API disabled).

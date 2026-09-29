@@ -85,6 +85,7 @@ const {
 const { profilePage, contributorsPage } = require('./ui/profile');
 const { WatchStore } = require('./watches');
 const { DownloadStats } = require('./stats');
+const { isAttestationUrl, discoverAttestation } = require('./attestations');
 const { packageActivity, watchedFeed } = require('./activity');
 const {
   loginPage,
@@ -2879,9 +2880,29 @@ function createApp(config = loadConfig()) {
 
   // ─── Publish ──────────────────────────────────────────────────────────────
 
-  app.post('/publish', writeLimit, authenticated, handleUpload, (req, res, next) => {
+  app.post('/publish', writeLimit, authenticated, handleUpload, async (req, res, next) => {
     try {
       const result = publish(req, { config, indexStore, artifacts, token: req.token });
+      // C2: no publisher-supplied attestation? Ask GitHub by subject digest,
+      // best-effort. A miss, a timeout, or a missing token never affects the
+      // publish; a hit is stored next to the provenance and rendered.
+      let attestation = result.attestation;
+      if (!attestation && result.publisher && config.attestations) {
+        attestation = await discoverAttestation({
+          repository: result.publisher.repository,
+          sha256: result.sha256,
+          token: config.attestations.token,
+          apiUrl: config.attestations.apiUrl,
+        });
+        if (attestation) {
+          try {
+            indexStore.setAttestation(result.name, result.version, attestation);
+          } catch (err) {
+            console.warn(`attestation for ${result.name}@${result.version} not stored: ${err.message}`);
+            attestation = '';
+          }
+        }
+      }
       notifyWatchersOfRelease(result);
       res.status(201).json({
         ok: true,
@@ -2891,6 +2912,7 @@ function createApp(config = loadConfig()) {
         signature: result.signature || undefined,
         publicKey: result.publicKey || undefined,
         ...(result.publisher ? { publisher: result.publisher } : {}),
+        ...(attestation ? { attestation } : {}),
         ...(result.warnings && result.warnings.length > 0 ? { warnings: result.warnings } : {}),
         message: `Successfully published ${result.name}@${result.version}`,
       });
@@ -3194,6 +3216,27 @@ function publish(req, { config, indexStore, artifacts, token }) {
   // OIDC provenance: repository/workflow/ref/run recorded per version. Static
   // tokens have no publisher and stay unchanged.
   if (token.publisher) metadata.publisher = token.publisher;
+  // C2: a publisher may hand us the GitHub attestation URL for the tarball.
+  // Validate hard -- this lands in /index.json and is rendered as a link --
+  // and only attach it when there is provenance to attach it to.
+  const suppliedAttestation = typeof req.body?.attestation === 'string'
+    ? req.body.attestation.trim()
+    : '';
+  if (suppliedAttestation) {
+    if (!token.publisher) {
+      throw new BadRequestError(
+        'attestation requires OIDC provenance; publish with a trusted publisher instead',
+        'attestation_without_provenance',
+      );
+    }
+    if (!isAttestationUrl(suppliedAttestation)) {
+      throw new BadRequestError(
+        'attestation must be a https://github.com/<owner>/<repo>/attestations/<id> URL',
+        'bad_attestation',
+      );
+    }
+    metadata.publisher = { ...metadata.publisher, attestation: suppliedAttestation };
+  }
   const warnings = packageMeta.unknownCategories.map(
     (category) => `unknown category "${category}" ignored; valid categories: ${CATEGORIES.join(', ')}`,
   );
@@ -3248,7 +3291,16 @@ function publish(req, { config, indexStore, artifacts, token }) {
     + `sha256:${sha256.slice(0, 12)}..., by ${token.label}`
     + `${token.publisher ? ` via ${token.publisher.repository}` : ''})`,
   );
-  return { name, version, sha256, signature, publicKey, warnings, publisher: token.publisher };
+  return {
+    name,
+    version,
+    sha256,
+    signature,
+    publicKey,
+    warnings,
+    publisher: token.publisher,
+    attestation: metadata.publisher ? metadata.publisher.attestation || '' : '',
+  };
 }
 
 module.exports = { createApp, publish, computeLatest };

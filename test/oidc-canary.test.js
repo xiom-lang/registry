@@ -72,9 +72,16 @@ function runCanary(env) {
 test('canary script publishes and verifies provenance; unmapped tokens fail', async () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'xiom-canary-test-'));
   const keypair = makeRsaKeypair();
+  // One stub serves the JWKS and the C2 attestations API; the recorded digest
+  // proves the registry asked about the artifact it just accepted.
+  const attestationCalls = [];
   const jwksServer = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ keys: [keypair.jwk] }));
+    if (req.url.startsWith('/repos/')) {
+      attestationCalls.push({ url: req.url, authorization: req.headers.authorization || '' });
+      return res.end(JSON.stringify({ attestations: [{ id: 424242 }] }));
+    }
+    return res.end(JSON.stringify({ keys: [keypair.jwk] }));
   });
   await new Promise((resolve) => jwksServer.listen(0, '127.0.0.1', resolve));
 
@@ -100,6 +107,9 @@ test('canary script publishes and verifies provenance; unmapped tokens fail', as
     TOKENS_FILE: path.join(sandbox, 'tokens.json'),
     TRUSTED_PUBLISHERS_FILE: path.join(sandbox, 'trusted-publishers.json'),
     OIDC_JWKS_URL: `http://127.0.0.1:${jwksServer.address().port}/jwks`,
+    // C2 discovery points at the same stub.
+    GITHUB_ATTESTATIONS_API_URL: `http://127.0.0.1:${jwksServer.address().port}`,
+    GITHUB_ATTESTATIONS_TOKEN: 'canary-attest-token',
   };
   const saved = {};
   for (const [key, value] of Object.entries(env)) {
@@ -135,6 +145,24 @@ test('canary script publishes and verifies provenance; unmapped tokens fail', as
     assert.equal(publisher.repository, 'xiom-lang/registry');
     assert.equal(publisher.workflow, 'oidc-canary.yml');
     assert.equal(publisher.runUrl, 'https://github.com/xiom-lang/registry/actions/runs/424242');
+
+    // C2: the registry asked GitHub about the exact artifact digest and stored
+    // the attestation next to the provenance, and the page renders it.
+    assert.equal(
+      publisher.attestation,
+      'https://github.com/xiom-lang/registry/attestations/424242',
+    );
+    assert.equal(attestationCalls.length, 1);
+    assert.equal(
+      attestationCalls[0].url,
+      `/repos/xiom-lang/registry/attestations/sha256:${stored.versions['0.0.0-canary.1'].sha256}`,
+    );
+    assert.equal(attestationCalls[0].authorization, 'Bearer canary-attest-token');
+    const pageHtml = await (await fetch(`${baseUrl}/packages/xiom.canary-oidc`, {
+      headers: { Accept: 'text/html' },
+    })).text();
+    assert.match(pageHtml, /build attestation/);
+    assert.match(pageHtml, /https:\/\/github\.com\/xiom-lang\/registry\/attestations\/424242/);
 
     const unmapped = await runCanary({
       XIOM_REGISTRY: baseUrl,
