@@ -1965,9 +1965,9 @@ email, community->maintainer contact, review votes/replies) is recorded in
 **Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
 contributor profiles + Sponsors badge + board, C3 offline export bundle; see
 24.2) and is **live on staging and production** (ops, 2026-09-28 23:14/23:18Z;
-registry-lane verification green, see 24.1). **A5 feeds/following landed on
-`main` after the release** (`bbe42d0`, CHANGELOG Unreleased) and awaits the
-next release/deploy.
+registry-lane verification green, see 24.1). **A5 feeds/following (`bbe42d0`)
+and C1 download stats (`c77381c`) landed on `main` after the release**
+(CHANGELOG Unreleased) and await the next release/deploy.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2299,7 +2299,7 @@ order.
 
 | Order | Feature | Notes | Size |
 |---|---|---|---|
-| C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). | M |
+| C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). **DONE 2026-09-29 (`c77381c`, post-2.5.0):** migration 013 `download_counts` + `download_markers`; visitor-day dedupe with a day-salted HMAC marker (per-process salt, markers pruned after 7 days, aggregates kept), best-effort counting on the download route (404s never count), `?stats=1` JSON, package-page Downloads row, and `sort=downloads` / `sort=rating` with chips (closes A10's sort note). | M (done) |
 | C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. | S |
 | C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. **DONE 2026-09-29 (`62780a3`, 2.5.0):** `scripts/export-bundle.js` + `OFFLINE.md`; every artifact hashed while exporting, `--latest-only`, resume, `--verify`; production export verified: 384 artifacts / 15,516,333 bytes. Client lane owns offline resolution semantics. | L (done) |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
@@ -2638,8 +2638,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `bbe42d0` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; compose sponsors fix `3c5d76b`; bundle docs copy `cb0b447`; deploy note `9d770b0`); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **312/312**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `c77381c` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; C1 stats `c77381c`; compose sponsors fix `3c5d76b`; bundle docs copy `cb0b447`; deploy note `9d770b0`); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **314/314**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
@@ -2678,6 +2678,11 @@ now warns when the manifest declares no stage or marks a pre-release version
   Activity trail, `/account/feed`, and `release` notices to watchers on
   publish; per-account/per-package caps; the notify-kinds route now persists
   every structured kind (review-reply included). 312/312 unit; mobile pass.
+- `c77381c` **C1 -- download stats** (post-2.5.0, CHANGELOG Unreleased):
+  migration 013 `download_counts`/`download_markers`, visitor-day dedupe with
+  day-salted HMAC markers (pruned after 7 days; aggregates kept), Downloads
+  row on package pages, `?stats=1` JSON, and `sort=downloads` /
+  `sort=rating` (closes A10's sort note). 314/314 unit; mobile pass.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2696,10 +2701,9 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **Roadmap next** (section 21 order): C1 download stats
-   (also unlocks the most-downloaded sort; the A10 rating sort is now
-   unblocked since A4 landed); C2 provenance attestation link; C5 index digest
-   (discuss first); C4 object storage/sharding only past a few thousand
+4. **Roadmap next** (section 21 order): C2 provenance attestation link
+   (store the GitHub attestation URL per version and render it); C5 index
+   digest (discuss first); C4 object storage/sharding only past a few thousand
    packages; Track B client items (`pkg` guard, `yank`, `--dry-run` + validate
    endpoint, publisher self-service edit/revoke, token rotation).
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
@@ -2711,23 +2715,24 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at bbe42d0 (2.5.0 ddd4b42;
-features 9b10975 A10, 67a582f A4, 62780a3 C3; A5 feeds bbe42d0; compose
-sponsors fix 3c5d76b), clean, 312/312 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at c77381c (2.5.0 ddd4b42;
+features 9b10975 A10, 67a582f A4, 62780a3 C3; A5 feeds bbe42d0; C1 stats
+c77381c; compose sponsors fix 3c5d76b), clean, 314/314 unit and 20/20 e2e
+green.
 
 State in one line: 2.5.0 is live on staging and production and verified; A5
-feeds/following landed after the release and waits for the next release
-window; no relay is open.
+feeds/following and C1 download stats landed after the release and wait for
+the next release window; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 312) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 314) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.5.0, email enabled).
 2. C3 delivered to the playground (2026-09-29): latest-only production bundle
    at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
    the client lane wires the offline example and sandboxed test. A5
-   feeds/following is DONE (`bbe42d0`); the next registry feature from the
-   section 21 order is C1 download stats (unblocks the most-downloaded sort;
-   A10's rating sort is unblocked).
+   feeds/following (`bbe42d0`) and C1 download stats (`c77381c`) are DONE;
+   the next registry feature from the section 21 order is C2 provenance
+   attestation link.
 3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b).
 
