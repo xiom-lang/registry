@@ -6,6 +6,17 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Discovery
+
+- **Download stats (C1)**: artifact requests are counted per package,
+  version, and UTC day. Within a day one visitor counts once per version
+  (day-salted, non-reversible marker), so there is no per-user tracking and
+  no raw log; dedupe markers are pruned after a week while the aggregate
+  stays. Package pages show the all-time total and the 30-day window,
+  `GET /packages/<name>?stats=1` returns the JSON breakdown, and the listing
+  gains **Most downloaded** (`sort=downloads`) and **Top rated**
+  (`sort=rating`) sorts. `/index.json` is untouched.
+
 ### Community
 
 - **Feeds and following (A5)**: package pages gain a watch toggle with a

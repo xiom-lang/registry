@@ -280,9 +280,12 @@ function packageCard(name, pkg) {
 
 /**
  * Filter + sort package names for the listing (SESSION.md section 13
- * phase 3, A10): `sort` is 'updated' (newest latest-publish first, the
- * default) or 'name'; facets are category, firstParty, signed (the latest
- * installable version carries a publisher signature), stage, and prerelease.
+ * phase 3, A10, C1): `sort` is 'updated' (newest latest-publish first, the
+ * default), 'name', 'downloads' (all-time total, C1) or 'rating' (average
+ * stars with count as the tiebreak, C1). Facets are category, firstParty,
+ * signed (the latest installable version carries a publisher signature),
+ * stage, and prerelease. The aggregate maps are computed by the caller so
+ * this stays a pure function of its inputs.
  */
 function listingNames(index, {
   sort = 'updated',
@@ -291,6 +294,8 @@ function listingNames(index, {
   signed = false,
   stage = DEFAULT_STAGE,
   prerelease = DEFAULT_PRERELEASE,
+  downloadTotals = null,
+  ratingSummaries = null,
 } = {}) {
   let names = Object.keys(index.packages);
   if (category) {
@@ -307,8 +312,21 @@ function listingNames(index, {
     const parsed = entry && entry.published ? Date.parse(entry.published) : 0;
     return Number.isFinite(parsed) ? parsed : 0;
   };
+  const downloadsOf = (name) => (downloadTotals ? (downloadTotals.get(name) || 0) : 0);
+  const ratingOf = (name) => (ratingSummaries ? ratingSummaries.get(name) : null) || { count: 0, average: 0 };
   if (sort === 'name') names.sort((a, b) => a.localeCompare(b));
-  else names.sort((a, b) => publishedAt(b) - publishedAt(a) || a.localeCompare(b));
+  else if (sort === 'downloads') {
+    names.sort((a, b) => downloadsOf(b) - downloadsOf(a) || publishedAt(b) - publishedAt(a)
+      || a.localeCompare(b));
+  } else if (sort === 'rating') {
+    names.sort((a, b) => {
+      // Unrated packages sink below rated ones; more ratings win ties.
+      const left = ratingOf(a);
+      const right = ratingOf(b);
+      return right.average - left.average || right.count - left.count
+        || publishedAt(b) - publishedAt(a) || a.localeCompare(b);
+    });
+  } else names.sort((a, b) => publishedAt(b) - publishedAt(a) || a.localeCompare(b));
   return names;
 }
 
@@ -322,8 +340,12 @@ function paginatePackages(index, {
   signed = false,
   stage = DEFAULT_STAGE,
   prerelease = DEFAULT_PRERELEASE,
+  downloadTotals = null,
+  ratingSummaries = null,
 } = {}) {
-  const names = listingNames(index, { sort, category, firstParty, signed, stage, prerelease });
+  const names = listingNames(index, {
+    sort, category, firstParty, signed, stage, prerelease, downloadTotals, ratingSummaries,
+  });
   const total = names.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(Math.max(1, page), totalPages);
@@ -513,7 +535,12 @@ function facetBar(index, paged) {
       paged.category === name,
     ))
     .join('');
-  const sorts = [['updated', 'Updated'], ['name', 'A-Z']]
+  const sorts = [
+    ['updated', 'Updated'],
+    ['name', 'A-Z'],
+    ['downloads', 'Most downloaded'],
+    ['rating', 'Top rated'],
+  ]
     .map(([value, label]) => chip(label, { sort: value }, paged.sort === value))
     .join('');
   return `<div class="facet-bar">
@@ -965,6 +992,22 @@ function contactBlock({ name, support, pkg }) {
  * toggle needs a signed-in, active account. One button with one action:
  * `Watch package` when not following, `Unwatch` when following.
  */
+/**
+ * Download-count detail row (C1). Counts are per-version-per-day aggregates
+ * with a day-salted visitor marker, never per-user data; the row shows the
+ * all-time total and the 30-day window when there is one.
+ */
+function downloadsRow(stats) {
+  if (!stats) return '';
+  const total = Number(stats.total) || 0;
+  const last30 = Number(stats.last30) || 0;
+  const totalText = total.toLocaleString('en-US');
+  const trend = last30 > 0 && last30 !== total
+    ? ` <span class="pkg-meta">(${last30.toLocaleString('en-US')} in 30 days)</span>`
+    : '';
+  return `<div class="detail"><dt>Downloads</dt><dd>${totalText}${trend}</dd></div>`;
+}
+
 function watchBlock(name, watch) {
   if (!watch) return '';
   const countText = `${Number(watch.watchers) || 0} watching`;
@@ -1006,6 +1049,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const detailGrid = detail ? `<dl class="detail-grid">
   <div class="detail"><dt>Version</dt><dd>${escapeHtml(detailVersion)}</dd></div>
   <div class="detail"><dt>Published</dt><dd>${formatWhen(detail.published)}</dd></div>
+  ${downloadsRow(options.stats)}
   <div class="detail"><dt>Size</dt><dd>${escapeHtml(formatBytes(detail.size))}</dd></div>
   <div class="detail"><dt>SHA-256</dt><dd>${shortDigest(detail.sha256)}</dd></div>
   <div class="detail"><dt>Signature</dt><dd>${signatureCell(detail)}</dd></div>

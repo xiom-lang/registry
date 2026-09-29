@@ -84,6 +84,7 @@ const {
 } = require('./contributors');
 const { profilePage, contributorsPage } = require('./ui/profile');
 const { WatchStore } = require('./watches');
+const { DownloadStats } = require('./stats');
 const { packageActivity, watchedFeed } = require('./activity');
 const {
   loginPage,
@@ -183,7 +184,7 @@ function listingFromQuery(query) {
   return {
     page: clamp(query.page, 1, 1_000_000),
     perPage: clamp(query.per_page, DEFAULT_PER_PAGE, MAX_PER_PAGE),
-    sort: query.sort === 'name' ? 'name' : 'updated',
+    sort: ['name', 'downloads', 'rating'].includes(query.sort) ? query.sort : 'updated',
     category: typeof query.category === 'string' ? query.category.trim().toLowerCase() : '',
     firstParty: flag(query.first_party),
     signed: flag(query.signed),
@@ -287,6 +288,10 @@ function createApp(config = loadConfig()) {
   const contributors = new ContributorStore({ db });
   // A5: package watches (account feed + release notices).
   const watches = new WatchStore({ db });
+  // C1: artifact download counts (aggregated per version/day; no per-user
+  // tracking). The salt is per-process: markers cannot be correlated across
+  // restarts or days, which is the point.
+  const stats = new DownloadStats({ db });
 
   // Audited display-stage overrides (SESSION.md 21.4): generated from the
   // publisher repo's STATUS.json files at a pinned commit and reviewed as a
@@ -986,6 +991,21 @@ function createApp(config = loadConfig()) {
   // the platform DB, maintainership from the index overlay. Ranking is the
   // capped, weighted score in src/contributors.js -- never raw volume.
 
+  /**
+   * C1: attach the aggregates a requested sort needs and nothing more. The
+   * maps are computed once per request (single aggregate query each) and the
+   * UI stays a pure function of them.
+   */
+  function withListingAggregates(listing) {
+    if (listing.sort === 'downloads') {
+      return { ...listing, downloadTotals: stats.totalsFor() };
+    }
+    if (listing.sort === 'rating') {
+      return { ...listing, ratingSummaries: reviews.ratingSummaries() };
+    }
+    return listing;
+  }
+
   /** Suspended and banned accounts are not ranked on the board. */
   function contributorBoard(limit = CONTRIBUTORS_LIMIT) {
     const maintainers = maintainerCounts(indexStore.snapshot(), {
@@ -1204,7 +1224,7 @@ function createApp(config = loadConfig()) {
   // page size capped at 200); `/index.json` stays whole for the client.
   app.get('/packages', generalLimit, (req, res) => {
     const index = publicIndex();
-    const listing = listingFromQuery(req.query);
+    const listing = withListingAggregates(listingFromQuery(req.query));
     if (wantsHtml(req)) {
       return res.type('html').set('Cache-Control', 'public, max-age=60')
         .send(packagesPage(index, { nav: accountNav(req), ...listing }));
@@ -1257,6 +1277,12 @@ function createApp(config = loadConfig()) {
       }
       throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
     }
+    // C1: explicit stats request -> JSON regardless of Accept, so scripts and
+    // badges have one stable endpoint. Counts only; no per-user data exists.
+    if (req.query.stats === '1') {
+      return res.set('Cache-Control', 'public, max-age=60')
+        .json({ package: name, downloads: stats.forPackage(name) });
+    }
     if (wantsHtml(req)) {
       const view = reviewedIndex();
       return res.type('html').set('Cache-Control', 'public, max-age=60')
@@ -1273,6 +1299,7 @@ function createApp(config = loadConfig()) {
             reviews,
             ownership,
           }),
+          stats: stats.forPackage(pkg.name),
         }));
     }
     res.json(pkg);
@@ -1310,6 +1337,12 @@ function createApp(config = loadConfig()) {
       // not know about.
       indexStore.requireVersion(name, version);
       const file = artifacts.require(name, version);
+      // C1: count best-effort -- statistics must never break a download.
+      try {
+        stats.record({ package: name, version, ip: req.ip });
+      } catch (err) {
+        console.warn(`download stats for ${name}@${version} failed: ${err.message}`);
+      }
       const stat = fs.statSync(file);
       res.setHeader('Content-Type', 'application/gzip');
       res.setHeader('Content-Length', stat.size);
@@ -1737,8 +1770,7 @@ function createApp(config = loadConfig()) {
           review: Boolean(req.body.review),
           support: Boolean(req.body.support),
           'review-reply': Boolean(req.body['review-reply']),
-          release: Boolean(req.body.release),
-        });
+          release: Boolean(req.body.release),        });
         return res.redirect(303, '/account/settings?prefs=1');
       } catch (err) {
         return next(err);
@@ -2993,6 +3025,7 @@ function createApp(config = loadConfig()) {
     support,
     contributors,
     watches,
+    stats,
     sessions,
   };
   return app;

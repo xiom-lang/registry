@@ -441,6 +441,31 @@ class ReviewStore {
   }
 
   /**
+   * Rating summaries for every package with at least one rating, keyed by
+   * package name (C1 top-rated sort; one aggregate query, no N+1).
+   *
+   * @returns {Map<string, { count: number, average: number }>}
+   */
+  ratingSummaries() {
+    if (this.db) {
+      const rows = this.db.all(
+        `SELECT package, COUNT(*) AS count, AVG(stars) AS average
+         FROM review_ratings GROUP BY package`,
+      );
+      return new Map(rows.map((row) => [row.package, {
+        count: Number(row.count) || 0,
+        average: Math.round((Number(row.average) || 0) * 10) / 10,
+      }]));
+    }
+    const summaries = new Map();
+    for (const name of Object.keys(this.ratings)) {
+      const summary = this.ratingSummary(name);
+      if (summary.count > 0) summaries.set(name, summary);
+    }
+    return summaries;
+  }
+
+  /**
    * Ratings this account wrote, newest first (A4 contributor profiles).
    *
    * @returns {Array<{ package: string, stars: number, review: string, at: string }>}

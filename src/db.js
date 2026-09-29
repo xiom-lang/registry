@@ -294,6 +294,35 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '013-download-stats',
+    up(db) {
+      // C1 (SESSION.md 21): per-version-per-day artifact download counts, no
+      // per-user tracking. `download_counts` is the durable aggregate and
+      // survives forever; `download_markers` holds one hashed, day-salted
+      // visitor marker per (package, version, day) so a refresh loop cannot
+      // inflate the numbers, and is pruned after a week. Raw addresses are
+      // never stored, and markers cannot be linked across days.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS download_counts (
+          package TEXT NOT NULL,
+          version TEXT NOT NULL,
+          day TEXT NOT NULL,
+          count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (package, version, day)
+        );
+        CREATE INDEX IF NOT EXISTS download_counts_package ON download_counts (package);
+        CREATE TABLE IF NOT EXISTS download_markers (
+          package TEXT NOT NULL,
+          version TEXT NOT NULL,
+          day TEXT NOT NULL,
+          marker TEXT NOT NULL,
+          PRIMARY KEY (package, version, day, marker)
+        );
+        CREATE INDEX IF NOT EXISTS download_markers_day ON download_markers (day);
+      `);
+    },
+  },
 ];
 
 class Database {
