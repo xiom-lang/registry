@@ -2716,6 +2716,11 @@ now warns when the manifest declares no stage or marks a pre-release version
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
+6. **Next release contents (when the owner orders the cut):** A5 feeds,
+   C1 download stats, and the nav/cache fixes (`480531b`) are on `main` but
+   not deployed; version bump + CHANGELOG promotion + ops deploy (staging
+   first). Production stays 2.5.0 until then, so the header fixes are not
+   visible there yet.
 
 ### 24.4 Paste-ready prompt for the next session
 
