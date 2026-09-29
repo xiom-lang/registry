@@ -1962,11 +1962,11 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
-**Status 2026-09-29:** 2.5.0 is live on staging and production (ops,
-2026-09-28 23:14/23:18Z; verification in 24.1). **2.6.0 is cut on `main`**
-(A5 feeds `bbe42d0`, C1 stats `c77381c`, nav/cache fixes
-`480531b`/`ff6ae2b`; CHANGELOG promoted) and awaits the ops deploy, staging
-first.
+**Status 2026-09-29:** 2.6.0 (A10, A4, C3, A5 feeds, C1 stats, nav/cache
+fixes) is **live on staging and production** (ops, 16:38Z: boots 2.6.0,
+migrations through 013, new tables at 0, index sha unchanged, live-check
+green). **C2 build attestation links (`2681ad6`) landed on `main` after the
+release** (CHANGELOG Unreleased) and await the next release/deploy.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2299,7 +2299,7 @@ order.
 | Order | Feature | Notes | Size |
 |---|---|---|---|
 | C1 | **Download stats** | Count artifact requests per version/day, aggregate, no per-user tracking; show on the package page and expose `?stats=1`. Guard against inflation (dedupe by IP+day, no raw logs). **DONE 2026-09-29 (`c77381c`, post-2.5.0):** migration 013 `download_counts` + `download_markers`; visitor-day dedupe with a day-salted HMAC marker (per-process salt, markers pruned after 7 days, aggregates kept), best-effort counting on the download route (404s never count), `?stats=1` JSON, package-page Downloads row, and `sort=downloads` / `sort=rating` with chips (closes A10's sort note). | M (done) |
-| C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. | S |
+| C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. **DONE 2026-09-29 (`2681ad6`, post-2.6.0):** optional `publisher.attestation` (additive in `/index.json`); publisher-supplied canonical URL at publish time or best-effort GitHub attestations-API discovery by subject digest; rendered as a "build attestation" link; token-optional via `GITHUB_ATTESTATIONS_TOKEN` (falls back to the Sponsors token). | S (done) |
 | C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. **DONE 2026-09-29 (`62780a3`, 2.5.0):** `scripts/export-bundle.js` + `OFFLINE.md`; every artifact hashed while exporting, `--latest-only`, resume, `--verify`; production export verified: 384 artifacts / 15,516,333 bytes. Client lane owns offline resolution semantics. | L (done) |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
 | C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. | M |
@@ -2637,10 +2637,10 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.6.0 release commit (on top of `ff6ae2b`; 2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b` nav/cache fixes); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **314/314**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact, facets/profile/board surfaces respond. **2.6.0 is on `main` and awaiting ops** |
-| Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
+| Repo | `main` at `2681ad6` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2 attestation links); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **322/322**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Deployed | **2.6.0 on staging and production** (ops, 2026-09-29 16:38Z; boots 2.6.0, migrations through 013, new tables at 0, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in href, Downloads row + `?stats=1`, `sort=downloads`. **C2 (`2681ad6`) is on `main` and awaits the next release** |
+| Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
 | Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
@@ -2691,7 +2691,13 @@ now warns when the manifest declares no stage or marks a pre-release version
 - `ff6ae2b` **test hardening**: the A5 activity-ordering assertions no longer
   depend on same-millisecond tie order (CI flake fix).
 - Release commit on top of `ff6ae2b`: version `2.6.0`, CHANGELOG promotion
-  ([Unreleased] -> [2.6.0]), this handoff.
+  ([Unreleased] -> [2.6.0]), this handoff. **Deployed 2026-09-29 16:38Z.**
+- `2681ad6` **C2 -- build attestation links** (post-2.6.0, CHANGELOG
+  Unreleased): optional `publisher.attestation` (additive); supplied-URL
+  validation at publish time, best-effort GitHub attestations-API discovery
+  by subject digest after provenance publishes (token optional), rendered as
+  a "build attestation" link; PUBLISHING.md documents both paths. 322/322
+  unit; canary test proves the digest question end to end.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2710,11 +2716,12 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **Roadmap next** (section 21 order): C2 provenance attestation link
-   (store the GitHub attestation URL per version and render it); C5 index
-   digest (discuss first); C4 object storage/sharding only past a few thousand
-   packages; Track B client items (`pkg` guard, `yank`, `--dry-run` + validate
-   endpoint, publisher self-service edit/revoke, token rotation).
+4. **Roadmap next** (section 21 order): C5 index manifest digest
+   (**discuss first** -- a signed digest of `/index.json` is a different
+   trust claim from package signing); C4 object storage/sharding only past a
+   few thousand packages; Track B client items (`pkg` guard, `yank`,
+   `--dry-run` + validate endpoint, publisher self-service edit/revoke, token
+   rotation). C2 is done (`2681ad6`).
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
@@ -2731,27 +2738,27 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.6.0 release commit
-(features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
-480531b nav/cache fixes, ff6ae2b test hardening), clean, 314/314 unit and
-20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at 2681ad6 (2.6.0 73e7db5;
+features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
+480531b+ff6ae2b nav/cache fixes, 2681ad6 C2 attestation links), clean,
+322/322 unit and 20/20 e2e green.
 
-State in one line: 2.6.0 (A5 feeds, C1 stats, nav/cache fixes) is cut on main
-and awaiting ops; staging and production still run 2.5.0, verified.
+State in one line: 2.6.0 is live on staging and production and verified; C2
+build attestation links landed after the release and await the next release
+window; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 314) and npm run test:e2e (expect
-   20); /health on staging and production (2.5.0 until ops deploys 2.6.0,
-   then 2.6.0; email enabled either way).
-2. If 2.6.0 is not deployed, hand ops the deploy: staging first, then
-   production (migrations 012-013 apply on boot; walk the header sign-in
-   button, /account/feed, package Downloads/Activity, ?sort=downloads).
-3. C3 delivered to the playground (2026-09-29): latest-only production bundle
+1. Verify state: git pull; npm test (expect 322) and npm run test:e2e (expect
+   20); /health on staging and production (expect 2.6.0, email enabled).
+2. C3 delivered to the playground (2026-09-29): latest-only production bundle
    at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
-   the client lane wires the offline example and sandboxed test. Next registry
-   feature from the section 21 order: C2 provenance attestation link.
-4. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
-   enable live Sponsors checks (declared in compose since 3c5d76b).
+   the client lane wires the offline example and sandboxed test. C2 is done
+   (`2681ad6`); the next registry feature from the section 21 order is C5
+   index manifest digest -- discuss the trust claim before building.
+3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
+   enable live Sponsors checks (declared in compose since 3c5d76b); the same
+   token doubles as GITHUB_ATTESTATIONS_TOKEN for attestation discovery
+   (optional -- public repos answer unauthenticated).
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
