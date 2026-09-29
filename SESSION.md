@@ -2725,6 +2725,10 @@ now warns when the manifest declares no stage or marks a pre-release version
   owner's profile shows "Sponsors badge: off -- enable it in Settings" when
   the opt-in is still off (owner report: the badge looked missing), with a
   test pinning the hint.
+- UI discoverability follow-ups after the release commit (same 2.7.0
+  deploy): Contributors linked from the top nav + mobile Menu + home page;
+  the `/account` overview hero shows the Sponsors state (badge or a direct
+  settings link). Tests pin both; mobile visual pass at 390px.
 - Release commit on top of `b04a955`: version `2.7.0`, CHANGELOG promotion
   ([Unreleased] -> [2.7.0]), this handoff.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it

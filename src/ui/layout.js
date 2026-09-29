@@ -92,6 +92,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
   const menuLinks = `
         <a href="/packages">Packages</a>
         <a href="/categories">Categories</a>
+        <a href="/contributors">Contributors</a>
         <a href="/search">Search</a>
         <a href="/publish">Publish a package</a>
         <a href="/whats-new">What&rsquo;s new</a>
@@ -118,6 +119,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
     <nav class="nav-links" aria-label="Primary">
       <a href="/packages">Packages</a>
       <a href="/categories">Categories</a>
+      <a href="/contributors">Contributors</a>
       <a href="/search">Search</a>
       <a href="/publish">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>

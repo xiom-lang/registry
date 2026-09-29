@@ -191,6 +191,10 @@ test('GET / renders HTML for browsers and JSON for the API', async () => {
   assert.match(body, /terms\.html/);      // legal links in the footer
   assert.match(body, /privacy\.html/);
   assert.match(body, /support@xiom-lang\.org/);
+  // Contributors is reachable from the top nav and the home page, not just
+  // by typing the URL.
+  assert.match(body, /nav-links[\s\S]*?href="\/contributors">Contributors<\/a>/);
+  assert.match(body, /href="\/contributors">Meet the top contributors<\/a>/);
 
   const json = await fetch(`${baseUrl}/`, { headers: API });
   assert.match(json.headers.get('content-type'), /application\/json/);

@@ -312,6 +312,7 @@ function accountHero(account, { title, subtitle = '' }) {
 /**
  * Account overview: who you are, role/status, and the newest activity.
  * `role` is 'admin' | 'reviewer' | 'member'; `status` is 'active' | 'suspended'.
+ * `sponsor` is the A4 opt-in state ({ optedIn, state, checkedAt }).
  */
 function accountOverviewPage({
   account,
@@ -320,6 +321,7 @@ function accountOverviewPage({
   requests = [],
   notifications = [],
   maintained = [],
+  sponsor = { optedIn: false, state: '', checkedAt: '' },
   csrf,
   notice = '',
   error = '',
@@ -345,10 +347,20 @@ function accountOverviewPage({
     ? '<p class="pkg-meta">You are not listed as a maintainer of any package yet. Open a package '
       + 'you publish and use &ldquo;I maintain this package&rdquo; to claim it.</p>'
     : `<ul class="maintainer-list">\n${maintained.map(maintainedRow).join('\n')}\n</ul>`;
+  // A4: the Sponsors badge state in the overview, mirroring the settings
+  // language -- verified shows the badge, "not listed" and off link there.
+  const sponsorVisual = !sponsor.optedIn
+    ? '<span><a href="/account/settings#sponsors">Sponsors badge: off</a></span>'
+    : (sponsor.state === 'sponsor'
+      ? `<span>${sponsorBadge(account.login)}</span>`
+      : (sponsor.state === 'not'
+        ? '<span><a href="/account/settings#sponsors">Sponsors badge: no public listing</a></span>'
+        : '<span><a href="/account/settings#sponsors">Sponsors badge: unverified</a></span>'));
   const body = `${accountHero(account, {
     subtitle: `<span>Joined ${formatWhen(account.createdAt)}</span>`
       + `<span>Last sign-in ${formatWhen(account.lastLoginAt)}</span>`
-      + `<span class="status-pill status-approved">${escapeHtml(ROLE_LABELS[role] || role)}</span>`,
+      + `<span class="status-pill status-approved">${escapeHtml(ROLE_LABELS[role] || role)}</span>`
+      + sponsorVisual,
   })}
 ${accountTabs('overview', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}

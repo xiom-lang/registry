@@ -657,7 +657,8 @@ function homePage(index, options = {}) {
 <h1>Packages</h1>
 <h2>Recently updated</h2>
 ${strip}
-<p class="browse-all"><a class="button" href="/packages">Browse all ${total} package${total === 1 ? '' : 's'}</a></p>`,
+<p class="browse-all"><a class="button" href="/packages">Browse all ${total} package${total === 1 ? '' : 's'}</a>
+  <a class="button" href="/contributors">Meet the top contributors</a></p>`,
   });
 }
 

@@ -1586,6 +1586,8 @@ function createApp(config = loadConfig()) {
         publishers: publisherStore.list(),
         claims: ownership.listClaims(),
       }),
+      // A4: the Sponsors badge state for the overview hero.
+      sponsor: contributors.sponsorOf(context.account.githubId),
       notice,
     }));
   });

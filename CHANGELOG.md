@@ -16,6 +16,12 @@ The rendered version of this file is at `/whats-new`.
 - **Sponsors opt-in discoverability**: on your own profile, a badge that is
   still off now says so with a direct link to
   `/account/settings#sponsors` instead of leaving the opt-in a mystery.
+- **Contributors is findable**: `/contributors` is now linked from the top
+  navigation (and the mobile Menu), and the home page offers *Meet the top
+  contributors* next to *Browse all packages*.
+- **Sponsors badge in the account overview**: the `/account` hero shows the
+  verified badge, and a direct settings link in every other state
+  (off / no public listing / unverified).
 
 ### Provenance
 

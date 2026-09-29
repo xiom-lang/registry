@@ -1994,6 +1994,9 @@ test('the Sponsors badge is opt-in, cached, verified, and removable', async () =
   // opt-in is discoverable instead of a mystery.
   response = await requestAs(jar, '/account/plain-user', { headers: BROWSER });
   assert.match(await response.text(), /Sponsors badge: off &mdash; enable it in Settings/);
+  // ...and the account overview shows the same state.
+  response = await requestAs(jar, '/account', { headers: BROWSER });
+  assert.match(await response.text(), /Sponsors badge: off<\/a>/);
 
   // Opt in: the fake GitHub confirms a listing and the answer is cached.
   response = await requestAs(jar, '/account/sponsors', {
@@ -2008,6 +2011,9 @@ test('the Sponsors badge is opt-in, cached, verified, and removable', async () =
   assert.match(html, /status-approved">verified/);
   assert.match(html, /sponsor-badge/);
   assert.match(html, /github\.com\/sponsors\/plain-user/);
+  // The overview hero shows the verified badge too.
+  response = await requestAs(jar, '/account', { headers: BROWSER });
+  assert.match(await response.text(), /class="sponsor-badge"/);
 
   // The badge shows on the public profile and on the board.
   response = await fetch(`${baseUrl}/account/plain-user`, { headers: BROWSER });
