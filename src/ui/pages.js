@@ -24,6 +24,7 @@ const { categoryCounts, STAGES } = require('../categories');
 const { renderMarkdown } = require('./markdown');
 const { reportForm, decisionPill, reviewHistory, decisionControls, ratingsSection } = require('./review');
 const { profileLink } = require('./profile');
+const { activityList } = require('./activity');
 const semver = require('semver');
 
 /** Listing pagination defaults (SESSION.md section 13 phase 1). */
@@ -959,9 +960,34 @@ function contactBlock({ name, support, pkg }) {
 </section>`;
 }
 
+/**
+ * Follow control for a package page (A5). The watcher count is public; the
+ * toggle needs a signed-in, active account. One button with one action:
+ * `Watch package` when not following, `Unwatch` when following.
+ */
+function watchBlock(name, watch) {
+  if (!watch) return '';
+  const countText = `${Number(watch.watchers) || 0} watching`;
+  const notice = watch.notice
+    ? `<p class="notice" role="status">${escapeHtml(watch.notice)}</p>`
+    : '';
+  if (!watch.signedIn) {
+    return `${notice}<p class="watch-box" id="watch"><span class="pkg-meta">${countText} &middot;
+  <a href="/login?returnTo=${encodeURIComponent(`/packages/${name}#watch`)}">Sign in</a> to follow new releases.</span></p>`;
+  }
+  return `${notice}<form class="watch-box" id="watch" method="post" action="/packages/${encodeURIComponent(name)}/watch">
+  <input type="hidden" name="csrf" value="${escapeHtml(watch.csrf)}">
+  <input type="hidden" name="next" value="/packages/${escapeHtml(name)}#watch">
+  <button class="button${watch.watching ? '' : ' primary'}" type="submit">${watch.watching ? 'Unwatch' : 'Watch package'}</button>
+  <span class="pkg-meta">${countText}${watch.watching ? ' &middot; new releases notify you' : ''}</span>
+</form>`;
+}
+
 function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   const name = pkg.name;
   const names = Object.keys(pkg.versions);
+  const watch = options.watch || null;
+  const activity = options.activity || null;
   const detailVersion = selectedVersion && pkg.versions[selectedVersion]
     ? selectedVersion
     : (pkg.latest || names[names.length - 1] || '');
@@ -1096,6 +1122,16 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   registry maintainers. Files are unchanged and pinned installs still work.</p>`
     : '';
 
+  // A5: watcher count + follow toggle (signed-in), and the merged public
+  // activity trail (releases, reviews, replies, decisions, verified claims).
+  const watchBlockHtml = watchBlock(name, watch);
+  const activityBlock = Array.isArray(activity)
+    ? `<section id="activity">
+  <h2>Activity <span class="count">${activity.length}</span></h2>
+  ${activityList(activity, { empty: 'No activity recorded yet.' })}
+</section>`
+    : '';
+
   // The decision pill already says "reviewed by a reviewer"; do not repeat
   // the same claim in the badge pill row.
   const reviewedByDecision = Boolean(review && review.decision && review.decision.reviewed === true);
@@ -1115,6 +1151,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}
   <div class="install">${installNode}</div>
   ${detailGrid}
+  ${watchBlockHtml}
   ${maintainersBlock({
     name,
     ownership: options.ownership || null,
@@ -1127,6 +1164,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   ${readmeBlock}
   ${ratingsBlock}
   ${reviewBlock}
+  ${activityBlock}
 </section>
 <h2>Versions</h2>
 <div class="table-wrap">

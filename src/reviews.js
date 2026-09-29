@@ -492,6 +492,27 @@ class ReviewStore {
   }
 
   /**
+   * Maintainer replies on one package, newest first (A5 activity feed).
+   * Replies live only in SQLite, so the JSON fallback is empty.
+   *
+   * @returns {Array<{ author: object, body: string, at: string, updatedAt: string }>}
+   */
+  repliesByPackage(packageName, { limit = 12 } = {}) {
+    if (!this.db) return [];
+    const capped = Math.max(1, Math.min(Number(limit) || 12, 100));
+    return this.db.all(
+      `SELECT * FROM review_replies WHERE package = ? ORDER BY at DESC LIMIT ?`,
+      String(packageName),
+      capped,
+    ).map((row) => ({
+      author: { githubId: String(row.author_id), login: row.author_login },
+      body: row.body,
+      at: row.at || '',
+      updatedAt: row.updated_at || '',
+    }));
+  }
+
+  /**
    * Reviewer decisions this account took, newest first (A4). The actor is
    * stored as a login in the decision history (the audit trail the package
    * pages already show).

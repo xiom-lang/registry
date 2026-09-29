@@ -6,6 +6,20 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Community
+
+- **Feeds and following (A5)**: package pages gain a watch toggle with a
+  public watcher count, plus an **Activity** trail (releases, reviews,
+  maintainer replies, reviewer decisions, verified claims) assembled from the
+  same public data everyone can see. `/account/feed` merges the trail of
+  every watched package, and new releases notify watchers through a new
+  `release` notification kind. Watching is a feed subscription only: no
+  publish powers, no `/index.json` change, per-account and per-package caps
+  keep lists bounded.
+- Notification settings now persist **every** structured kind: the
+  `review-reply` checkbox (previously dropped on save) is stored, and the new
+  `release` kind can be muted independently.
+
 ## [2.5.0] - 2026-09-29
 
 ### Discovery

@@ -1521,12 +1521,13 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   assert.match(html, /name="review" checked/);
   assert.match(html, /name="support" checked/);
   assert.match(html, /name="review-reply" checked/);
+  assert.match(html, /name="release" checked/);
   const csrf = csrfFrom(html);
 
   // Turn review notices off; claim, report, and support stay on.
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, claim: 'on', report: 'on', support: 'on', 'review-reply': 'on' }),
+    body: new URLSearchParams({ csrf, claim: 'on', report: 'on', support: 'on', 'review-reply': 'on', release: 'on' }),
   });
   assert.equal(response.status, 303);
   assert.equal(response.headers.get('location'), '/account/settings?prefs=1');
@@ -1534,7 +1535,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     stored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: false, support: true, 'review-reply': true },
+    { claim: true, report: true, review: false, support: true, 'review-reply': true, release: true },
   );
 
   response = await requestAs(member, '/account/settings', { headers: BROWSER });
@@ -1584,13 +1585,13 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const restoreCsrf = csrfFrom(await response.text());
   response = await requestAs(member, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on' }),
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on', release: 'on' }),
   });
   assert.equal(response.status, 303);
   const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     restored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: true, support: true, 'review-reply': true },
+    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true },
   );
 });
 
@@ -1687,12 +1688,11 @@ test('community members message maintainers, with limits, mutes, and abuse repor
   const settingsCsrf = csrfFrom(await response.text());
   response = await requestAs(maintainer, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: settingsCsrf, claim: 'on', report: 'on', review: 'on', 'review-reply': 'on' }),
+    body: new URLSearchParams({ csrf: settingsCsrf, claim: 'on', report: 'on', review: 'on', 'review-reply': 'on', release: 'on' }),
   });
   assert.equal(response.status, 303);
 
-  const sender = cookieJar();
-  await login(sender, 'admin-code');
+  const sender = cookieJar();  await login(sender, 'admin-code');
   response = await requestAs(sender, '/packages/notify-decision-pkg', { headers: BROWSER });
   const senderCsrf = csrfFrom(await response.text());
   response = await requestAs(sender, '/packages/notify-decision-pkg/contact', {
@@ -1711,7 +1711,7 @@ test('community members message maintainers, with limits, mutes, and abuse repor
   const restoreCsrf = csrfFrom(await response.text());
   response = await requestAs(maintainer, '/account/notify-kinds', {
     method: 'POST',
-    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on' }),
+    body: new URLSearchParams({ csrf: restoreCsrf, claim: 'on', report: 'on', review: 'on', support: 'on', 'review-reply': 'on', release: 'on' }),
   });
   assert.equal(response.status, 303);
 });

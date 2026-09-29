@@ -19,8 +19,8 @@ function tempPath() {
 test('accounts default every structured notification kind to on', () => {
   const store = new AccountStore({ path: tempPath() });
   const account = store.upsert({ id: '42', login: 'alice' });
-  assert.deepEqual(account.notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true });
-  assert.deepEqual(store.get('42').notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true });
+  assert.deepEqual(account.notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
+  assert.deepEqual(store.get('42').notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
 });
 
 test('setNotifyKinds stores only the allowlist and survives a reload', () => {
@@ -28,10 +28,10 @@ test('setNotifyKinds stores only the allowlist and survives a reload', () => {
   const store = new AccountStore({ path: file });
   store.upsert({ id: '42', login: 'alice' });
   const saved = store.setNotifyKinds('42', { claim: true, report: false, admin: false });
-  assert.deepEqual(saved, { claim: true, report: false, review: true, support: true, 'review-reply': true });
+  assert.deepEqual(saved, { claim: true, report: false, review: true, support: true, 'review-reply': true, release: true });
 
   const reloaded = new AccountStore({ path: file });
-  assert.deepEqual(reloaded.get('42').notifyKinds, { claim: true, report: false, review: true, support: true, 'review-reply': true });
+  assert.deepEqual(reloaded.get('42').notifyKinds, { claim: true, report: false, review: true, support: true, 'review-reply': true, release: true });
   assert.throws(() => reloaded.setNotifyKinds('99', {}), /account not found/);
 });
 
@@ -45,7 +45,7 @@ test('accounts written before A2 load with every kind on', () => {
     },
   }));
   const store = new AccountStore({ path: file });
-  assert.deepEqual(store.get('7').notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true });
+  assert.deepEqual(store.get('7').notifyKinds, { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
   // D7: an address written before the gate is unverified and never mails.
   assert.equal(store.isEmailVerified('7'), false);
   assert.equal(store.get('7').notifyEmailVerifiedAt, '');
@@ -131,17 +131,17 @@ test('an expired verification token is refused and cleared', () => {
 test('upsert preserves stored prefs and normalization ignores junk', () => {
   const store = new AccountStore({ path: tempPath() });
   store.upsert({ id: '42', login: 'alice' });
-  store.setNotifyKinds('42', { claim: false, report: true, review: false, support: false, 'review-reply': true });
+  store.setNotifyKinds('42', { claim: false, report: true, review: false, support: false, 'review-reply': true, release: true });
   const again = store.upsert({ id: '42', login: 'alice-renamed' });
-  assert.deepEqual(again.notifyKinds, { claim: false, report: true, review: false, support: false, 'review-reply': true });
+  assert.deepEqual(again.notifyKinds, { claim: false, report: true, review: false, support: false, 'review-reply': true, release: true });
 
   // Only an explicit `false` mutes a kind; malformed input defaults to on.
-  assert.deepEqual(normalizeNotifyKinds(null), { claim: true, report: true, review: true, support: true, 'review-reply': true });
-  assert.deepEqual(normalizeNotifyKinds('yes'), { claim: true, report: true, review: true, support: true, 'review-reply': true });
-  assert.deepEqual(normalizeNotifyKinds(['claim']), { claim: true, report: true, review: true, support: true, 'review-reply': true });
+  assert.deepEqual(normalizeNotifyKinds(null), { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
+  assert.deepEqual(normalizeNotifyKinds('yes'), { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
+  assert.deepEqual(normalizeNotifyKinds(['claim']), { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true });
   assert.deepEqual(
     normalizeNotifyKinds({ claim: 0, report: 'on', review: [] }),
-    { claim: true, report: true, review: true, support: true, 'review-reply': true },
+    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true },
   );
 });
 

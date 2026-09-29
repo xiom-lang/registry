@@ -275,6 +275,25 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '012-package-watches',
+    up(db) {
+      // A5 (SESSION.md 21): follow a package. Watches drive the signed-in
+      // account feed and an in-app notification for new releases (kind
+      // `release`, mutable per account); the count is public on the package
+      // page. A row exists only after an account watches something.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS package_watches (
+          github_id TEXT NOT NULL,
+          login TEXT NOT NULL,
+          package TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (github_id, package)
+        );
+        CREATE INDEX IF NOT EXISTS package_watches_package ON package_watches (package);
+      `);
+    },
+  },
 ];
 
 class Database {

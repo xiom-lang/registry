@@ -1436,3 +1436,36 @@ textarea:focus-visible {
   .contributor-row { align-items: flex-start; }
   .contributor-breakdown { flex-basis: 100%; order: 5; }
 }
+
+/* ---------- Activity feeds + watching (A5) ---------- */
+
+.watch-box {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin: var(--space-md) 0;
+}
+
+.activity-list {
+  display: grid;
+  list-style: none;
+  padding: 0;
+}
+.activity-row {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-sm);
+  padding: 8px 2px;
+}
+.activity-type { flex: 0 0 auto; }
+.activity-detail { flex: 1 1 60%; min-width: 0; }
+.activity-excerpt { color: var(--muted); display: block; overflow-wrap: anywhere; }
+.activity-when { margin-left: auto; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .activity-detail { flex-basis: 100%; order: 2; }
+  .activity-when { margin-left: 0; order: 3; }
+}

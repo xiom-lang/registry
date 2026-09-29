@@ -11,6 +11,7 @@
 const { escapeHtml, formatWhen, shortId } = require('./format');
 const { layout } = require('./layout');
 const { sponsorBadge } = require('./profile');
+const { activityList } = require('./activity');
 
 const STATUS_LABELS = {
   pending: 'pending review',
@@ -480,6 +481,7 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('review', 'Package review decisions')}
       ${kindRow('support', 'Messages from the community')}
       ${kindRow('review-reply', 'Replies to your reviews')}
+      ${kindRow('release', 'New releases of packages you watch')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
     <h3 id="sponsors" class="account-subhead">GitHub Sponsors badge</h3>
@@ -528,12 +530,41 @@ ${accountBanner({ account, status, notice, error })}
   return layout({ title: 'Settings', body, nav });
 }
 
+/**
+ * Signed-in account feed (A5): the merged public activity trail of every
+ * watched package, newest first, with the watch list and an empty state that
+ * points at discovery. Rendering only; the data comes from
+ * `watchedFeed()` in src/activity.js.
+ */
+function accountFeedPage({ account, entries = [], watches = [], nav = '', notice = '' }) {
+  const list = entries.length === 0
+    ? `<div class="empty">Nothing yet. <a href="/packages">Browse packages</a> and press
+       <strong>Watch package</strong> to follow releases, reviews, and decisions here.</div>`
+    : activityList(entries, { showPackage: true, empty: 'Nothing yet.' });
+  const watchChips = watches.length === 0
+    ? ''
+    : `<p class="pkg-meta">Watching: ${watches
+      .map((name) => `<a class="chip" href="/packages/${encodeURIComponent(name)}#watch">${escapeHtml(name)}</a>`)
+      .join(' ')}</p>`;
+  const body = `<section class="hero">
+  <h1>Feed</h1>
+  <p>Activity from the packages you watch: new releases, reviews, maintainer
+     replies, and reviewer decisions. Watching never changes what you can
+     publish, and the same trail is public on each package page.</p>
+</section>
+${accountBanner({ account, status: 'active', notice, error: '' })}
+${watchChips}
+${list}`;
+  return layout({ title: 'Feed', body, nav });
+}
+
 module.exports = {
   loginPage,
   accountOverviewPage,
   accountRequestsPage,
   accountNotificationsPage,
   accountSettingsPage,
+  accountFeedPage,
   requestForm,
   requestTarget,
   kindLabel,

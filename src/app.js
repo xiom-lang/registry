@@ -83,12 +83,15 @@ const {
   CONTRIBUTORS_LIMIT,
 } = require('./contributors');
 const { profilePage, contributorsPage } = require('./ui/profile');
+const { WatchStore } = require('./watches');
+const { packageActivity, watchedFeed } = require('./activity');
 const {
   loginPage,
   accountOverviewPage,
   accountRequestsPage,
   accountNotificationsPage,
   accountSettingsPage,
+  accountFeedPage,
 } = require('./ui/account');
 const {
   adminDashboardPage,
@@ -282,6 +285,8 @@ function createApp(config = loadConfig()) {
   const configReviewerLogins = new Set(config.oauth.reviewerLogins.map((login) => String(login).toLowerCase()));
   // A4: the opt-in Sponsors badge state and the profile/board queries.
   const contributors = new ContributorStore({ db });
+  // A5: package watches (account feed + release notices).
+  const watches = new WatchStore({ db });
 
   // Audited display-stage overrides (SESSION.md 21.4): generated from the
   // publisher repo's STATUS.json files at a pinned commit and reviewed as a
@@ -466,6 +471,7 @@ function createApp(config = loadConfig()) {
       : '';
     const panel = [
       '<a href="/account">Overview</a>',
+      '<a href="/account/feed">Feed</a>',
       '<a href="/account/requests">Requests</a>',
       '<a href="/account/notifications">Notifications</a>',
       '<a href="/account/settings">Settings</a>',
@@ -617,6 +623,31 @@ function createApp(config = loadConfig()) {
   }
 
   /**
+   * A5: every watcher of a package learns about a new version. Best-effort
+   * and bounded (watchersOf caps at 10k recipients); the per-account
+   * `release` kind can be muted from settings. Bulk `/sync` imports
+   * deliberately do not call this -- backfills are not releases.
+   */
+  function notifyWatchersOfRelease(result) {
+    try {
+      const stored = indexStore.getPackage(result.name) || {};
+      const body = String(stored.description || '').slice(0, 200);
+      for (const watcher of watches.watchersOf(result.name)) {
+        notifyAccount({
+          account: watcher,
+          kind: 'release',
+          subject: `New release: ${result.name} ${result.version}`,
+          body,
+          link: `/packages/${encodeURIComponent(result.name)}`,
+          ref: `${result.name}@${result.version}`,
+        });
+      }
+    } catch (err) {
+      console.warn(`release notification for ${result.name} failed: ${err.message}`);
+    }
+  }
+
+  /**
    * Notify every maintainer of a package who has a registry account after a
    * moderation decision. Best-effort, like every A2 notice.
    */
@@ -760,6 +791,23 @@ function createApp(config = loadConfig()) {
       viewer: account,
       reviewer: isReviewer(account),
     });
+  }
+
+  /** View-model for the watch control on a package page (A5). */
+  function packageWatchContext(req, name) {
+    const account = accountOf(req);
+    const notice = typeof req.query.watched === 'string'
+      ? (req.query.watched === '1'
+        ? 'You are watching this package; new releases notify you.'
+        : 'Stopped watching this package.')
+      : '';
+    return {
+      signedIn: Boolean(account),
+      watching: account ? watches.isWatching(account.githubId, name) : false,
+      watchers: watches.countFor(name),
+      csrf: req.session ? req.session.csrf : '',
+      notice,
+    };
   }
 
   /** Double-submit CSRF check against the session's per-session token. */
@@ -1218,6 +1266,13 @@ function createApp(config = loadConfig()) {
           review: packageReviewContext(req, pkg.name),
           ownership: packageOwnershipContext(req, pkg.name),
           support: packageSupportContext(req, pkg.name),
+          watch: packageWatchContext(req, pkg.name),
+          activity: packageActivity({
+            name: pkg.name,
+            pkg: view.packages[name] || pkg,
+            reviews,
+            ownership,
+          }),
         }));
     }
     res.json(pkg);
@@ -1379,6 +1434,7 @@ function createApp(config = loadConfig()) {
       }
       const account = accounts.upsert(profile);
       admin.touch({ githubId: account.githubId, login: account.login });
+      watches.rename(account.githubId, account.login);
       const id = sessions.create({
         account: { githubId: account.githubId, login: account.login },
       });
@@ -1464,6 +1520,17 @@ function createApp(config = loadConfig()) {
       ...context,
       notifications: notifications.listFor(context.account.githubId, { limit: 50 }),
       notice,
+    }));
+  });
+
+  // Signed-in feed (A5): the merged public activity of watched packages.
+  app.get('/account/feed', generalLimit, requireAccount, (req, res) => {
+    const context = accountContext(req);
+    const names = watches.packagesFor(context.account.githubId);
+    res.type('html').send(accountFeedPage({
+      ...context,
+      entries: watchedFeed({ packages: names, index: publicIndex(), reviews, ownership }),
+      watches: names,
     }));
   });
 
@@ -1652,10 +1719,10 @@ function createApp(config = loadConfig()) {
     });
   });
 
-  // Per-kind notification preferences (SESSION.md 22.4 A2). Checkboxes: a
-  // present field means on, an absent one means muted; the store re-applies
-  // the allowlist so only claim/report/review are stored. In-app rows and
-  // emails for a muted kind are both suppressed.
+  // Per-kind notification preferences (SESSION.md 22.4 A2, extended by A5).
+  // Checkboxes: a present field means on, an absent one means muted; the
+  // store re-applies the allowlist so only known kinds are stored. In-app
+  // rows and emails for a muted kind are both suppressed.
   app.post(
     '/account/notify-kinds',
     writeLimit,
@@ -1669,6 +1736,8 @@ function createApp(config = loadConfig()) {
           report: Boolean(req.body.report),
           review: Boolean(req.body.review),
           support: Boolean(req.body.support),
+          'review-reply': Boolean(req.body['review-reply']),
+          release: Boolean(req.body.release),
         });
         return res.redirect(303, '/account/settings?prefs=1');
       } catch (err) {
@@ -2496,6 +2565,49 @@ function createApp(config = loadConfig()) {
     },
   );
 
+  // Follow/unfollow a package (A5). Toggle semantics: the same action flips
+  // the state, so one button is enough. The count is public; the watch itself
+  // only powers the personal feed and release notices.
+  app.post(
+    '/packages/:name/watch',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireWriteAccess,
+    requireCsrf,
+    (req, res, next) => {
+      const name = String(req.params.name).toLowerCase();
+      const back = `/packages/${encodeURIComponent(name)}`;
+      try {
+        if (!indexStore.getPackage(name)) {
+          throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        const account = accounts.get(accountOf(req).githubId) || accountOf(req);
+        if (watches.isWatching(account.githubId, name)) {
+          watches.unwatch(account.githubId, name);
+          console.log(`Unwatch: ${account.login} stopped following ${name}`);
+          return res.redirect(303, `${back}?watched=0#watch`);
+        }
+        try {
+          watches.watch(account.githubId, account.login, name);
+        } catch (err) {
+          if (err && err.code === 'watch_limit') {
+            throw new BadRequestError(err.message, 'watch_limit');
+          }
+          throw err;
+        }
+        console.log(`Watch: ${account.login} follows ${name}`);
+        return res.redirect(303, `${back}?watched=1#watch`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `${back}#watch`);
+        }
+        return next(err);
+      }
+    },
+  );
+
   // Maintainer claim: identity for display only; a reviewer verifies or
   // rejects it from the review queue. Never grants publish power.
   app.post(
@@ -2714,6 +2826,7 @@ function createApp(config = loadConfig()) {
   app.post('/publish', writeLimit, authenticated, handleUpload, (req, res, next) => {
     try {
       const result = publish(req, { config, indexStore, artifacts, token: req.token });
+      notifyWatchersOfRelease(result);
       res.status(201).json({
         ok: true,
         package: result.name,
@@ -2879,6 +2992,7 @@ function createApp(config = loadConfig()) {
     ownership,
     support,
     contributors,
+    watches,
     sessions,
   };
   return app;
