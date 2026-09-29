@@ -1965,7 +1965,9 @@ email, community->maintainer contact, review votes/replies) is recorded in
 **Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
 contributor profiles + Sponsors badge + board, C3 offline export bundle; see
 24.2) and is **live on staging and production** (ops, 2026-09-28 23:14/23:18Z;
-registry-lane verification green, see 24.1).
+registry-lane verification green, see 24.1). **A5 feeds/following landed on
+`main` after the release** (`bbe42d0`, CHANGELOG Unreleased) and awaits the
+next release/deploy.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -1975,7 +1977,7 @@ registry-lane verification green, see 24.1).
 | A2 | **Notification coverage** | 18.1: review decisions, ratings, **and ownership-claim decisions** (claimants currently learn the outcome only by revisiting the page) as notification rows; verified addresses via the `user:email` scope; per-kind mute. **DONE 2026-09-27 (`616a800` store, `2ff1e43` events/UI) -- see 23; owner-verified on staging.** | S |
 | A3 | **SQLite primary store** | 18.2: move ratings/reviews first (fastest growing), then requests/accounts/publishers behind their existing interfaces. **DONE 2026-09-27 (phases 1-3c):** ratings, reports/decisions, publishers, requests, and accounts all live in SQLite with per-table import + rollback mirrors (`591067f`, `db52657`, `1eeee50`, `1b5e647`, accounts commit this session). The JSON files are mirrors only; `/index.json` untouched. A4 (profiles/feeds) and future pagination/analytics query the new tables. | M (done) |
 | A4 | **Contributor profiles + Sponsors badges** | 18.3: per-account page (packages, reviews, audit events), opt-in GitHub Sponsors badge from the public API (cached), top-contributors board with anti-abuse caps. **DONE 2026-09-29 (`67a582f`, 2.5.0) -- see 24.2:** `/account/<login>` public profile (maintained packages, written reviews/ratings, maintainer replies, decision history), opt-in cached `hasSponsorsListing` badge (`GITHUB_SPONSORS_TOKEN`, migration 011), `/contributors` board scored with per-category caps; author/maintainer/decision links now point at profiles. | M (done) |
-| A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. | L |
+| A5 | **Feeds and following** | 18.4: activity per maintainer/package, watch a package. Only after A1-A4 are stable. **DONE 2026-09-29 (`bbe42d0`, post-2.5.0):** `package_watches` (migration 012) with per-account cap, public watcher count + watch toggle on package pages, per-package Activity trail (releases, reviews, replies, decisions, verified claims) from public data, `/account/feed` merging watched packages, and `release` notices to watchers on `/publish` (mutable kind; `/sync` excluded). No publish powers, no protocol change. | L (done) |
 | A6 | **Sponsorship** | 15.4: sponsorships are a site-level concern; registry shows the badge, handles no money. **Badge shipped in A4 (`67a582f`); no-payment boundary documented in OFFLINE-style copy and settings.** | S (done) |
 | A7 | **Community -> maintainer contact** | **Agreed with owner 2026-09-27** (21.9.2): a package-scoped "contact maintainers / support" message, separate from the admin-only report flow; new structured kind `support`, signed-in accounts only, rate-limited per account/package, per-kind mute, in-app + optional email, abuse-reportable; maintainer reply deferred to A9. So support reaches maintainers directly instead of funneling 10k users through admins. **DONE 2026-09-27 (`710da52`) -- see 23.2/23.4.** | M |
 | A8 | **Repository / issue-tracker links** | **Agreed with owner 2026-09-27** (21.9.4): render Repository + "Open an issue" from the published-version provenance (`github.com/owner/repo` only), so the community has a direct bug/feature path; no link when provenance has no repository. Pairs with A7 but stands alone. **DONE 2026-09-27 (`7d7e853`).** | S |
@@ -2636,8 +2638,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `cb0b447` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; compose sponsors fix `3c5d76b`; deploy note `1c6ce16`; bundle docs copy `cb0b447`); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **306/306**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `bbe42d0` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; compose sponsors fix `3c5d76b`; bundle docs copy `cb0b447`; deploy note `9d770b0`); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **312/312**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
@@ -2671,6 +2673,11 @@ now warns when the manifest declares no stage or marks a pre-release version
   **Delivered to the playground 2026-09-29** (latest-only; location and
   pinned hashes in 24.1; `cb0b447` also ships `OFFLINE.md` inside bundles).
 - Release commit on top: version `2.5.0`, CHANGELOG section, this handoff.
+- `bbe42d0` **A5 -- feeds and following** (post-2.5.0, CHANGELOG Unreleased):
+  migration 012 `package_watches`, watch toggle + public count, package
+  Activity trail, `/account/feed`, and `release` notices to watchers on
+  publish; per-account/per-package caps; the notify-kinds route now persists
+  every structured kind (review-reply included). 312/312 unit; mobile pass.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2689,7 +2696,7 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **Roadmap next** (section 21 order): A5 feeds/following; C1 download stats
+4. **Roadmap next** (section 21 order): C1 download stats
    (also unlocks the most-downloaded sort; the A10 rating sort is now
    unblocked since A4 landed); C2 provenance attestation link; C5 index digest
    (discuss first); C4 object storage/sharding only past a few thousand
@@ -2704,23 +2711,23 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 3c5d76b (2.5.0 ddd4b42;
-features 9b10975 A10, 67a582f A4, 62780a3 C3; compose sponsors fix 3c5d76b),
-clean, 306/306 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at bbe42d0 (2.5.0 ddd4b42;
+features 9b10975 A10, 67a582f A4, 62780a3 C3; A5 feeds bbe42d0; compose
+sponsors fix 3c5d76b), clean, 312/312 unit and 20/20 e2e green.
 
-State in one line: 2.5.0 (A10 discovery facets, A4 contributor profiles +
-Sponsors badge + board, C3 offline export bundle) is live on staging and
-production and verified; the xiom-std@0.62.0 canary is DONE on both
-instances (see 24.1) and no relay is open.
+State in one line: 2.5.0 is live on staging and production and verified; A5
+feeds/following landed after the release and waits for the next release
+window; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 306) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 312) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.5.0, email enabled).
 2. C3 delivered to the playground (2026-09-29): latest-only production bundle
    at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
-   the client lane wires the offline example and sandboxed test. Next registry
-   feature from the section 21 order: A5 feeds/following, then C1 download
-   stats (unblocks the most-downloaded sort; A10's rating sort is unblocked).
+   the client lane wires the offline example and sandboxed test. A5
+   feeds/following is DONE (`bbe42d0`); the next registry feature from the
+   section 21 order is C1 download stats (unblocks the most-downloaded sort;
+   A10's rating sort is unblocked).
 3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b).
 
