@@ -1962,13 +1962,12 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
-**Status 2026-09-29:** 2.6.0 is live on staging and production (ops; both
-recreated 17:48Z with the Sponsors token, health 2.6.0 + email enabled).
-**2.7.0 is cut on `main`** (C2 build attestation links `2681ad6`, B3
-`/validate` `33c3d56`, B4/B5 grant changes `9f364d4`, C5 index digest
-`10d7217`, Instagram footer `b04a955`; CHANGELOG promoted) and awaits the
-ops deploy, staging first. All registry-side roadmap items are done; the
-remaining Track B work is client-lane.
+**Status 2026-09-29:** **2.7.0 is live on staging and production** (C2
+attestation links, B3 `/validate`, B4/B5 grant changes, C5 index digest,
+Instagram footer, contributor/sponsor discoverability; verified from the
+registry lane: health 2.7.0 + email enabled, digest byte-exact on both,
+production digest signed `f7:6f:5f:f5:15:38:ce:75`). All registry-side
+roadmap items are done; the remaining Track B work is client-lane.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2641,7 +2640,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 |---|---|
 | Repo | `main` at the 2.7.0 release commit (on top of `b04a955`; 2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5, `b04a955` Instagram footer); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.6.0 on staging and production** (ops, 2026-09-29; both recreated 17:48Z, health 2.6.0 + email enabled, migrations through 013, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in, Downloads row + `?stats=1`, `sort=downloads`. Post-2.6.0 on `main` awaiting the next release: C2 `2681ad6`, B3 `/validate` `33c3d56`, B4/B5 `9f364d4`, C5 `10d7217` |
+| Deployed | **2.7.0 on staging and production** (ops, 2026-09-29; health 2.7.0 + email enabled on both, no migrations or env needed, live-check complete, `/index-digest.json` byte-exact against `/index.json` independently on both). Production digest is **signed** (ed25519, fp `f7:6f:5f:f5:15:38:ce:75`); staging is unsigned. Post-2.7.0 `main` is `18d1763` |
+| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75` -- hand to the client lane for pinning. Staging unsigned |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). **Confirmed configured on both hosts 2026-09-29 (ops: token present in both containers after recreate; health 2.6.0 + email enabled 17:48Z), so live checks are enabled** |
@@ -2750,16 +2750,13 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **2.7.0 is cut (owner-ordered, 2026-09-29) and awaits the ops deploy:**
-   hand ops the deploy -- staging first, then production. Contents: C2 build
-   attestation links, the B3 registry-side `/validate` preflight, B4/B5
-   owner-facing grant changes, the C5 index digest sidecar, and the Instagram
-   footer. No new migrations (012/013 already applied); nothing new to
-   configure. Staging walkthrough: a grant change on `/account/requests`, a
-   `/validate` preflight with a real token, `/index-digest.json` matching the
-   served `/index.json` hash, and the footer icons. Optional C5 follow-up:
-   generate an index key with `node scripts/index-key.js`, set
-   `INDEX_SIGNING_KEY`, recreate to sign the digest.
+4. **2.7.0 deploy: DONE (ops, 2026-09-29).** Live on both environments with
+   health 2.7.0 + email enabled, no migrations or env needed, `/index-digest.json`
+   byte-exact against `/index.json` on both (independently verified), live-check
+   complete. Ops also set the optional C5 key: production's digest is signed
+   (ed25519, public key `f76f5ff5...9673`, fp `f7:6f:5f:f5:15:38:ce:75`); staging
+   is unsigned. The public key goes to the client lane for pinning. Remaining
+   optional: sign staging too, or leave it unsigned (no dependency).
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
@@ -2784,31 +2781,28 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.7.0 release commit
-(features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
-480531b+ff6ae2b nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4
-B4/B5, 10d7217 C5, b04a955 Instagram footer), clean, 335/335 unit and 20/20
-e2e green.
+notes. This is E:\xiom-lang\registry on main at 18d1763 (2.7.0 ba26db1 plus
+the profile/UI follow-ups e4c9c19 and 5640296/18d1763; features 9b10975
+A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1, 480531b+ff6ae2b
+nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4 B4/B5, 10d7217 C5),
+clean, 335/335 unit and 20/20 e2e green.
 
-State in one line: 2.7.0 (C2 attestation links, B3 /validate, B4/B5 grant
-changes, C5 index digest, Instagram footer) is cut on main and awaiting ops;
-staging and production run 2.6.0, verified.
+State in one line: 2.7.0 is live on staging and production and verified;
+production's index digest is signed (fp f7:6f:5f:f5:15:38:ce:75); all
+registry-side roadmap items are done and no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 335) and npm run test:e2e (expect
-   20); /health on staging and production (2.6.0 until ops deploys 2.7.0,
-   then 2.7.0; email enabled either way).
-2. If 2.7.0 is not deployed, hand ops the deploy: staging first, then
-   production (no new migrations; walk a grant change on /account/requests, a
-   /validate preflight, /index-digest.json against the served /index.json
-   hash, and the footer).
-3. Optional ops follow-ups: the Sponsors token is configured on both hosts
-   (2026-09-29). Still optional: generate a C5 index key (`node
-   scripts/index-key.js`), set `INDEX_SIGNING_KEY`, recreate to sign the
-   digest.
-4. Packages' README staleness is parked with the packages lane (chunked
-   0.1.1 republishes; ops opens the publish-rate window per batch); C3 is
-   delivered to the playground and their side continues.
+   20); /health on staging and production (expect 2.7.0, email enabled);
+   /index-digest.json byte-exact against /index.json on both.
+2. Client-lane handoff: pin the index public key
+   f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673
+   (fp f7:6f:5f:f5:15:38:ce:75) and use POST /validate for `--dry-run`.
+3. Optional ops follow-ups: sign the staging digest too (parity), or leave
+   it unsigned. Nothing required.
+4. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
+   ops opens the publish-rate window per batch); C3 is delivered to the
+   playground and their side continues. No registry code work remains.
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
