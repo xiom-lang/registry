@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-09-29
+
 ### Interface
 
 - **Footer social row**: added Instagram (`@xiom.language`) to match the

@@ -1962,14 +1962,13 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
-**Status 2026-09-29:** 2.6.0 (A10, A4, C3, A5 feeds, C1 stats, nav/cache
-fixes) is **live on staging and production** (ops, 16:38Z: boots 2.6.0,
-migrations through 013, new tables at 0, index sha unchanged, live-check
-green). Post-release on `main`, awaiting the next release window: **C2 build
-attestation links** (`2681ad6`), the **B3 registry-side `/validate`
-preflight** (`33c3d56`), **B4/B5 owner-facing grant changes** (`9f364d4`),
-and the **C5 index digest sidecar** (`10d7217`). All registry-side roadmap
-items are now done; Track B's remainder is client-lane work.
+**Status 2026-09-29:** 2.6.0 is live on staging and production (ops; both
+recreated 17:48Z with the Sponsors token, health 2.6.0 + email enabled).
+**2.7.0 is cut on `main`** (C2 build attestation links `2681ad6`, B3
+`/validate` `33c3d56`, B4/B5 grant changes `9f364d4`, C5 index digest
+`10d7217`, Instagram footer `b04a955`; CHANGELOG promoted) and awaits the
+ops deploy, staging first. All registry-side roadmap items are done; the
+remaining Track B work is client-lane.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2640,7 +2639,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `10d7217` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5); clean; Registry CI + CodeQL green |
+| Repo | `main` at the 2.7.0 release commit (on top of `b04a955`; 2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5, `b04a955` Instagram footer); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.6.0 on staging and production** (ops, 2026-09-29; both recreated 17:48Z, health 2.6.0 + email enabled, migrations through 013, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in, Downloads row + `?stats=1`, `sort=downloads`. Post-2.6.0 on `main` awaiting the next release: C2 `2681ad6`, B3 `/validate` `33c3d56`, B4/B5 `9f364d4`, C5 `10d7217` |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
@@ -2720,13 +2719,18 @@ now warns when the manifest declares no stage or marks a pre-release version
   now served byte-for-byte from disk (empty index materialized at boot), so
   `sha256sum data/index.json` equals the digest; `scripts/index-key.js`
   generates keys. 335/335 unit; e2e re-run.
+- `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
+  registry footer matches the updated xiom-lang.org social row.
+- Release commit on top of `b04a955`: version `2.7.0`, CHANGELOG promotion
+  ([Unreleased] -> [2.7.0]), this handoff.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
 
 ### 24.3 Next actions, in order
 
-1. **2.5.0 deploy: DONE** (ops, staging 23:14Z, production 23:18Z). Registry-lane verification passed: `/health` 2.5.0 + `email: enabled` on both; live-check green on both (every latest artifact digest verified); all 384 exported version entries byte-identical in the live production index (13 new packages since the export = normal publish drift); facets/profile/board surfaces respond; prerelease facet confirmed live on staging (`xiom.canary-oidc` hidden by default, `prerelease=only` returns it). Ops-side pastes still to record: migrations end `011`, `contributor_sponsors` 0 rows, publishers 2, `PUBLISH_RATE_MAX=20`, `TRUST_PROXY=1`. Optional next: set `GITHUB_SPONSORS_TOKEN` and recreate to enable live badge checks (`3c5d76b` declares it).
+1. **Deploys 2.5.0 and 2.6.0: DONE and verified** (see 24.1; ops pastes
+   green, migrations through 013, live-check green on both).
 2. **stdlib canary: DONE** (see 24.1). Staging `36501800456` and production
    `36495200014` both published `xiom-std@0.62.0`; artifact digest, size,
    ed25519 signature, and the official/signed badge re-verified independently
@@ -2738,26 +2742,21 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **Roadmap state: all registry-side items are done.** C2 (`2681ad6`), C5
-   (`10d7217`), B3's registry half (`33c3d56`), and B4/B5 (`9f364d4`) are on
-   `main` awaiting the next release window. Remaining roadmap work is not
-   ours: Track B's packaging guard, `pkg yank`, and the client `--dry-run`
-   flag belong to the client lane; C4 (object storage/sharding) only matters
-   past a few thousand packages. When the owner orders the next cut: bump
-   the version, promote [Unreleased], and hand ops the deploy (staging
-   first). Optional C5 follow-up for ops: generate an index key with
-   `node scripts/index-key.js`, set `INDEX_SIGNING_KEY`, recreate.
+4. **2.7.0 is cut (owner-ordered, 2026-09-29) and awaits the ops deploy:**
+   hand ops the deploy -- staging first, then production. Contents: C2 build
+   attestation links, the B3 registry-side `/validate` preflight, B4/B5
+   owner-facing grant changes, the C5 index digest sidecar, and the Instagram
+   footer. No new migrations (012/013 already applied); nothing new to
+   configure. Staging walkthrough: a grant change on `/account/requests`, a
+   `/validate` preflight with a real token, `/index-digest.json` matching the
+   served `/index.json` hash, and the footer icons. Optional C5 follow-up:
+   generate an index key with `node scripts/index-key.js`, set
+   `INDEX_SIGNING_KEY`, recreate to sign the digest.
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
-6. **2.6.0 deploy (owner-ordered, cut 2026-09-29):** hand ops the deploy --
-   staging first (walk the header sign-in button, `/account/feed`, a package
-   page's Downloads row and Activity trail, `?sort=downloads`), then
-   production. Migrations 012 (`package_watches`) and 013
-   (`download_counts`/`download_markers`) apply on boot; nothing new to
-   configure. Production is on 2.5.0 until then, so the header fixes are not
-   visible there yet. **DONE: live 16:38Z; boots 2.6.0, migrations through
-   013, new tables at 0, index sha unchanged, live-check green on both.**
+6. **2.6.0 deploy: DONE** (live 2026-09-29 16:38Z; both services recreated
+   17:48Z with the Sponsors token; health 2.6.0 + email enabled).
 7. **README staleness ruling (for the packages lane, 2026-09-29): no
    version-less refresh.** Package pages render the README from the stored
    immutable artifact (`src/readme.js`: "from the stored artifact, never from
@@ -2777,24 +2776,26 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 10d7217 (2.6.0 73e7db5;
-features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
+notes. This is E:\xiom-lang\registry on main at the 2.7.0 release commit
+(features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
 480531b+ff6ae2b nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4
-B4/B5, 10d7217 C5), clean, 335/335 unit and 20/20 e2e green.
+B4/B5, 10d7217 C5, b04a955 Instagram footer), clean, 335/335 unit and 20/20
+e2e green.
 
-State in one line: 2.6.0 is live on staging and production and verified; all
-registry-side roadmap items (C2, C5, B3 registry half, B4/B5) are on main
-awaiting the next release cut; no relay is open.
+State in one line: 2.7.0 (C2 attestation links, B3 /validate, B4/B5 grant
+changes, C5 index digest, Instagram footer) is cut on main and awaiting ops;
+staging and production run 2.6.0, verified.
 
 First actions:
 1. Verify state: git pull; npm test (expect 335) and npm run test:e2e (expect
-   20); /health on staging and production (expect 2.6.0, email enabled).
-2. If the owner has ordered the next release: bump the version, promote the
-   CHANGELOG [Unreleased] section, update this handoff, push, watch CI, then
-   hand ops the deploy (staging first; no new migrations).
+   20); /health on staging and production (2.6.0 until ops deploys 2.7.0,
+   then 2.7.0; email enabled either way).
+2. If 2.7.0 is not deployed, hand ops the deploy: staging first, then
+   production (no new migrations; walk a grant change on /account/requests, a
+   /validate preflight, /index-digest.json against the served /index.json
+   hash, and the footer).
 3. Optional ops follow-ups: the Sponsors token is configured on both hosts
-   (2026-09-29), so badge checks and attestation-discovery rate limits are
-   live. Still optional: generate a C5 index key (`node
+   (2026-09-29). Still optional: generate a C5 index key (`node
    scripts/index-key.js`), set `INDEX_SIGNING_KEY`, recreate to sign the
    digest.
 4. Packages' README staleness is parked with the packages lane (chunked
