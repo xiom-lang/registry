@@ -1967,7 +1967,8 @@ attestation links, B3 `/validate`, B4/B5 grant changes, C5 index digest,
 Instagram footer, contributor/sponsor discoverability; verified from the
 registry lane: health 2.7.0 + email enabled, digest byte-exact on both,
 production digest signed `f7:6f:5f:f5:15:38:ce:75`). All registry-side
-roadmap items are done; the remaining Track B work is client-lane.
+roadmap items are done; the remaining Track B work is compiler-lane
+(`xiom pkg`).
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2291,7 +2292,7 @@ order.
 |---|---|---|---|
 | B1 | `xiom pkg publish` packaging guard | Ignore file / CI artifact filter so juniors cannot ship `target/`; pairs with the guide. | S |
 | B2 | `xiom pkg yank <pkg>@<ver>` | The guide currently curls the API; a subcommand makes withdrawal a first-class op. | S |
-| B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). **Registry side DONE 2026-09-29 (`33c3d56`, post-2.6.0):** `POST /validate` runs the exact publish checks (shared `preparePublish` pipeline) with no artifacts/index writes and the upload always discarded; same status codes/body as `/publish`, documented in PUBLISHING.md. Client `--dry-run` flag remains with the client lane. | M (registry half done) |
+| B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). **Registry side DONE 2026-09-29 (`33c3d56`, post-2.6.0):** `POST /validate` runs the exact publish checks (shared `preparePublish` pipeline) with no artifacts/index writes and the upload always discarded; same status codes/body as `/publish`, documented in PUBLISHING.md. The `--dry-run` flag remains with the compiler lane (`xiom pkg`). | M (registry half done) |
 | B4 | Trusted-publisher self-service | Owner-facing edit/revoke request for their own repo+workflow entries (ops still executes revocation); currently admin-only. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** "Your grants" on `/account/requests`; owner files `publisher-edit` / `publisher-revoke` requests carrying the target grant; admin one-click approve applies `PublisherStore.update` (in-place, provenance kept, clashes refused) or removes the entry immediately; ownership checked against the target record, one pending change per grant, full audit chain. | S (done) |
 | B5 | Token rotation self-service | Request rotation from `/account/requests`; fulfilment stays host-side. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** fulfilled token grants offer "Request rotation" (kind `token-rotation`, scopes copied); admin approval ends `approved` for host-side minting with a kind-aware notice. | S (done) |
 
@@ -2641,7 +2642,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 | Repo | `main` at the 2.7.0 release commit (on top of `b04a955`; 2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5, `b04a955` Instagram footer); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.7.0 on staging and production** (ops, 2026-09-29; health 2.7.0 + email enabled on both, no migrations or env needed, live-check complete, `/index-digest.json` byte-exact against `/index.json` independently on both). Production digest is **signed** (ed25519, fp `f7:6f:5f:f5:15:38:ce:75`); staging is unsigned. Post-2.7.0 `main` is `18d1763` |
-| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75` -- hand to the client lane for pinning. Staging unsigned |
+| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75` -- hand to the compiler lane (`xiom pkg`) for pinning once its 0.62.2 release is out. Staging unsigned |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). **Confirmed configured on both hosts 2026-09-29 (ops: token present in both containers after recreate; health 2.6.0 + email enabled 17:48Z), so live checks are enabled** |
@@ -2755,7 +2756,9 @@ now warns when the manifest declares no stage or marks a pre-release version
    byte-exact against `/index.json` on both (independently verified), live-check
    complete. Ops also set the optional C5 key: production's digest is signed
    (ed25519, public key `f76f5ff5...9673`, fp `f7:6f:5f:f5:15:38:ce:75`); staging
-   is unsigned. The public key goes to the client lane for pinning. Remaining
+   is unsigned. The public key goes to the compiler lane (`xiom pkg`) for
+   pinning; **do not touch the xiom repo while its 0.62.2 release is in
+   flight** (it has that lane's uncommitted release files). Remaining
    optional: sign staging too, or leave it unsigned (no dependency).
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
@@ -2795,7 +2798,8 @@ First actions:
 1. Verify state: git pull; npm test (expect 335) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.7.0, email enabled);
    /index-digest.json byte-exact against /index.json on both.
-2. Client-lane handoff: pin the index public key
+2. Compiler-lane handoff (`xiom pkg`, after 0.62.2 ships -- do not touch the
+   xiom repo while that release is in flight): pin the index public key
    f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673
    (fp f7:6f:5f:f5:15:38:ce:75) and use POST /validate for `--dry-run`.
 3. Optional ops follow-ups: sign the staging digest too (parity), or leave
