@@ -2636,13 +2636,13 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `3c5d76b` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3); clean; Registry CI + CodeQL green |
+| Repo | `main` at `cb0b447` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; compose sponsors fix `3c5d76b`; deploy note `1c6ce16`; bundle docs copy `cb0b447`); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **306/306**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
-| Offline bundle | Production export verified: 384 artifacts / 15,516,333 bytes, all sha256-checked and `--verify`-clean; regenerate with `npm run export-bundle -- --registry https://registry.xiom-lang.org --out <dir>` |
+| Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
 | stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014` |
 
 ### 24.2 Shipped in 2.5.0 (hashes)
@@ -2668,6 +2668,8 @@ now warns when the manifest declares no stage or marks a pre-release version
   sha256/signature/publicKey/source/generatedAt and the index digest; hashes
   verified while exporting (mismatch stops the run, no manifest written);
   `--latest-only`, resume, and offline `--verify`. Production run verified.
+  **Delivered to the playground 2026-09-29** (latest-only; location and
+  pinned hashes in 24.1; `cb0b447` also ships `OFFLINE.md` inside bundles).
 - Release commit on top: version `2.5.0`, CHANGELOG section, this handoff.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
@@ -2714,10 +2716,11 @@ instances (see 24.1) and no relay is open.
 First actions:
 1. Verify state: git pull; npm test (expect 306) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.5.0, email enabled).
-2. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
-   --latest-only, pin by sha256) and take the next feature from the section 21
-   order: A5 feeds/following, then C1 download stats (unblocks the
-   most-downloaded sort; A10's rating sort is now unblocked too).
+2. C3 delivered to the playground (2026-09-29): latest-only production bundle
+   at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
+   the client lane wires the offline example and sandboxed test. Next registry
+   feature from the section 21 order: A5 feeds/following, then C1 download
+   stats (unblocks the most-downloaded sort; A10's rating sort is unblocked).
 3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b).
 
