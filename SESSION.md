@@ -1966,8 +1966,9 @@ email, community->maintainer contact, review votes/replies) is recorded in
 fixes) is **live on staging and production** (ops, 16:38Z: boots 2.6.0,
 migrations through 013, new tables at 0, index sha unchanged, live-check
 green). Post-release on `main`, awaiting the next release window: **C2 build
-attestation links** (`2681ad6`) and the **B3 registry-side `/validate`
-preflight** (`33c3d56`).
+attestation links** (`2681ad6`), the **B3 registry-side `/validate`
+preflight** (`33c3d56`), and **B4/B5 owner-facing grant changes**
+(`9f364d4`).
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2292,8 +2293,8 @@ order.
 | B1 | `xiom pkg publish` packaging guard | Ignore file / CI artifact filter so juniors cannot ship `target/`; pairs with the guide. | S |
 | B2 | `xiom pkg yank <pkg>@<ver>` | The guide currently curls the API; a subcommand makes withdrawal a first-class op. | S |
 | B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). **Registry side DONE 2026-09-29 (`33c3d56`, post-2.6.0):** `POST /validate` runs the exact publish checks (shared `preparePublish` pipeline) with no artifacts/index writes and the upload always discarded; same status codes/body as `/publish`, documented in PUBLISHING.md. Client `--dry-run` flag remains with the client lane. | M (registry half done) |
-| B4 | Trusted-publisher self-service | Owner-facing edit/revoke request for their own repo+workflow entries (ops still executes revocation); currently admin-only. | S |
-| B5 | Token rotation self-service | Request rotation from `/account/requests`; fulfilment stays host-side. | S |
+| B4 | Trusted-publisher self-service | Owner-facing edit/revoke request for their own repo+workflow entries (ops still executes revocation); currently admin-only. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** "Your grants" on `/account/requests`; owner files `publisher-edit` / `publisher-revoke` requests carrying the target grant; admin one-click approve applies `PublisherStore.update` (in-place, provenance kept, clashes refused) or removes the entry immediately; ownership checked against the target record, one pending change per grant, full audit chain. | S (done) |
+| B5 | Token rotation self-service | Request rotation from `/account/requests`; fulfilment stays host-side. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** fulfilled token grants offer "Request rotation" (kind `token-rotation`, scopes copied); admin approval ends `approved` for host-side minting with a kind-aware notice. | S (done) |
 
 ### Track C -- protocol-adjacent platform (sections 6 and 10)
 
@@ -2638,8 +2639,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `33c3d56` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2 attestation links, `33c3d56` `/validate`); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **325/325**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `9f364d4` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **330/330**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.6.0 on staging and production** (ops, 2026-09-29 16:38Z; boots 2.6.0, migrations through 013, new tables at 0, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in href, Downloads row + `?stats=1`, `sort=downloads`. **C2 (`2681ad6`) is on `main` and awaits the next release** |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
@@ -2704,6 +2705,13 @@ now warns when the manifest declares no stage or marks a pre-release version
   write wrapper; the preflight returns the same status codes/body as
   `/publish` with no artifact, index, or upload residue. Documented in
   PUBLISHING.md; useful for the packages republish batches. 325/325 unit.
+- `9f364d4` **B4/B5 -- owner-facing grant changes** (post-2.6.0, CHANGELOG
+  Unreleased): `/account/requests` "Your grants" with publisher change /
+  revocation and token rotation requests; admin one-click execution (edit in
+  place with provenance kept, revoke immediately, rotation approved for
+  host-side minting). Ownership against the target record; one pending
+  change per grant; PUBLISHING.md documents the flow. 330/330 unit; mobile
+  pass at 390px.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2725,10 +2733,10 @@ now warns when the manifest declares no stage or marks a pre-release version
 4. **Roadmap next** (section 21 order): C5 index manifest digest
    (**discuss first** -- a signed digest of `/index.json` is a different
    trust claim from package signing); C4 object storage/sharding only past a
-   few thousand packages; Track B remaining: B1 packaging guard and B2
-   `pkg yank` (client lane), B3 client `--dry-run` flag (registry endpoint
-   done, `33c3d56`), B4 publisher self-service edit/revoke, B5 token
-   rotation self-service. C2 is done (`2681ad6`).
+   few thousand packages; Track B remaining: B1 packaging guard, B2
+   `pkg yank`, and B3 client `--dry-run` flag (all client lane; the
+   registry-side validate endpoint is done at `33c3d56`). C2, B4, and B5 are
+   done (`2681ad6`, `9f364d4`).
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
@@ -2759,30 +2767,32 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 33c3d56 (2.6.0 73e7db5;
+notes. This is E:\xiom-lang\registry on main at 9f364d4 (2.6.0 73e7db5;
 features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
-480531b+ff6ae2b nav/cache fixes, 2681ad6 C2, 33c3d56 /validate), clean,
-325/325 unit and 20/20 e2e green.
+480531b+ff6ae2b nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4
+B4/B5), clean, 330/330 unit and 20/20 e2e green.
 
 State in one line: 2.6.0 is live on staging and production and verified; C2
-attestation links and the B3 /validate preflight landed after the release
-and await the next release window; no relay is open.
+attestation links, the B3 /validate preflight, and B4/B5 owner-facing grant
+changes landed after the release and await the next release window; no relay
+is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 325) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 330) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.6.0, email enabled).
 2. C3 delivered to the playground (2026-09-29): latest-only production bundle
    at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
    the client lane wires the offline example and sandboxed test. Next registry
-   options: C5 index manifest digest (discuss the trust claim first), B4
-   trusted-publisher self-service edit/revoke, B5 token rotation
-   self-service; C4 sharding only at scale.
+   options: C5 index manifest digest (discuss the trust claim first) or C4
+   sharding only at real scale; Track B's remaining items (packaging guard,
+   `pkg yank`, client `--dry-run`) belong to the client lane.
 3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b); the same
    token doubles as GITHUB_ATTESTATIONS_TOKEN for attestation discovery
    (optional -- public repos answer unauthenticated).
 4. Packages' README staleness is parked with the packages lane (no registry
-   work; chunked 0.1.1 republishes, see 24.3 item 7).
+   work; chunked 0.1.1 republishes, see 24.3 item 7); ops opens the
+   publish-rate window per batch.
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
