@@ -1965,9 +1965,10 @@ email, community->maintainer contact, review votes/replies) is recorded in
 **Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
 contributor profiles + Sponsors badge + board, C3 offline export bundle; see
 24.2) and is **live on staging and production** (ops, 2026-09-28 23:14/23:18Z;
-registry-lane verification green, see 24.1). **A5 feeds/following (`bbe42d0`)
-and C1 download stats (`c77381c`) landed on `main` after the release**
-(CHANGELOG Unreleased) and await the next release/deploy.
+registry-lane verification green, see 24.1). **A5 feeds/following (`bbe42d0`),
+C1 download stats (`c77381c`), and the owner-reported nav/cache fixes
+(`480531b`) landed on `main` after the release** (CHANGELOG Unreleased) and
+await the next release/deploy.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2638,7 +2639,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `c77381c` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; C1 stats `c77381c`; compose sponsors fix `3c5d76b`; bundle docs copy `cb0b447`; deploy note `9d770b0`); clean; Registry CI + CodeQL green |
+| Repo | `main` at `480531b` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; C1 stats `c77381c`; nav/cache fixes `480531b`; compose sponsors fix `3c5d76b`); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **314/314**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
@@ -2683,6 +2684,12 @@ now warns when the manifest declares no stage or marks a pre-release version
   day-salted HMAC markers (pruned after 7 days; aggregates kept), Downloads
   row on package pages, `?stats=1` JSON, and `sort=downloads` /
   `sort=rating` (closes A10's sort note). 314/314 unit; mobile pass.
+- `480531b` **nav/cache fixes** (post-2.5.0, owner report): HTML defaults to
+  `Cache-Control: private, no-cache` (a cached anonymous page showed "Sign in"
+  right after signing in); the header Sign in button starts
+  `/auth/github/start?returnTo=<page>` directly (one click); the account menu
+  shows the stored GitHub avatar + display name; the nav-button CSS is scoped
+  to `.nav-shell` so the button actually renders. 314/314 unit; mobile pass.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
