@@ -1962,13 +1962,11 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
-**Status 2026-09-29:** 2.5.0 is cut on `main` (A10 discovery facets, A4
-contributor profiles + Sponsors badge + board, C3 offline export bundle; see
-24.2) and is **live on staging and production** (ops, 2026-09-28 23:14/23:18Z;
-registry-lane verification green, see 24.1). **A5 feeds/following (`bbe42d0`),
-C1 download stats (`c77381c`), and the owner-reported nav/cache fixes
-(`480531b`) landed on `main` after the release** (CHANGELOG Unreleased) and
-await the next release/deploy.
+**Status 2026-09-29:** 2.5.0 is live on staging and production (ops,
+2026-09-28 23:14/23:18Z; verification in 24.1). **2.6.0 is cut on `main`**
+(A5 feeds `bbe42d0`, C1 stats `c77381c`, nav/cache fixes
+`480531b`/`ff6ae2b`; CHANGELOG promoted) and awaits the ops deploy, staging
+first.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2639,9 +2637,9 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `480531b` (2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3; A5 feeds `bbe42d0`; C1 stats `c77381c`; nav/cache fixes `480531b`; compose sponsors fix `3c5d76b`); clean; Registry CI + CodeQL green |
+| Repo | `main` at the 2.6.0 release commit (on top of `ff6ae2b`; 2.5.0 `ddd4b42`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b` nav/cache fixes); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **314/314**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact (384/384 exported versions byte-identical; 13 new packages since), facets/profile/board surfaces respond |
+| Deployed | **2.5.0 on staging (23:14Z) and production (23:18Z)**, `email: enabled`; verified from the registry lane: `live-check` green on both, index entries intact, facets/profile/board surfaces respond. **2.6.0 is on `main` and awaiting ops** |
 | Migrations | `001-notifications` ... `011-contributor-sponsors`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
@@ -2690,6 +2688,10 @@ now warns when the manifest declares no stage or marks a pre-release version
   `/auth/github/start?returnTo=<page>` directly (one click); the account menu
   shows the stored GitHub avatar + display name; the nav-button CSS is scoped
   to `.nav-shell` so the button actually renders. 314/314 unit; mobile pass.
+- `ff6ae2b` **test hardening**: the A5 activity-ordering assertions no longer
+  depend on same-millisecond tie order (CI flake fix).
+- Release commit on top of `ff6ae2b`: version `2.6.0`, CHANGELOG promotion
+  ([Unreleased] -> [2.6.0]), this handoff.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2716,10 +2718,12 @@ now warns when the manifest declares no stage or marks a pre-release version
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
-6. **Next release contents (when the owner orders the cut):** A5 feeds,
-   C1 download stats, and the nav/cache fixes (`480531b`) are on `main` but
-   not deployed; version bump + CHANGELOG promotion + ops deploy (staging
-   first). Production stays 2.5.0 until then, so the header fixes are not
+6. **2.6.0 deploy (owner-ordered, cut 2026-09-29):** hand ops the deploy --
+   staging first (walk the header sign-in button, `/account/feed`, a package
+   page's Downloads row and Activity trail, `?sort=downloads`), then
+   production. Migrations 012 (`package_watches`) and 013
+   (`download_counts`/`download_markers`) apply on boot; nothing new to
+   configure. Production is on 2.5.0 until then, so the header fixes are not
    visible there yet.
 
 ### 24.4 Paste-ready prompt for the next session
@@ -2727,25 +2731,26 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at c77381c (2.5.0 ddd4b42;
-features 9b10975 A10, 67a582f A4, 62780a3 C3; A5 feeds bbe42d0; C1 stats
-c77381c; compose sponsors fix 3c5d76b), clean, 314/314 unit and 20/20 e2e
-green.
+notes. This is E:\xiom-lang\registry on main at the 2.6.0 release commit
+(features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
+480531b nav/cache fixes, ff6ae2b test hardening), clean, 314/314 unit and
+20/20 e2e green.
 
-State in one line: 2.5.0 is live on staging and production and verified; A5
-feeds/following and C1 download stats landed after the release and wait for
-the next release window; no relay is open.
+State in one line: 2.6.0 (A5 feeds, C1 stats, nav/cache fixes) is cut on main
+and awaiting ops; staging and production still run 2.5.0, verified.
 
 First actions:
 1. Verify state: git pull; npm test (expect 314) and npm run test:e2e (expect
-   20); /health on staging and production (expect 2.5.0, email enabled).
-2. C3 delivered to the playground (2026-09-29): latest-only production bundle
+   20); /health on staging and production (2.5.0 until ops deploys 2.6.0,
+   then 2.6.0; email enabled either way).
+2. If 2.6.0 is not deployed, hand ops the deploy: staging first, then
+   production (migrations 012-013 apply on boot; walk the header sign-in
+   button, /account/feed, package Downloads/Activity, ?sort=downloads).
+3. C3 delivered to the playground (2026-09-29): latest-only production bundle
    at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
-   the client lane wires the offline example and sandboxed test. A5
-   feeds/following (`bbe42d0`) and C1 download stats (`c77381c`) are DONE;
-   the next registry feature from the section 21 order is C2 provenance
-   attestation link.
-3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
+   the client lane wires the offline example and sandboxed test. Next registry
+   feature from the section 21 order: C2 provenance attestation link.
+4. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b).
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every

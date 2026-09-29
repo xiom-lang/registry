@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-09-29
+
 ### Fixed
 
 - **Stale "Sign in" in the header after signing in**: session-aware HTML is no
