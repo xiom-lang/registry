@@ -2643,7 +2643,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
 | Offline bundle | Production export verified: 384 artifacts / 15,516,333 bytes, all sha256-checked and `--verify`-clean; regenerate with `npm run export-bundle -- --registry https://registry.xiom-lang.org --out <dir>` |
-| Blocked elsewhere | `xiom-std@0.62.0` canary: the stdlib tag was force-updated to commit **`0e63101`** (subject SHA `0e631018100b157539614cc92fc471f22663baff`; no release had been published, so nothing was invalidated). Tag-triggered Release run `36495200067`: validate PASS, ubuntu gates PASS (1h2m47s), windows gates still running at 00:10Z; GitHub Release + `xiom-std-0.62.0.tar.gz`/SHA256SUMS -> pin-PR -> staging canary dispatch follow automatically, and the Registry Publish run re-dispatches once assets land |
+| stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014` |
 
 ### 24.2 Shipped in 2.5.0 (hashes)
 
@@ -2676,15 +2676,12 @@ now warns when the manifest declares no stage or marks a pre-release version
 ### 24.3 Next actions, in order
 
 1. **2.5.0 deploy: DONE** (ops, staging 23:14Z, production 23:18Z). Registry-lane verification passed: `/health` 2.5.0 + `email: enabled` on both; live-check green on both (every latest artifact digest verified); all 384 exported version entries byte-identical in the live production index (13 new packages since the export = normal publish drift); facets/profile/board surfaces respond; prerelease facet confirmed live on staging (`xiom.canary-oidc` hidden by default, `prerelease=only` returns it). Ops-side pastes still to record: migrations end `011`, `contributor_sponsors` 0 rows, publishers 2, `PUBLISH_RATE_MAX=20`, `TRUST_PROXY=1`. Optional next: set `GITHUB_SPONSORS_TOKEN` and recreate to enable live badge checks (`3c5d76b` declares it).
-2. **stdlib canary when the release finishes**: tag `stdlib-v0.62.0` now points
-   at commit **`0e63101`** (subject SHA `0e631018100b157539614cc92fc471f22663baff`);
-   Release run `36495200067` passed validate + ubuntu gates and was finishing
-   windows gates at 00:10Z. The pipeline publishes the GitHub Release,
-   `xiom-std-0.62.0.tar.gz`/SHA256SUMS, the pin-PR, and the staging canary
-   dispatch automatically. Once assets exist, re-dispatch the Registry Publish
-   run if it did not proceed, then run the pinned canary with the NEW
-   provenance (index entry, `refs/tags/stdlib-v0.62.0` + commit `0e63101`,
-   sha256, ed25519, badge), staging then production.
+2. **stdlib canary: DONE** (see 24.1). Staging `36501800456` and production
+   `36495200014` both published `xiom-std@0.62.0`; artifact digest, size,
+   ed25519 signature, and the official/signed badge re-verified independently
+   against the served bytes on both instances. Production provenance carries
+   `refs/tags/stdlib-v0.62.0` + commit `0e63101`. No open relay remains from
+   the 0.62.0 blocker.
 3. **Tell the playground lane** the C3 deliverable is ready: `npm run
    export-bundle -- --registry https://registry.xiom-lang.org --out <dir>`
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
@@ -2711,25 +2708,17 @@ clean, 306/306 unit and 20/20 e2e green.
 
 State in one line: 2.5.0 (A10 discovery facets, A4 contributor profiles +
 Sponsors badge + board, C3 offline export bundle) is live on staging and
-production and verified; the stdlib 0.62.0 publish wait on the stdlib Release
-run 36495200067 is the only open relay.
+production and verified; the xiom-std@0.62.0 canary is DONE on both
+instances (see 24.1) and no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 306) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.5.0, email enabled).
-2. stdlib: the tag stdlib-v0.62.0 was force-updated to commit 0e63101
-   (subject SHA 0e631018100b157539614cc92fc471f22663baff). Release run
-   36495200067 (validate + ubuntu gates pass, windows finishing at 00:10Z)
-   auto-publishes the GitHub Release, tarball/SHA256SUMS, pin-PR, and staging
-   canary dispatch. Once assets exist, re-dispatch the Registry Publish run
-   if stale, then run the pinned-artifact canary with the NEW provenance
-   (refs/tags/stdlib-v0.62.0 + commit 0e63101, sha256, ed25519, badge),
-   staging then production.
-3. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
+2. Tell the playground lane C3 is ready (npm run export-bundle, OFFLINE.md,
    --latest-only, pin by sha256) and take the next feature from the section 21
    order: A5 feeds/following, then C1 download stats (unblocks the
    most-downloaded sort; A10's rating sort is now unblocked too).
-4. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
+3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
    enable live Sponsors checks (declared in compose since 3c5d76b).
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
