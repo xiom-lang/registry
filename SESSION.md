@@ -2642,10 +2642,10 @@ now warns when the manifest declares no stage or marks a pre-release version
 |---|---|
 | Repo | `main` at `10d7217` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.6.0 on staging and production** (ops, 2026-09-29 16:38Z; boots 2.6.0, migrations through 013, new tables at 0, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in href, Downloads row + `?stats=1`, `sort=downloads`. **C2 (`2681ad6`) is on `main` and awaits the next release** |
+| Deployed | **2.6.0 on staging and production** (ops, 2026-09-29; both recreated 17:48Z, health 2.6.0 + email enabled, migrations through 013, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in, Downloads row + `?stats=1`, `sort=downloads`. Post-2.6.0 on `main` awaiting the next release: C2 `2681ad6`, B3 `/validate` `33c3d56`, B4/B5 `9f364d4`, C5 `10d7217` |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
-| Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose now declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). Unset = checks disabled, badge stays unverified |
+| Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). **Confirmed configured on both hosts 2026-09-29 (ops: token present in both containers after recreate; health 2.6.0 + email enabled 17:48Z), so live checks are enabled** |
 | Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
 | stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014` |
 
@@ -2792,10 +2792,11 @@ First actions:
 2. If the owner has ordered the next release: bump the version, promote the
    CHANGELOG [Unreleased] section, update this handoff, push, watch CI, then
    hand ops the deploy (staging first; no new migrations).
-3. Optional ops follow-ups: generate a C5 index key (`node
-   scripts/index-key.js`), set INDEX_SIGNING_KEY, recreate; set
-   GITHUB_SPONSORS_TOKEN to enable live Sponsors checks (also enables
-   attestation discovery rate limits).
+3. Optional ops follow-ups: the Sponsors token is configured on both hosts
+   (2026-09-29), so badge checks and attestation-discovery rate limits are
+   live. Still optional: generate a C5 index key (`node
+   scripts/index-key.js`), set `INDEX_SIGNING_KEY`, recreate to sign the
+   digest.
 4. Packages' README staleness is parked with the packages lane (chunked
    0.1.1 republishes; ops opens the publish-rate window per batch); C3 is
    delivered to the playground and their side continues.
