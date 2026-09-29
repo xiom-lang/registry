@@ -1967,8 +1967,9 @@ fixes) is **live on staging and production** (ops, 16:38Z: boots 2.6.0,
 migrations through 013, new tables at 0, index sha unchanged, live-check
 green). Post-release on `main`, awaiting the next release window: **C2 build
 attestation links** (`2681ad6`), the **B3 registry-side `/validate`
-preflight** (`33c3d56`), and **B4/B5 owner-facing grant changes**
-(`9f364d4`).
+preflight** (`33c3d56`), **B4/B5 owner-facing grant changes** (`9f364d4`),
+and the **C5 index digest sidecar** (`10d7217`). All registry-side roadmap
+items are now done; Track B's remainder is client-lane work.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2304,7 +2305,7 @@ order.
 | C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. **DONE 2026-09-29 (`2681ad6`, post-2.6.0):** optional `publisher.attestation` (additive in `/index.json`); publisher-supplied canonical URL at publish time or best-effort GitHub attestations-API discovery by subject digest; rendered as a "build attestation" link; token-optional via `GITHUB_ATTESTATIONS_TOKEN` (falls back to the Sponsors token). | S (done) |
 | C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. **DONE 2026-09-29 (`62780a3`, 2.5.0):** `scripts/export-bundle.js` + `OFFLINE.md`; every artifact hashed while exporting, `--latest-only`, resume, `--verify`; production export verified: 384 artifacts / 15,516,333 bytes. Client lane owns offline resolution semantics. | L (done) |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
-| C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. | M |
+| C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. Owner approved the sidecar model 2026-09-29. **DONE 2026-09-29 (`10d7217`, post-2.6.0):** `GET /index-digest.json` (sha256/size/registry/signedAt; ed25519 over `xiom-index-digest:v1\n<sha256>` when `INDEX_SIGNING_KEY` is set; fail-closed on a bad key); `/index.json` served byte-for-byte from disk so `sha256sum data/index.json` equals the digest; `scripts/index-key.js`; compose + env examples + DEPLOY.md wired; unsigned digest available with no key. | M (done) |
 
 ### Track D -- operations and hardening
 
@@ -2639,8 +2640,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `9f364d4` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **330/330**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `10d7217` (2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.6.0 on staging and production** (ops, 2026-09-29 16:38Z; boots 2.6.0, migrations through 013, new tables at 0, index sha unchanged, live-check green). Registry-lane spot-check: `private, no-cache` HTML, one-click sign-in href, Downloads row + `?stats=1`, `sort=downloads`. **C2 (`2681ad6`) is on `main` and awaits the next release** |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
@@ -2712,6 +2713,13 @@ now warns when the manifest declares no stage or marks a pre-release version
   host-side minting). Ownership against the target record; one pending
   change per grant; PUBLISHING.md documents the flow. 330/330 unit; mobile
   pass at 390px.
+- `10d7217` **C5 -- index digest sidecar** (post-2.6.0, CHANGELOG
+  Unreleased): `GET /index-digest.json` with the sha256 of the exact
+  `/index.json` bytes and an optional ed25519 signature (domain-separated
+  payload; `INDEX_SIGNING_KEY`, fail-closed on a bad key). `/index.json` is
+  now served byte-for-byte from disk (empty index materialized at boot), so
+  `sha256sum data/index.json` equals the digest; `scripts/index-key.js`
+  generates keys. 335/335 unit; e2e re-run.
 - Also deployed earlier in the 2.4.x line (now included in 2.5.0 when it
   ships): `8fbc41f` accounts -> SQLite + founding-admin hierarchy (2.4.2),
   `04098a0` publish-stage warnings.
@@ -2730,13 +2738,15 @@ now warns when the manifest declares no stage or marks a pre-release version
    (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
    the client lane owns offline resolution semantics. Production export
    verified 384 artifacts / 15,516,333 bytes.
-4. **Roadmap next** (section 21 order): C5 index manifest digest
-   (**discuss first** -- a signed digest of `/index.json` is a different
-   trust claim from package signing); C4 object storage/sharding only past a
-   few thousand packages; Track B remaining: B1 packaging guard, B2
-   `pkg yank`, and B3 client `--dry-run` flag (all client lane; the
-   registry-side validate endpoint is done at `33c3d56`). C2, B4, and B5 are
-   done (`2681ad6`, `9f364d4`).
+4. **Roadmap state: all registry-side items are done.** C2 (`2681ad6`), C5
+   (`10d7217`), B3's registry half (`33c3d56`), and B4/B5 (`9f364d4`) are on
+   `main` awaiting the next release window. Remaining roadmap work is not
+   ours: Track B's packaging guard, `pkg yank`, and the client `--dry-run`
+   flag belong to the client lane; C4 (object storage/sharding) only matters
+   past a few thousand packages. When the owner orders the next cut: bump
+   the version, promote [Unreleased], and hand ops the deploy (staging
+   first). Optional C5 follow-up for ops: generate an index key with
+   `node scripts/index-key.js`, set `INDEX_SIGNING_KEY`, recreate.
 5. **Ops backlog** (section 21 Track D): fulfiller worker confirmation,
    ops-repo template cleanup, audit pagination, backup/restore drill,
    rate-limit batch profile, resource-cap retune.
@@ -2767,32 +2777,28 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 9f364d4 (2.6.0 73e7db5;
+notes. This is E:\xiom-lang\registry on main at 10d7217 (2.6.0 73e7db5;
 features 9b10975 A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1,
 480531b+ff6ae2b nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4
-B4/B5), clean, 330/330 unit and 20/20 e2e green.
+B4/B5, 10d7217 C5), clean, 335/335 unit and 20/20 e2e green.
 
-State in one line: 2.6.0 is live on staging and production and verified; C2
-attestation links, the B3 /validate preflight, and B4/B5 owner-facing grant
-changes landed after the release and await the next release window; no relay
-is open.
+State in one line: 2.6.0 is live on staging and production and verified; all
+registry-side roadmap items (C2, C5, B3 registry half, B4/B5) are on main
+awaiting the next release cut; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 330) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 335) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.6.0, email enabled).
-2. C3 delivered to the playground (2026-09-29): latest-only production bundle
-   at `E:\xiom-lang\registry-bundle` (+ tarball) with pinned hashes in 24.1;
-   the client lane wires the offline example and sandboxed test. Next registry
-   options: C5 index manifest digest (discuss the trust claim first) or C4
-   sharding only at real scale; Track B's remaining items (packaging guard,
-   `pkg yank`, client `--dry-run`) belong to the client lane.
-3. When convenient: set GITHUB_SPONSORS_TOKEN on the host and recreate to
-   enable live Sponsors checks (declared in compose since 3c5d76b); the same
-   token doubles as GITHUB_ATTESTATIONS_TOKEN for attestation discovery
-   (optional -- public repos answer unauthenticated).
-4. Packages' README staleness is parked with the packages lane (no registry
-   work; chunked 0.1.1 republishes, see 24.3 item 7); ops opens the
-   publish-rate window per batch.
+2. If the owner has ordered the next release: bump the version, promote the
+   CHANGELOG [Unreleased] section, update this handoff, push, watch CI, then
+   hand ops the deploy (staging first; no new migrations).
+3. Optional ops follow-ups: generate a C5 index key (`node
+   scripts/index-key.js`), set INDEX_SIGNING_KEY, recreate; set
+   GITHUB_SPONSORS_TOKEN to enable live Sponsors checks (also enables
+   attestation discovery rate limits).
+4. Packages' README staleness is parked with the packages lane (chunked
+   0.1.1 republishes; ops opens the publish-rate window per batch); C3 is
+   delivered to the playground and their side continues.
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
