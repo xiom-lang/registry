@@ -251,6 +251,24 @@ optional `attestation` form field with a canonical
 is rejected. The link is display metadata: it never changes the artifact,
 its digest, or its signature.
 
+### Validate before publishing
+
+`POST /validate` runs the exact publish checks without writing anything --
+no artifact, no index entry, and your upload is discarded. It takes the same
+token and multipart fields as `/publish` and answers with the same status
+codes, so a dry run tells you precisely what a real publish would do:
+
+```bash
+curl -sS -X POST "$REGISTRY/validate" \
+  -H "Authorization: Bearer $XIOM_REGISTRY_TOKEN" \
+  -F name=my-lib -F version=0.1.1 -F package=@dist/my-lib-0.1.1.tar.gz
+```
+
+A clean payload answers `200` with the sha256, size, and any publish
+warnings; conflicts (409, the version exists), signature rules (422), scope
+denials (403), and malformed input (400) are reported exactly as `/publish`
+would. It is rate-limited like a publish and changes nothing.
+
 ### Token hygiene
 
 - One token per purpose; ask for the smallest scope that works.

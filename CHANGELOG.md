@@ -6,6 +6,16 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Publishing
+
+- **Validate before publishing (B3, registry side)**: `POST /validate` runs
+  the exact `/publish` checks -- name, semver, scope, namespace, version
+  conflicts, signature rules, manifest, and every publish warning -- with no
+  artifact store and no index write; the upload is always discarded. Status
+  codes and the response body mirror `/publish`, so a client dry-run can
+  treat it exactly like the real thing. `PUBLISHING.md` documents the curl
+  flow; useful as a preflight for republish batches.
+
 ### Provenance
 
 - **Build attestation links (C2)**: a version published through a trusted

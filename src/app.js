@@ -2921,6 +2921,34 @@ function createApp(config = loadConfig()) {
     }
   });
 
+  // Read-only preflight (Track B3, registry side): the exact publish checks
+  // -- name, semver, scope, namespace, version conflicts, signature rules,
+  // manifest, and every publish warning -- with no artifact store and no
+  // index write. The upload is always removed. Status codes and the body
+  // shape mirror /publish (minus `ok`), so a client dry-run can treat this
+  // exactly like the real thing.
+  app.post('/validate', writeLimit, authenticated, handleUpload, (req, res, next) => {
+    try {
+      const prepared = preparePublish(req, { config, indexStore, token: req.token });
+      prepared.removeUpload();
+      res.json({
+        ok: true,
+        package: prepared.name,
+        version: prepared.version,
+        sha256: prepared.sha256,
+        size: prepared.size,
+        signature: prepared.signature || undefined,
+        publicKey: prepared.publicKey || undefined,
+        ...(prepared.publisher ? { publisher: prepared.publisher } : {}),
+        ...(prepared.attestation ? { attestation: prepared.attestation } : {}),
+        ...(prepared.warnings.length > 0 ? { warnings: prepared.warnings } : {}),
+        message: `${prepared.name}@${prepared.version} would publish; nothing was written`,
+      });
+    } catch (err) {
+      cleanupAndNext(req, res, next, err);
+    }
+  });
+
   // ─── Yank ─────────────────────────────────────────────────────────────────
 
   app.post(
@@ -3078,12 +3106,18 @@ function createApp(config = loadConfig()) {
 }
 
 /**
- * The publish pipeline. Steps are ordered cheapest-first so hostile traffic
- * is rejected before any hashing or disk writes.
+ * The shared publish pipeline: every validation, cheapest-first, so hostile
+ * traffic is rejected before any hashing or disk writes. It stops before the
+ * writes: `publish()` completes it; the read-only `POST /validate` dry-run
+ * ends here. The caller owns the staged upload; on success paths it must
+ * call `removeUpload()` unless it stores the artifact.
  *
- * @returns {{ name: string, version: string, sha256: string, signature: string, publicKey: string }}
+ * @returns {{ name: string, version: string, sha256: string, signature: string,
+ *             publicKey: string, size: number, metadata: object, warnings: string[],
+ *             publisher: object|undefined, attestation: string,
+ *             staged: string, removeUpload: Function }}
  */
-function publish(req, { config, indexStore, artifacts, token }) {
+function preparePublish(req, { config, indexStore, token }) {
   // Re-derive the staged path from its basename: the only path component a
   // caller could influence cannot carry a separator. (CodeQL js/path-injection.)
   const staged = req.file && typeof req.file.path === 'string'
@@ -3276,6 +3310,31 @@ function publish(req, { config, indexStore, artifacts, token }) {
     );
   }
 
+  return {
+    name,
+    version,
+    sha256,
+    signature,
+    publicKey,
+    size: fileBuffer.length,
+    metadata,
+    warnings,
+    publisher: token.publisher,
+    attestation: metadata.publisher ? metadata.publisher.attestation || '' : '',
+    staged,
+    removeUpload,
+  };
+}
+
+/**
+ * Publish: run the shared validation pipeline, then store the artifact and
+ * index the version. `preparePublish` owns every check; this wrapper owns
+ * the writes (and the artifact rollback when indexing fails).
+ */
+function publish(req, { config, indexStore, artifacts, token }) {
+  const prepared = preparePublish(req, { config, indexStore, token });
+  const { name, version, metadata, staged } = prepared;
+
   // Move the artifact into place, then index it. If indexing fails (e.g. a
   // race lost to a concurrent publish), remove the artifact again.
   artifacts.store(name, version, staged);
@@ -3287,19 +3346,19 @@ function publish(req, { config, indexStore, artifacts, token }) {
   }
 
   console.log(
-    `Published: ${name}@${version} (${(fileBuffer.length / 1024).toFixed(1)} KB, `
-    + `sha256:${sha256.slice(0, 12)}..., by ${token.label}`
+    `Published: ${name}@${version} (${(prepared.size / 1024).toFixed(1)} KB, `
+    + `sha256:${prepared.sha256.slice(0, 12)}..., by ${token.label}`
     + `${token.publisher ? ` via ${token.publisher.repository}` : ''})`,
   );
   return {
     name,
     version,
-    sha256,
-    signature,
-    publicKey,
-    warnings,
-    publisher: token.publisher,
-    attestation: metadata.publisher ? metadata.publisher.attestation || '' : '',
+    sha256: prepared.sha256,
+    signature: prepared.signature,
+    publicKey: prepared.publicKey,
+    warnings: prepared.warnings,
+    publisher: prepared.publisher,
+    attestation: prepared.attestation,
   };
 }
 
