@@ -224,6 +224,9 @@ test('exportBundle writes the documented layout, verifies hashes, and resumes', 
       assert.equal(sha256(onDisk), manifest2.index.sha256);
       assert.deepEqual(JSON.parse(onDisk.toString('utf-8')), clean);
 
+      // The bundle explains its own layout.
+      assert.ok(fs.existsSync(path.join(out, 'OFFLINE.md')), 'OFFLINE.md ships inside the bundle');
+
       // A second run re-uses every artifact without new fetches.
       const fetchesAfterFirst = good.artifactFetches;
       const manifest3 = await exportBundle({

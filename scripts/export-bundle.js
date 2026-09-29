@@ -353,6 +353,10 @@ async function exportBundle({
   }
 
   fs.writeFileSync(path.join(outDir, 'bundle.json'), JSON.stringify(manifest, null, 2));
+  // Ship the layout documentation with the bytes: a bundle should explain
+  // itself to whoever mounts it.
+  const docs = path.join(__dirname, '..', 'OFFLINE.md');
+  if (fs.existsSync(docs)) fs.copyFileSync(docs, path.join(outDir, 'OFFLINE.md'));
   log(`bundle.json: ${artifacts.length} artifact(s), ${totalBytes} bytes `
     + `(${downloaded} downloaded, ${reused} reused)${skipped.length ? `, ${skipped.length} skipped` : ''}`);
   return manifest;

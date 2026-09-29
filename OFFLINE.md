@@ -18,6 +18,7 @@ registry-bundle/
       <version>/
         package.tar.gz                         artifact bytes, sha256-verified
   bundle.json                                  manifest (see below)
+  OFFLINE.md                                   this document, copied by the exporter
 ```
 
 `index.json` is written byte-for-byte as served, so it can be diffed against
