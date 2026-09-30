@@ -2314,9 +2314,9 @@ order.
 | D2 | Ops-repo issue template removal | Point the org profile at `/publish`; the web request flow is the only front door. | S (ops) |
 | D3 | Audit/report pagination + filters | The console caps at 100/200 rows; paginate when tables grow (checklist note). | S |
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
-| D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. | S |
+| D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. **Ops report 2026-09-30: republish waves now run <20 names at a time, so the default window usually suffices** -- the documented profile remains a small docs task. | S |
 | D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
-| D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1). **Code half DONE 2026-09-27 (`4110752`, `014f156`):** verified-address gate (single-use 24h link; only verified addresses queue email), retry/backoff with recorded errors, migration 003 skips the pre-gate backlog, `/health` + dashboard visibility. **Ops half remains:** set `SMTP_URL`/`SMTP_FROM` (from-address on `xiom-lang.org`) and recreate, then confirm delivery to an account with a verified address. | M (ops left) |
+| D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1). **Code half DONE 2026-09-27 (`4110752`, `014f156`):** verified-address gate (single-use 24h link; only verified addresses queue email), retry/backoff with recorded errors, migration 003 skips the pre-gate backlog, `/health` + dashboard visibility. **Ops half DONE 2026-09-28:** SMTP configured; `/health` reports `email: enabled` on both environments since 2.5.0 and every deploy report repeats it. | M (done) |
 
 ### Explicit non-goals (unchanged)
 
