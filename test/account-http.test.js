@@ -1274,15 +1274,26 @@ test('the admin reports queue paginates and keeps its status filter', async () =
     });
   }
 
-  let page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=1', { headers: BROWSER })).text();
-  assert.match(page, /pagination report 3/, 'newest first');
-  assert.match(page, /Page 1 of \d+/);
-  assert.match(page, /href="\/admin\/reports\?filter=open&amp;page=2"/, 'paging preserves the filter');
-  page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=2', { headers: BROWSER })).text();
-  assert.match(page, /pagination report 2/);
-  page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=3', { headers: BROWSER })).text();
-  assert.match(page, /pagination report 1/);
-  // The dismissed filter never shows the open seeds.
+  let page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=200', { headers: BROWSER })).text();
+  for (const note of ['pagination report 1', 'pagination report 2', 'pagination report 3']) {
+    assert.match(page, new RegExp(note), 'all seeds are in the open queue');
+  }
+  // Paging: per_page=1 makes adjacent pages provably distinct rows. Order
+  // among same-millisecond seeds falls back to random ids, so only the
+  // slicing is asserted, never which seed lands on which page.
+  const idOf = (html) => (html.match(/title="(rep_[0-9a-f]+)"/) || [])[1];
+  const first = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=1', { headers: BROWSER })).text();
+  const second = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=2', { headers: BROWSER })).text();
+  assert.match(first, /Page 1 of \d+/);
+  assert.ok(idOf(first) && idOf(second), 'both pages render a report');
+  assert.notEqual(idOf(first), idOf(second), 'adjacent pages hold different reports');
+  assert.match(first, /href="\/admin\/reports\?filter=open&amp;page=2"/, 'paging preserves the filter');
+  // The last page is reachable and the pager ends there.
+  const totalPages = Number((first.match(/Page 1 of (\d+)/) || [])[1]);
+  const last = await (await requestAs(jar, `/admin/reports?filter=open&per_page=1&page=${totalPages}`, { headers: BROWSER })).text();
+  assert.match(last, new RegExp(`Page ${totalPages} of ${totalPages}`));
+  assert.match(last, /disabled">Older/);
+  // A different status filter never shows the open seeds.
   page = await (await requestAs(jar, '/admin/reports?filter=dismissed&per_page=200', { headers: BROWSER })).text();
   assert.doesNotMatch(page, /pagination report/);
   // Out-of-range pages clamp to the last page of the filtered set.
