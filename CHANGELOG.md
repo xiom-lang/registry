@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-09-30
+
 ### Operations
 
 - **Admin console pagination + filters (D3)**: the audit log and the reports
