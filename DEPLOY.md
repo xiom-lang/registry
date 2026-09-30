@@ -261,9 +261,13 @@ service only after editing the operator file or the token store.
 
 Same mechanics as staging, but production is gated by the owner. Four switches:
 
-1. **Code** — `git pull`, add `PUBLISH_RATE_MAX=600` to the production `.env`
-   for the batch window, then rebuild and recreate production only:
+1. **Code** — `git pull`, add the **batch profile** to the production `.env`
+   for the window, then rebuild and recreate production only. Republish waves
+   under 20 names need no change at all (ops, 2026-09-30); the profile exists
+   for the larger coordinated batches:
    ```bash
+   # .env -- copy the block from .env.example "Batch publish window"
+   PUBLISH_RATE_MAX=600
    docker compose build registry
    docker compose up -d --no-deps registry
    docker exec xiom-registry printenv PUBLISH_RATE_MAX   # must print 600
@@ -272,8 +276,11 @@ Same mechanics as staging, but production is gated by the owner. Four switches:
    service `environment:` block (see "Load-test knobs and the compose env
    rule"). `PUBLISH_RATE_MAX` has been declared since the 2026-09-26 compose
    change; if this prints nothing on an older checkout, the batch ran at the
-   default 20/min and the runbook step silently did nothing. Restore 20 (and
-   verify again) when the packages lane confirms the batch is complete.
+   default 20/min and the runbook step silently did nothing. Restore the
+   default (comment the line out and recreate) when the packages lane confirms
+   the batch is complete. Before opening the window, preflight one tarball with
+   `POST /validate` (see PUBLISHING.md) so the batch cannot fail on a manifest
+   mistake mid-window.
 2. **Entry scopes** — set the production `xiom-packages/packages` entry to the
    full allowlist (generate `staging-scopes.txt` exactly as for staging, then
    apply it to `/etc/xiom-registry/trusted-publishers.json`), `firstParty: true`.
@@ -416,7 +423,7 @@ env context:
 | `RATE_LIMIT_WINDOW_MS` / `XIOM_STAGING_RATE_LIMIT_WINDOW_MS` | 60000 | general window |
 | `RATE_LIMIT_MAX` / `XIOM_STAGING_RATE_LIMIT_MAX` | 300 | general requests per window |
 | `PUBLISH_RATE_WINDOW_MS` / `XIOM_STAGING_PUBLISH_RATE_WINDOW_MS` | 60000 | publish window |
-| `PUBLISH_RATE_MAX` / `XIOM_STAGING_PUBLISH_RATE_MAX` | 20 | publish requests per window |
+| `PUBLISH_RATE_MAX` / `XIOM_STAGING_PUBLISH_RATE_MAX` | 20 | publish requests per window; `600` during a coordinated batch window (see the batch runbook and the env-example "Batch publish window" block) |
 | `DOWNLOAD_RATE_WINDOW_MS` / `XIOM_STAGING_DOWNLOAD_RATE_WINDOW_MS` | 60000 | artifact download window |
 | `DOWNLOAD_RATE_MAX` / `XIOM_STAGING_DOWNLOAD_RATE_MAX` | 600 | artifact downloads per window |
 | `GITHUB_SPONSORS_TOKEN` / `XIOM_STAGING_GITHUB_SPONSORS_TOKEN` | unset | A4 Sponsors badge checks: a GitHub token with plain public read access; unset = opt-ins stay unverified and the UI says so |

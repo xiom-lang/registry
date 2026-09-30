@@ -156,6 +156,55 @@ class AdminStore {
     );
   }
 
+  /**
+   * Paged audit log (D3) with optional exact-action and actor filters.
+   * Newest first; the caller clamps page/perPage.
+   *
+   * @returns {{ entries: object[], total: number, totalPages: number,
+   *             page: number, perPage: number }}
+   */
+  auditPage({ page = 1, perPage = 50, action = '', actor = '' } = {}) {
+    const clauses = [];
+    const args = [];
+    if (action) {
+      clauses.push('action = ?');
+      args.push(String(action));
+    }
+    if (actor) {
+      clauses.push('actor_login LIKE ?');
+      // SQLite LIKE is ASCII-case-insensitive; escape the wildcards so a
+      // search for "a_b" cannot match everything.
+      args.push(`%${String(actor).replace(/[%_]/g, (ch) => `\\${ch}`)}%`);
+    }
+    const where = clauses.length > 0
+      ? ` WHERE ${clauses.join(' AND ')}${actor ? " ESCAPE '\\'" : ''}`
+      : '';
+    const totalRow = this.db.get(`SELECT COUNT(*) AS count FROM admin_audit${where}`, ...args);
+    const total = totalRow ? Number(totalRow.count) : 0;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const current = Math.min(Math.max(1, page), totalPages);
+    return {
+      entries: this.db.all(
+        'SELECT id, at, actor_id, actor_login, action, subject_type, subject_id, subject_login, detail '
+        + `FROM admin_audit${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+        ...args,
+        perPage,
+        (current - 1) * perPage,
+      ),
+      total,
+      totalPages,
+      page: current,
+      perPage,
+    };
+  }
+
+  /** Distinct actions present in the log with counts, most recent first. */
+  auditActions() {
+    return this.db.all(
+      'SELECT action, COUNT(*) AS count FROM admin_audit GROUP BY action ORDER BY MAX(id) DESC',
+    ).map((row) => ({ action: row.action, count: Number(row.count) || 0 }));
+  }
+
   auditFor(githubId, limit = 20) {
     return this.db.all(
       'SELECT id, at, actor_id, actor_login, action, subject_type, subject_id, subject_login, detail '

@@ -41,13 +41,47 @@ function adminTabs(active) {
   return `<nav class="account-tabs" aria-label="Admin console">\n  ${links}\n</nav>`;
 }
 
-function filterChips(base, filters, active) {
+function filterChips(base, filters, active, { key = 'filter', params = {} } = {}) {
   const chips = filters.map(([value, label]) => {
-    const href = value === '' ? base : `${base}?filter=${encodeURIComponent(value)}`;
-    return `<a class="chip${active === value ? ' chip-active' : ''}" href="${href}"`
+    // Preserve the other active filters (e.g. the audit actor search) while
+    // switching this one; `key` lets a page use `action=` instead of
+    // `filter=` without a second renderer. Empty values stay out of the URL.
+    const query = new URLSearchParams();
+    for (const [name, param] of Object.entries(params)) {
+      if (param) query.set(name, param);
+    }
+    if (value === '') query.delete(key);
+    else query.set(key, value);
+    const qs = query.toString();
+    const href = qs ? `${base}?${qs}` : base;
+    return `<a class="chip${active === value ? ' chip-active' : ''}" href="${escapeHtml(href)}"`
       + `${active === value ? ' aria-current="page"' : ''}>${escapeHtml(label)}</a>`;
-  }).join('\n  ');
+  });
   return `<nav class="facet-row" aria-label="Filters">\n  ${chips}\n</nav>`;
+}
+
+/**
+ * Prev/next pager for the console tables (D3), preserving the active filters.
+ * Lists are newest first, so page 1 is the newest slice.
+ */
+function adminPagination(base, params, page, totalPages) {
+  if (totalPages <= 1) return '';
+  const href = (target) => {
+    const query = new URLSearchParams();
+    for (const [name, param] of Object.entries(params)) {
+      if (param) query.set(name, param);
+    }
+    query.set('page', String(target));
+    return `${base}?${query.toString()}`;
+  };
+  const previous = page > 1
+    ? `<a class="page-link" href="${escapeHtml(href(page - 1))}" rel="prev">&larr; Newer</a>`
+    : '<span class="page-link disabled">&larr; Newer</span>';
+  const next = page < totalPages
+    ? `<a class="page-link" href="${escapeHtml(href(page + 1))}" rel="next">Older &rarr;</a>`
+    : '<span class="page-link disabled">Older &rarr;</span>';
+  return `<nav class="pagination" aria-label="Pagination">${previous}`
+    + `<span class="pkg-meta">Page ${page} of ${totalPages}</span>${next}</nav>`;
 }
 
 /** Console dashboard: what needs attention, with links into each queue. */
@@ -102,6 +136,7 @@ ${outbox}
 <section>
   <h2>Recent admin activity</h2>
   ${auditList(recentAudit, 'Nothing has been done from the console yet.')}
+  <p class="pkg-meta"><a href="/admin/audit">View the full audit log &rarr;</a></p>
 </section>`;
   return layout({ title: 'Admin console', body, nav });
 }
@@ -109,13 +144,25 @@ ${outbox}
 function auditList(entries, empty) {
   if (entries.length === 0) return `<p class="pkg-meta">${escapeHtml(empty)}</p>`;
   return `<ul class="audit-list">
-${entries.map((entry) => `  <li class="audit-row">
+${entries.map((entry) => {
+    // Actors and subjects link to their pages (A4 profiles / package pages)
+    // so an operator can move from a log line to the thing it touched.
+    const actor = entry.actor_login
+      ? `<a class="profile-link" href="/account/${encodeURIComponent(entry.actor_login)}">@${escapeHtml(entry.actor_login)}</a>`
+      : '<span class="pkg-meta">system</span>';
+    const subject = entry.subject_type === 'package'
+      ? `<a href="/packages/${encodeURIComponent(entry.subject_id)}">${escapeHtml(entry.subject_id)}</a>`
+      : (entry.subject_type === 'user' && entry.subject_login
+        ? `<a class="profile-link" href="/account/${encodeURIComponent(entry.subject_login)}">@${escapeHtml(entry.subject_login)}</a>`
+        : `${escapeHtml(entry.subject_type)} ${escapeHtml(entry.subject_login || entry.subject_id)}`);
+    return `  <li class="audit-row">
     <span class="pkg-meta">${formatWhen(entry.at)}</span>
     <span class="mono audit-action">${escapeHtml(entry.action)}</span>
-    <span>@${escapeHtml(entry.actor_login)}</span>
-    <span class="pkg-meta">&rarr; ${escapeHtml(entry.subject_type)} ${escapeHtml(entry.subject_login || entry.subject_id)}</span>
+    ${actor}
+    <span class="pkg-meta">&rarr; ${subject}</span>
     ${entry.detail ? `<span class="pkg-meta audit-detail">${escapeHtml(entry.detail)}</span>` : ''}
-  </li>`).join('\n')}
+  </li>`;
+  }).join('\n')}
 </ul>`;
 }
 
@@ -363,7 +410,16 @@ function adminReportRow(report, csrf) {
 </li>`;
 }
 
-function adminReportsPage({ account, reports = [], csrf, notice = '', error = '', filter = '', nav = '' }) {
+function adminReportsPage({
+  account,
+  reports = [],
+  paged = null,
+  csrf,
+  notice = '',
+  error = '',
+  filter = '',
+  nav = '',
+}) {
   const body = `<section class="hero">
   <h1>Reports</h1>
   <p>Community reports about published packages. Resolving or dismissing records your note,
@@ -373,9 +429,11 @@ function adminReportsPage({ account, reports = [], csrf, notice = '', error = ''
 ${adminTabs('reports')}
 ${noticeBox(notice, error)}
 ${filterChips('/admin/reports', [['', 'All'], ['open', 'Open'], ['resolved', 'Resolved'], ['dismissed', 'Dismissed']], filter)}
+${paged ? `<p class="pkg-meta">${paged.total} report${paged.total === 1 ? '' : 's'}</p>` : ''}
 ${reports.length === 0
     ? '<p class="pkg-meta">No reports match that filter.</p>'
-    : `<ul class="request-list">\n${reports.map((report) => adminReportRow(report, csrf)).join('\n')}\n</ul>`}`;
+    : `<ul class="request-list">\n${reports.map((report) => adminReportRow(report, csrf)).join('\n')}\n</ul>`}
+${paged ? adminPagination('/admin/reports', { filter }, paged.page, paged.totalPages) : ''}`;
   return layout({ title: 'Admin reports', body, nav });
 }
 
@@ -548,14 +606,37 @@ ${noticeBox(notice, error)}
   return layout({ title: `Admin @${user.login}`, body, nav });
 }
 
-function adminAuditPage({ account, entries = [], nav = '' }) {
+function adminAuditPage({
+  account,
+  entries = [],
+  paged = null,
+  action = '',
+  q = '',
+  actions = [],
+  nav = '',
+}) {
+  // Top actions become chips (All first); the actor search preserves them.
+  const actionFilters = [['', 'All actions']].concat(
+    actions.slice(0, 8).map(({ action: value, count }) => [value, `${value} (${count})`]),
+  );
   const body = `<section class="hero">
   <h1>Audit</h1>
   <p>Every console action, newest first: who did it, what it touched, and the note they left.
      Request decisions additionally keep their own per-request history on the package pages.</p>
 </section>
 ${adminTabs('audit')}
-${auditList(entries, 'Nothing has been done from the console yet.')}`;
+${actionFilters.length > 1
+    ? filterChips('/admin/audit', actionFilters, action, { key: 'action', params: { q } })
+    : ''}
+<form class="console-search" method="get" action="/admin/audit" role="search">
+  ${action ? `<input type="hidden" name="action" value="${escapeHtml(action)}">` : ''}
+  <input type="search" name="q" value="${escapeHtml(q)}" placeholder="Filter by actor"
+         aria-label="Filter audit entries by actor login" autocomplete="off">
+  <button class="button" type="submit">Filter</button>
+</form>
+${paged ? `<p class="pkg-meta">${paged.total} entr${paged.total === 1 ? 'y' : 'ies'}</p>` : ''}
+${auditList(entries, 'Nothing has been done from the console yet.')}
+${paged ? adminPagination('/admin/audit', { action, q }, paged.page, paged.totalPages) : ''}`;
   return layout({ title: 'Admin audit', body, nav });
 }
 

@@ -399,6 +399,28 @@ class ReviewStore {
     return all.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
 
+  /**
+   * Paged reports queue (D3): same filters as listReports, plus LIMIT/OFFSET
+   * style slicing and totals for the admin console. Reports are few, so the
+   * slice happens in memory on top of one query.
+   *
+   * @returns {{ reports: object[], total: number, totalPages: number,
+   *             page: number, perPage: number }}
+   */
+  reportsPage({ status = '', packageName = '', page = 1, perPage = 50 } = {}) {
+    const all = this.listReports({ status, packageName });
+    const total = all.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const current = Math.min(Math.max(1, page), totalPages);
+    return {
+      reports: all.slice((current - 1) * perPage, current * perPage),
+      total,
+      totalPages,
+      page: current,
+      perPage,
+    };
+  }
+
   openReportCount(packageName) {
     const name = String(packageName);
     if (this.db) {

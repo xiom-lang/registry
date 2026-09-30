@@ -194,6 +194,22 @@ function listingFromQuery(query) {
   };
 }
 
+/**
+ * Admin console paging (D3): `?page` / `?per_page`, clamped like the public
+ * listing (default 50, cap 200) so a deep link can never ask for a huge scan.
+ */
+function adminPaging(query) {
+  const clamp = (value, fallback, max) => {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+    return Math.min(parsed, max);
+  };
+  return {
+    page: clamp(query.page, 1, 1_000_000),
+    perPage: clamp(query.per_page, 50, 200),
+  };
+}
+
 /** Lifecycle facet params shared by /packages and /search (A10). */
 function lifecycleFromQuery(query) {
   const pick = (value, allowed, fallback) => {
@@ -2270,13 +2286,16 @@ function createApp(config = loadConfig()) {
     }));
   });
 
-  app.get('/admin/reports', generalLimit, requireAdminPage, (req, res) => {    const context = adminPageContext(req);
+  app.get('/admin/reports', generalLimit, requireAdminPage, (req, res) => {
+    const context = adminPageContext(req);
     const filter = ['open', 'resolved', 'dismissed'].includes(String(req.query.filter))
       ? String(req.query.filter)
       : '';
+    const paged = reviews.reportsPage({ status: filter, ...adminPaging(req.query) });
     res.type('html').send(adminReportsPage({
       ...context,
-      reports: reviews.listReports({ status: filter }),
+      reports: paged.reports,
+      paged,
       filter,
     }));
   });
@@ -2451,9 +2470,16 @@ function createApp(config = loadConfig()) {
 
   app.get('/admin/audit', generalLimit, requireAdminPage, (req, res) => {
     const context = adminPageContext(req);
+    const action = typeof req.query.action === 'string' ? req.query.action.trim() : '';
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const paged = admin.auditPage({ ...adminPaging(req.query), action, actor: q });
     res.type('html').send(adminAuditPage({
       ...context,
-      entries: admin.recentAudit(100),
+      entries: paged.entries,
+      paged,
+      action,
+      q,
+      actions: admin.auditActions(),
     }));
   });
 

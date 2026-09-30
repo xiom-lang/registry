@@ -1223,6 +1223,72 @@ test('the admin audit feed records role and status changes newest first', async 
   assert.ok(actions.includes('user.suspended'));
   assert.ok(actions.includes('user.banned'));
   assert.ok(actions.includes('user.restore'));
+
+  // D3: paging + filters. Seed three known rows so the totals are ours.
+  const { admin } = app.locals.registry;
+  for (let i = 1; i <= 3; i++) {
+    admin.audit({
+      actor: { githubId: '4242', login: 'admin-user' },
+      action: 'test.audit',
+      subjectType: 'package',
+      subjectId: `audit-demo-${i}`,
+      detail: `row ${i}`,
+    });
+  }
+  let page = await (await requestAs(jar, '/admin/audit?action=test.audit&per_page=2&page=1', { headers: BROWSER })).text();
+  assert.match(page, /3 entries/);
+  assert.match(page, /Page 1 of 2/);
+  assert.match(page, /href="\/admin\/audit\?action=test\.audit&amp;page=2"/, 'paging keeps the filter');
+  // The newest seeded row links its actor and subject.
+  assert.match(page, /href="\/account\/admin-user"/);
+  assert.match(page, /href="\/packages\/audit-demo-3"/);
+  page = await (await requestAs(jar, '/admin/audit?action=test.audit&per_page=2&page=2', { headers: BROWSER })).text();
+  assert.equal((page.match(/class="audit-row"/g) || []).length, 1, 'the last page holds one row');
+  assert.match(page, /Page 2 of 2/);
+  assert.match(page, /disabled">Older/);
+  // Actor search narrows the log; the action chip survives the form redirect.
+  page = await (await requestAs(jar, '/admin/audit?q=admin-user&per_page=200', { headers: BROWSER })).text();
+  assert.match(page, /test\.audit/);
+  assert.match(page, /Filter by actor/);
+  page = await (await requestAs(jar, '/admin/audit?q=ghost-nobody', { headers: BROWSER })).text();
+  assert.match(page, /Nothing has been done from the console yet/);
+
+  // Out-of-range pages clamp instead of erroring.
+  page = await (await requestAs(jar, '/admin/audit?action=test.audit&per_page=2&page=99', { headers: BROWSER })).text();
+  assert.match(page, /Page 2 of 2/);
+});
+
+test('the admin reports queue paginates and keeps its status filter', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+  const { reviews } = app.locals.registry;
+  // Seed three open reports from reporters no earlier test used, so the
+  // per-reporter cap cannot interact and the newest-first order is ours.
+  const reporters = ['seed-one', 'seed-two', 'seed-three'];
+  for (const [index, login] of reporters.entries()) {
+    reviews.createReport({
+      packageName: 'readme-pkg',
+      reporter: { githubId: `90${index}`, login },
+      reason: 'other',
+      note: `pagination report ${index + 1}`,
+    });
+  }
+
+  let page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=1', { headers: BROWSER })).text();
+  assert.match(page, /pagination report 3/, 'newest first');
+  assert.match(page, /Page 1 of \d+/);
+  assert.match(page, /href="\/admin\/reports\?filter=open&amp;page=2"/, 'paging preserves the filter');
+  page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=2', { headers: BROWSER })).text();
+  assert.match(page, /pagination report 2/);
+  page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=3', { headers: BROWSER })).text();
+  assert.match(page, /pagination report 1/);
+  // The dismissed filter never shows the open seeds.
+  page = await (await requestAs(jar, '/admin/reports?filter=dismissed&per_page=200', { headers: BROWSER })).text();
+  assert.doesNotMatch(page, /pagination report/);
+  // Out-of-range pages clamp to the last page of the filtered set.
+  page = await (await requestAs(jar, '/admin/reports?filter=open&per_page=1&page=9999', { headers: BROWSER })).text();
+  assert.match(page, /Newer/);
+  assert.match(page, /disabled">Older/);
 });
 
 test('maintainer claims are filed, verified by reviewers, and shown publicly', async () => {
