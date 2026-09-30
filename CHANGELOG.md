@@ -6,6 +6,21 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Operations
+
+- **Admin console pagination + filters (D3)**: the audit log and the reports
+  queue are paged (`?page` / `?per_page`: default 50, cap 200, clamped to the
+  last matching page) and every filter chip, pager link, and search form
+  preserves the other active filters. The audit page adds action chips with
+  counts and an actor-login search, and audit rows link the actor and the
+  subject to their profile/package pages; the dashboard's recent-activity
+  block links to the full log.
+- **Batch-publish window documented (D5)**: the production batch runbook in
+  DEPLOY.md and a labeled "Batch publish window" block in `.env.example`
+  describe the temporary `PUBLISH_RATE_MAX=600` profile -- recreate, verify
+  with `printenv`, restore afterwards -- and point at `POST /validate` as the
+  pre-batch preflight. Republish waves under 20 names need no change.
+
 ## [2.7.0] - 2026-09-29
 
 ### Interface
