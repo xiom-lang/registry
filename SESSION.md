@@ -1966,9 +1966,10 @@ email, community->maintainer contact, review votes/replies) is recorded in
 attestation links, B3 `/validate`, B4/B5 grant changes, C5 index digest,
 Instagram footer, contributor/sponsor discoverability; verified from the
 registry lane: health 2.7.0 + email enabled, digest byte-exact on both,
-production digest signed `f7:6f:5f:f5:15:38:ce:75`). All registry-side
-roadmap items are done; the remaining Track B work is compiler-lane
-(`xiom pkg`).
+production digest signed `f7:6f:5f:f5:15:38:ce:75`). **Post-2.7.0 on `main`:
+D3 admin pagination/filters and D5 batch profile (`4175b3e`, `3859438`),
+awaiting the next release window.** All registry-side roadmap items are done;
+the remaining Track B work is compiler-lane (`xiom pkg`).
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2312,9 +2313,9 @@ order.
 |---|---|---|---|
 | D1 | Fulfilment worker on the VPS | Ops item from 20.7; one admin click end-to-end with mail. | S (ops) |
 | D2 | Ops-repo issue template removal | Point the org profile at `/publish`; the web request flow is the only front door. | S (ops) |
-| D3 | Audit/report pagination + filters | The console caps at 100/200 rows; paginate when tables grow (checklist note). | S |
+| D3 | Audit/report pagination + filters | The console caps at 100/200 rows; paginate when tables grow (checklist note). **DONE 2026-09-30 (`4175b3e`):** `AdminStore.auditPage()` + `ReviewStore.reportsPage()` with clamped `?page`/`?per_page` (default 50, cap 200, clamp to last matching page); audit page gains action chips with counts + actor search; every chip/pager/form preserves the other filters; audit rows link actors/subjects to profile/package pages; dashboard links the full log. 336/336 unit; mobile pass at 390px. | S (done) |
 | D4 | Backup/restore drill | SQLite WAL + `data/` + `packages/` restore rehearsal; document RPO/RTO in DEPLOY.md. | S (ops) |
-| D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. **Ops report 2026-09-30: republish waves now run <20 names at a time, so the default window usually suffices** -- the documented profile remains a small docs task. | S |
+| D5 | Rate-limit tuning for batch publishes | The eco batch needed `PUBLISH_RATE_MAX=600`; make the batch mode a documented env profile rather than an ad-hoc bump. **DONE 2026-09-30 (`4175b3e`):** the production runbook (DEPLOY.md) and a labeled "Batch publish window" block in `.env.example` document the temporary `PUBLISH_RATE_MAX=600` profile (recreate, `printenv` check, restore) with a `POST /validate` pre-batch preflight. Ops: waves under 20 names need no change. | S (done) |
 | D6 | Resource-cap tuning | L0 defaults shipped in `docker-compose.yml` (registry 1.5 CPU / 1g / 256 pids, staging 1.0 / 768m / 256), overridable from `.env`; revisit after the staging characterization run (`docs/SCALING_LOAD_PLAN.md` in the ops repo). | S (ops) |
 | D7 | **Notification email enablement + observability** | **Agreed with owner 2026-09-27** (21.9.1). **Code half DONE 2026-09-27 (`4110752`, `014f156`):** verified-address gate (single-use 24h link; only verified addresses queue email), retry/backoff with recorded errors, migration 003 skips the pre-gate backlog, `/health` + dashboard visibility. **Ops half DONE 2026-09-28:** SMTP configured; `/health` reports `email: enabled` on both environments since 2.5.0 and every deploy report repeats it. | M (done) |
 
@@ -2639,8 +2640,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.7.0 release commit (on top of `b04a955`; 2.6.0 `73e7db5`; features `9b10975` A10, `67a582f` A4, `62780a3` C3, `bbe42d0` A5, `c77381c` C1, `480531b`+`ff6ae2b` nav/cache fixes, `2681ad6` C2, `33c3d56` `/validate`, `9f364d4` B4/B5, `10d7217` C5, `b04a955` Instagram footer); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **335/335**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `3859438` (2.7.0 `ba26db1`; post-release fixes `e4c9c19`/`5640296`/`18d1763`; D3+D5 `4175b3e`+`3859438`); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **336/336**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.7.0 on staging and production** (ops, 2026-09-29; health 2.7.0 + email enabled on both, no migrations or env needed, live-check complete, `/index-digest.json` byte-exact against `/index.json` independently on both). Production digest is **signed** (ed25519, fp `f7:6f:5f:f5:15:38:ce:75`); staging is unsigned. Post-2.7.0 `main` is `18d1763` |
 | Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75` -- handed to the compiler lane (`xiom pkg`); 0.62.2 shipped 2026-09-30 so the pinning batch is unblocked. Staging unsigned |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
@@ -2720,6 +2721,12 @@ now warns when the manifest declares no stage or marks a pre-release version
   now served byte-for-byte from disk (empty index materialized at boot), so
   `sha256sum data/index.json` equals the digest; `scripts/index-key.js`
   generates keys. 335/335 unit; e2e re-run.
+- `4175b3e` + `3859438` **D3/D5** (post-2.7.0, CHANGELOG Unreleased): admin
+  audit + reports pagination/filters (clamped paging, action chips with
+  counts, actor search, filter-preserving links, actor/subject profile
+  links, dashboard deep link) and the documented batch-publish window
+  (DEPLOY.md runbook + `.env.example` block + `/validate` preflight note).
+  336/336 unit; mobile pass at 390px.
 - `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
   registry footer matches the updated xiom-lang.org social row.
 - Profile fix after the release commit (same 2.7.0 deploy): the signed-in
@@ -2784,31 +2791,28 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 18d1763 (2.7.0 ba26db1 plus
-the profile/UI follow-ups e4c9c19 and 5640296/18d1763; features 9b10975
-A10, 67a582f A4, 62780a3 C3, bbe42d0 A5, c77381c C1, 480531b+ff6ae2b
-nav/cache fixes, 2681ad6 C2, 33c3d56 /validate, 9f364d4 B4/B5, 10d7217 C5),
-clean, 335/335 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at 3859438 (2.7.0 ba26db1 plus
+the post-release profile/UI fixes and D3+D5 4175b3e), clean, 336/336 unit
+and 20/20 e2e green.
 
 State in one line: 2.7.0 is live on staging and production and verified;
-production's index digest is signed (fp f7:6f:5f:f5:15:38:ce:75); all
-registry-side roadmap items are done and no relay is open.
+production's index digest is signed (fp f7:6f:5f:f5:15:38:ce:75); D3 admin
+pagination + D5 batch profile are on main awaiting the next release window;
+no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 335) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 336) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.7.0, email enabled);
    /index-digest.json byte-exact against /index.json on both.
-2. Compiler-lane handoff (`xiom pkg`): **0.62.2 shipped 2026-09-30
-   16:37Z** (tag `801d888f`, release run green, xiom tree clean), so the
-   hold is lifted and the xiom-pkg batch (C5 index-digest pinning + B3
-   `--dry-run`) is unblocked. Pin the index public key
-   f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673
+2. Compiler-lane handoff (`xiom pkg`, 0.62.2 shipped): pin the index public
+   key f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673
    (fp f7:6f:5f:f5:15:38:ce:75) and use POST /validate for `--dry-run`.
 3. Optional ops follow-ups: sign the staging digest too (parity), or leave
    it unsigned. Nothing required.
 4. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
-   ops opens the publish-rate window per batch); C3 is delivered to the
-   playground and their side continues. No registry code work remains.
+   ops opens the publish-rate window per batch when a wave exceeds 20 names);
+   C3 is delivered to the playground and their side continues. Next release
+   candidates: only D3+D5 unless a new requirement arrives.
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
