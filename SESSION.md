@@ -2294,7 +2294,7 @@ order.
 |---|---|---|---|
 | B1 | `xiom pkg publish` packaging guard | Ignore file / CI artifact filter so juniors cannot ship `target/`; pairs with the guide. | S |
 | B2 | `xiom pkg yank <pkg>@<ver>` | The guide currently curls the API; a subcommand makes withdrawal a first-class op. | S |
-| B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). **Registry side DONE 2026-09-29 (`33c3d56`, post-2.6.0):** `POST /validate` runs the exact publish checks (shared `preparePublish` pipeline) with no artifacts/index writes and the upload always discarded; same status codes/body as `/publish`, documented in PUBLISHING.md. The `--dry-run` flag remains with the compiler lane (`xiom pkg`). | M (registry half done) |
+| B3 | Publishing `--dry-run` | Validates manifest, scope, and name locally and shows what would be sent; needs a registry-side validate endpoint (no writes). **Registry side DONE 2026-09-29 (`33c3d56`); compiler side DONE 2026-10-01 (`1af1873c` in xiom: `publish --dry-run` posts to `/validate`).** | M (done) |
 | B4 | Trusted-publisher self-service | Owner-facing edit/revoke request for their own repo+workflow entries (ops still executes revocation); currently admin-only. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** "Your grants" on `/account/requests`; owner files `publisher-edit` / `publisher-revoke` requests carrying the target grant; admin one-click approve applies `PublisherStore.update` (in-place, provenance kept, clashes refused) or removes the entry immediately; ownership checked against the target record, one pending change per grant, full audit chain. | S (done) |
 | B5 | Token rotation self-service | Request rotation from `/account/requests`; fulfilment stays host-side. **DONE 2026-09-29 (`9f364d4`, post-2.6.0):** fulfilled token grants offer "Request rotation" (kind `token-rotation`, scopes copied); admin approval ends `approved` for host-side minting with a kind-aware notice. | S (done) |
 
@@ -2306,7 +2306,7 @@ order.
 | C2 | Provenance attestation link | 6: store the GitHub attestation URL per version alongside the existing publisher provenance and render it. **DONE 2026-09-29 (`2681ad6`, post-2.6.0):** optional `publisher.attestation` (additive in `/index.json`); publisher-supplied canonical URL at publish time or best-effort GitHub attestations-API discovery by subject digest; rendered as a "build attestation" link; token-optional via `GITHUB_ATTESTATIONS_TOKEN` (falls back to the Sponsors token). | S (done) |
 | C3 | Mirror / offline mode | 6/10: a client-side mirror of `/index.json` + artifacts is the cheap version; a registry export bundle is the heavier one. Decide with the client lane. **The playground's C3 is waiting on this** (their container has no egress; they need a vendored/mounted cache layout -- see 20.8.5). **Registry answers to the four playground questions (2026-09-28, relayed from playground 11.2):** (1) *packages/timing* -- already live: **328 real `xiom.*` packages** on production (e.g. `xiom.hello@0.1.0`, `xiom.csv@0.1.0`, `xiom.windows@0.1.0`), all signed; the packages lane is re-publishing 53 of them with `stage: incubating` in correction batches and `xiom-std@0.62.0` is gated on the stdlib release workflow; (2) *index contract* -- stable and public: `GET /index.json` (no auth, read-only) plus `GET /packages/<name>/<version>/package.tar.gz`; the shape is SESSION 2.2, unchanged since the probe, and the publish-time stage warnings are the only recent addition; (3) *no-egress path* -- none exists yet: proposed registry deliverable is `scripts/export-bundle.js` producing a vendored/mountable layout `index.json` + `artifacts/<name>/<version>/package.tar.gz` + `bundle.json` (per-artifact sha256/signature/publicKey, source URL, generatedAt), with an `OFFLINE.md` documenting the layout; the client lane owns offline resolution semantics; (4) *production vs staging* -- export from **production** (source of truth), pin by sha256; staging is rehearsal only. **DONE 2026-09-29 (`62780a3`, 2.5.0):** `scripts/export-bundle.js` + `OFFLINE.md`; every artifact hashed while exporting, `--latest-only`, resume, `--verify`; production export verified: 384 artifacts / 15,516,333 bytes. Client lane owns offline resolution semantics. | L (done) |
 | C4 | Object storage + index sharding | 6/10: only when package count passes a few thousand; `/index.json` stays the contract, sharding is internal. | L |
-| C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. Owner approved the sidecar model 2026-09-29. **DONE 2026-09-29 (`10d7217`, post-2.6.0):** `GET /index-digest.json` (sha256/size/registry/signedAt; ed25519 over `xiom-index-digest:v1\n<sha256>` when `INDEX_SIGNING_KEY` is set; fail-closed on a bad key); `/index.json` served byte-for-byte from disk so `sha256sum data/index.json` equals the digest; `scripts/index-key.js`; compose + env examples + DEPLOY.md wired; unsigned digest available with no key. | M (done) |
+| C5 | Index manifest digest | Optional and *discuss first*: a signed digest of `/index.json` (registry key over a manifest hash) is a different trust claim from package signing; keep it clearly labeled if built. Owner approved the sidecar model 2026-09-29. **DONE 2026-09-29 (`10d7217`, post-2.6.0):** `GET /index-digest.json` (sha256/size/registry/signedAt; ed25519 over `xiom-index-digest:v1\n<sha256>` when `INDEX_SIGNING_KEY` is set; fail-closed on a bad key); `/index.json` served byte-for-byte from disk so `sha256sum data/index.json` equals the digest; `scripts/index-key.js`; compose + env examples + DEPLOY.md wired; unsigned digest available with no key. **Client pinning landed 2026-10-01 (`1af1873c` in xiom: TrustStore `index_keys`, `trust --registry --index-key`, fail-closed digest verification).** | M (done) |
 
 ### Track D -- operations and hardening
 
@@ -2806,15 +2806,15 @@ e2e green.
 State in one line: 2.8.0 (D3 admin pagination/filters, D5 batch profile) is
 live on staging and production and verified (digest byte-exact, production
 signature intact fp f7:6f:5f:f5:15:38:ce:75); all registry-side roadmap
-items are done and no relay is open.
+items are done, the compiler-lane C5 pinning + B3 dry-run landed
+(`1af1873c` in xiom, verified against production), and no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 336) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.8.0, email enabled);
    /index-digest.json byte-exact against /index.json on both.
-2. Compiler-lane handoff (`xiom pkg`, 0.62.2 shipped): pin the index public
-   key f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673
-   (fp f7:6f:5f:f5:15:38:ce:75) and use POST /validate for `--dry-run`.
+2. Remaining Track B items are optional compiler-lane polish: B1 packaging
+   guard and B2 `xiom pkg yank`. Nothing is pending from the registry side.
 3. Optional ops follow-ups: sign the staging digest too (parity), or leave
    it unsigned. Nothing required.
 4. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
