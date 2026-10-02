@@ -198,16 +198,31 @@ function listingFromQuery(query) {
 /**
  * Admin console paging (D3): `?page` / `?per_page`, clamped like the public
  * listing (default 50, cap 200) so a deep link can never ask for a huge scan.
+ * Pages with two independent lists pass their own page key (`ppage`/`dpage`).
  */
-function adminPaging(query) {
+function adminPaging(query, pageKey = 'page') {
   const clamp = (value, fallback, max) => {
     const parsed = Number.parseInt(String(value ?? ''), 10);
     if (!Number.isFinite(parsed) || parsed < 1) return fallback;
     return Math.min(parsed, max);
   };
   return {
-    page: clamp(query.page, 1, 1_000_000),
+    page: clamp(query[pageKey], 1, 1_000_000),
     perPage: clamp(query.per_page, 50, 200),
+  };
+}
+
+/** Slice one in-memory list for the console with clamped page numbers. */
+function pageSlice(items, { page = 1, perPage = 50 } = {}) {
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), totalPages);
+  return {
+    items: items.slice((current - 1) * perPage, current * perPage),
+    total,
+    totalPages,
+    page: current,
+    perPage,
   };
 }
 
@@ -2189,9 +2204,28 @@ function createApp(config = loadConfig()) {
     const filter = ['pending', 'approved', 'closed'].includes(String(req.query.filter))
       ? String(req.query.filter)
       : '';
+    const all = requests.list();
+    const groups = {
+      pending: all.filter((record) => record.status === 'pending'),
+      approved: all.filter((record) => record.status === 'approved'),
+      closed: all.filter((record) => record.status === 'denied' || record.status === 'fulfilled'),
+    };
+    // With a filter active, that group is paged; on "All" the actionable
+    // queues render in full and only the growing Closed list is paged.
+    const paged = filter ? pageSlice(groups[filter], adminPaging(req.query)) : null;
+    const closedPaged = filter ? null : pageSlice(groups.closed, adminPaging(req.query));
     res.type('html').send(adminRequestsPage({
       ...context,
-      requests: requests.list(),
+      pending: filter === 'pending' ? paged.items : groups.pending,
+      approved: filter === 'approved' ? paged.items : groups.approved,
+      closed: filter === 'closed' ? paged.items : (filter ? [] : closedPaged.items),
+      counts: {
+        pending: groups.pending.length,
+        approved: groups.approved.length,
+        closed: groups.closed.length,
+      },
+      paged,
+      closedPaged,
       activePublishers: publisherStore.list().map((entry) => entry.requestId),
       notice: updated ? `Request ${updated} updated.` : '',
       filter,
@@ -2307,11 +2341,22 @@ function createApp(config = loadConfig()) {
 
   app.get('/admin/claims', generalLimit, requireAdminPage, (req, res) => {
     const context = adminPageContext(req);
-    const decided = ownership.listClaims().filter((claim) => claim.status !== 'pending').slice(0, 20);
+    const claims = ownership.listClaims();
+    // Two independent lists on one page: ppage for pending, dpage for decided.
+    const pendingPaged = pageSlice(
+      claims.filter((claim) => claim.status === 'pending'),
+      adminPaging(req.query, 'ppage'),
+    );
+    const decidedPaged = pageSlice(
+      claims.filter((claim) => claim.status !== 'pending'),
+      adminPaging(req.query, 'dpage'),
+    );
     res.type('html').send(adminClaimsPage({
       ...context,
-      pending: ownership.listClaims({ status: 'pending' }),
-      decided,
+      pending: pendingPaged.items,
+      pendingPaged,
+      decided: decidedPaged.items,
+      decidedPaged,
     }));
   });
 
@@ -2369,10 +2414,17 @@ function createApp(config = loadConfig()) {
 
   app.get('/admin/users', generalLimit, requireAdminPage, (req, res) => {
     const context = adminPageContext(req);
+    const q = String(req.query.q || '').trim();
+    const needle = q.toLowerCase();
+    const all = accounts.list()
+      .map(accountUserView)
+      .filter((user) => !needle || user.login.toLowerCase().includes(needle));
+    const paged = pageSlice(all, adminPaging(req.query));
     res.type('html').send(adminUsersPage({
       ...context,
-      users: accounts.list().map(accountUserView),
-      q: String(req.query.q || '').trim(),
+      users: paged.items,
+      paged,
+      q,
       viewerIsConfigAdmin: isConfigAdmin(accountOf(req)),
     }));
   });

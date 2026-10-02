@@ -62,16 +62,17 @@ function filterChips(base, filters, active, { key = 'filter', params = {} } = {}
 
 /**
  * Prev/next pager for the console tables (D3), preserving the active filters.
- * Lists are newest first, so page 1 is the newest slice.
+ * Lists are newest first, so page 1 is the newest slice. `pageKey` lets one
+ * page paginate two independent lists (claims).
  */
-function adminPagination(base, params, page, totalPages) {
+function adminPagination(base, params, page, totalPages, { pageKey = 'page' } = {}) {
   if (totalPages <= 1) return '';
   const href = (target) => {
     const query = new URLSearchParams();
     for (const [name, param] of Object.entries(params)) {
       if (param) query.set(name, param);
     }
-    query.set('page', String(target));
+    query.set(pageKey, String(target));
     return `${base}?${query.toString()}`;
   };
   const previous = page > 1
@@ -255,7 +256,12 @@ function closedRow(record, csrf, publisherLive) {
 /** Approval queue with pending / awaiting-fulfilment / closed filters. */
 function adminRequestsPage({
   account,
-  requests,
+  pending = [],
+  approved = [],
+  closed = [],
+  counts = { pending: 0, approved: 0, closed: 0 },
+  paged = null,
+  closedPaged = null,
   activePublishers = [],
   csrf,
   notice = '',
@@ -263,19 +269,32 @@ function adminRequestsPage({
   filter = '',
   nav = '',
 }) {
-  const all = requests;
-  const pending = all.filter((record) => record.status === 'pending');
-  const approved = all.filter((record) => record.status === 'approved');
-  const closed = all.filter((record) => record.status === 'denied' || record.status === 'fulfilled');
-  const section = (title, items, empty, render) => `<section>
-  <h2>${escapeHtml(title)} <span class="count">${items.length}</span></h2>
+  // The route slices: with a filter active, that group is paged; on "All",
+  // the actionable queues render in full and only Closed is paged.
+  const section = (title, items, total, empty, render, pager = '') => `<section>
+  <h2>${escapeHtml(title)} <span class="count">${total}</span></h2>
   ${items.length === 0 ? `<p class="pkg-meta">${escapeHtml(empty)}</p>` : `<ul class="request-list">\n${items.map(render).join('\n')}\n</ul>`}
+  ${pager}
 </section>`;
-
+  const filterPager = (info) => (info
+    ? adminPagination('/admin/requests', { filter, per_page: info.perPage }, info.page, info.totalPages)
+    : '');
   const groups = {
-    pending: () => section('Pending', pending, 'Nothing waiting for a decision.', (record) => pendingRow(record, csrf)),
-    approved: () => section('Approved, awaiting fulfilment', approved, 'Nothing approved but unfulfilled.', (record) => approvedRow(record, csrf)),
-    closed: () => section('Closed', closed, 'No closed requests yet.', (record) => closedRow(record, csrf, activePublishers.includes(record.id))),
+    pending: () => section(
+      'Pending', pending, counts.pending, 'Nothing waiting for a decision.',
+      (record) => pendingRow(record, csrf),
+      filter === 'pending' ? filterPager(paged) : '',
+    ),
+    approved: () => section(
+      'Approved, awaiting fulfilment', approved, counts.approved, 'Nothing approved but unfulfilled.',
+      (record) => approvedRow(record, csrf),
+      filter === 'approved' ? filterPager(paged) : '',
+    ),
+    closed: () => section(
+      'Closed', closed, counts.closed, 'No closed requests yet.',
+      (record) => closedRow(record, csrf, activePublishers.includes(record.id)),
+      filter === 'closed' ? filterPager(paged) : filterPager(closedPaged),
+    ),
   };
   const rendered = filter && groups[filter]
     ? groups[filter]()
@@ -545,6 +564,7 @@ function adminUsersPage({
   notice = '',
   error = '',
   q = '',
+  paged = null,
   viewerIsConfigAdmin = false,
   nav = '',
 }) {
@@ -563,9 +583,11 @@ ${noticeBox(notice, error)}
   <input type="search" name="q" value="${escapeHtml(q)}" placeholder="Filter by GitHub login" aria-label="Filter users by login">
   <button class="button" type="submit">Search</button>
 </form>
+${paged ? `<p class="pkg-meta">${paged.total} account${paged.total === 1 ? '' : 's'}</p>` : ''}
 ${filtered.length === 0
     ? '<p class="pkg-meta">No accounts match.</p>'
-    : `<ul class="request-list">\n${filtered.map((user) => userCard(user, csrf, viewerIsConfigAdmin)).join('\n')}\n</ul>`}`;
+    : `<ul class="request-list">\n${filtered.map((user) => userCard(user, csrf, viewerIsConfigAdmin)).join('\n')}\n</ul>`}
+${paged ? adminPagination('/admin/users', { q }, paged.page, paged.totalPages) : ''}`;
   return layout({ title: 'Admin users', body, nav });
 }
 
@@ -646,7 +668,9 @@ ${paged ? adminPagination('/admin/audit', { action, q }, paged.page, paged.total
 function adminClaimsPage({
   account,
   pending = [],
+  pendingPaged = null,
   decided = [],
+  decidedPaged = null,
   csrf,
   notice = '',
   error = '',
@@ -669,17 +693,19 @@ function adminClaimsPage({
 ${adminTabs('claims')}
 ${noticeBox(notice, error)}
 <section>
-  <h2>Awaiting verification <span class="count">${pending.length}</span></h2>
+  <h2>Awaiting verification <span class="count">${pendingPaged ? pendingPaged.total : pending.length}</span></h2>
   ${pending.length === 0
     ? '<p class="pkg-meta">No claims are waiting. Claims arrive when a signed-in account clicks '
       + '&ldquo;I maintain this package&rdquo; on a package page it is not already tied to.</p>'
     : `<ul class="request-list">\n${pending.map((claim) => claimRow(claim, csrf, '/admin/claims')).join('\n')}\n</ul>`}
+  ${pendingPaged ? adminPagination('/admin/claims', { per_page: pendingPaged.perPage }, pendingPaged.page, pendingPaged.totalPages, { pageKey: 'ppage' }) : ''}
 </section>
 <section>
-  <h2>Recent decisions <span class="count">${decided.length}</span></h2>
+  <h2>Recent decisions <span class="count">${decidedPaged ? decidedPaged.total : decided.length}</span></h2>
   ${decided.length === 0
     ? '<p class="pkg-meta">Nothing decided yet.</p>'
     : `<ul class="request-list">\n${decided.map(decidedRow).join('\n')}\n</ul>`}
+  ${decidedPaged ? adminPagination('/admin/claims', { per_page: decidedPaged.perPage }, decidedPaged.page, decidedPaged.totalPages, { pageKey: 'dpage' }) : ''}
 </section>`;
   return layout({ title: 'Admin claims', body, nav });
 }

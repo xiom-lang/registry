@@ -1302,6 +1302,53 @@ test('the admin reports queue paginates and keeps its status filter', async () =
   assert.match(page, /disabled">Older/);
 });
 
+test('the admin queues paginate: users, claims, and requests', async () => {
+  const jar = cookieJar();
+  await login(jar, 'admin-code');
+
+  // Users: the login search combines with paging, and a result smaller than
+  // one page has no pager.
+  let page = await (await requestAs(jar, '/admin/users?q=admin&per_page=1&page=1', { headers: BROWSER })).text();
+  assert.match(page, /1 account\b/);
+  assert.match(page, /@admin-user/);
+  assert.doesNotMatch(page, /class="pagination"/);
+
+  page = await (await requestAs(jar, '/admin/users?per_page=1&page=1', { headers: BROWSER })).text();
+  const userPages = Number((page.match(/Page 1 of (\d+)/) || [])[1]);
+  assert.ok(userPages >= 3, `several accounts are paged (got ${userPages})`);
+  assert.match(page, /href="\/admin\/users\?page=2"/, 'the pager keeps the (empty) search out of the URL');
+  page = await (await requestAs(jar, '/admin/users?per_page=1&page=9999', { headers: BROWSER })).text();
+  assert.match(page, new RegExp(`Page ${userPages} of ${userPages}`), 'out-of-range pages clamp');
+
+  // Claims: seed one pending + two decided on a fresh package so both lists
+  // have rows; the decided list pages independently of the pending one.
+  const { ownership } = app.locals.registry;
+  ownership.claim('admin-paging-demo', { user: { githubId: '7101', login: 'page-claim-one' } });
+  ownership.claim('admin-paging-demo', { user: { githubId: '7102', login: 'page-claim-two' } });
+  ownership.claim('admin-paging-demo', { user: { githubId: '7103', login: 'page-claim-three' } });
+  ownership.decide('admin-paging-demo', '7102', { actor: 'admin-user', status: 'verified', note: 'ok' });
+  ownership.decide('admin-paging-demo', '7103', { actor: 'admin-user', status: 'rejected', note: 'no' });
+  page = await (await requestAs(jar, '/admin/claims?per_page=1&dpage=1', { headers: BROWSER })).text();
+  assert.match(page, /Recent decisions/);
+  const decidedPages = Number((page.match(/Page 1 of (\d+)/) || [])[1]);
+  assert.ok(decidedPages >= 2, `seeded decisions are paged (got ${decidedPages})`);
+  assert.match(page, /href="\/admin\/claims\?per_page=1&amp;dpage=2"/, 'dpage is preserved in the decided pager');
+  // Resolve the seeded pending claim so later tests see an empty queue.
+  ownership.decide('admin-paging-demo', '7101', { actor: 'admin-user', status: 'rejected', note: 'paging cleanup' });
+
+  // Requests: a filtered group pages and keeps the filter in the links.
+  page = await (await requestAs(jar, '/admin/requests?filter=closed&per_page=1&page=1', { headers: BROWSER })).text();
+  const closedPages = Number((page.match(/Page 1 of (\d+)/) || [])[1]);
+  assert.ok(closedPages >= 2, `closed requests are paged (got ${closedPages})`);
+  assert.match(page, /href="\/admin\/requests\?filter=closed&amp;per_page=1&amp;page=2"/);
+  page = await (await requestAs(jar, '/admin/requests?filter=closed&per_page=1&page=9999', { headers: BROWSER })).text();
+  assert.match(page, new RegExp(`Page ${closedPages} of ${closedPages}`), 'out-of-range pages clamp');
+  // The All view keeps the actionable queues unpaged and pages Closed.
+  page = await (await requestAs(jar, '/admin/requests?per_page=1', { headers: BROWSER })).text();
+  assert.match(page, /class="pagination"/);
+  assert.match(page, /href="\/admin\/requests\?per_page=1&amp;page=2"/);
+});
+
 test('maintainer claims are filed, verified by reviewers, and shown publicly', async () => {
   // A member claims a package: the section renders, the claim is queued, and
   // the claimant sees its state without it becoming public yet.
