@@ -1962,15 +1962,13 @@ and icon flows on staging. Owner feedback from the A2 test round (notification
 email, community->maintainer contact, review votes/replies) is recorded in
 21.9 and tracked as A7-A9, D7.
 
-**Status 2026-09-29:** **2.7.0 is live on staging and production** (C2
-attestation links, B3 `/validate`, B4/B5 grant changes, C5 index digest,
-Instagram footer, contributor/sponsor discoverability; verified from the
-registry lane: health 2.7.0 + email enabled, digest byte-exact on both,
-production digest signed `f7:6f:5f:f5:15:38:ce:75`). **2.8.0 (D3 admin
-pagination/filters, D5 batch profile) is live on staging and production**
-(ops, 2026-09-30 18:2xZ; verified from the registry lane). All registry-side
+**Status 2026-10-02:** 2.8.0 is live on staging and production (D3 admin
+pagination/filters, D5 batch profile) and verified (digest byte-exact,
+production signature intact `f7:6f:5f:f5:15:38:ce:75`). **Post-2.8.0 on
+`main`: reputation scoring v2 + the package stats strip (`3f8f1e2`,
+owner-approved)**, awaiting the next release window. All registry-side
 roadmap items are done; the remaining Track B work is compiler-lane
-(`xiom pkg`).
+(`xiom pkg`), with C5 pinning and B3 `--dry-run` already landed.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2641,8 +2639,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.8.0 release commit `30a84f2` plus the deploy-verify docs commit (on top of `e1a87d9`; D3+D5 `4175b3e`+`3859438`); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **336/336**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at `3f8f1e2` (2.8.0 `30a84f2` + deploy-verify docs; post-2.8.0 scoring v2/stats strip); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **338/338**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.8.0 on staging and production** (ops, 2026-09-30; health 2.8.0 + email enabled on both, no migrations or env steps, `/index-digest.json` byte-exact against `/index.json` independently on both, production signature intact `f7:6f:5f:f5:15:38:ce:75`; `/whats-new` serves the 2.8.0 entry). Registry-lane verification green |
 | Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75` -- handed to the compiler lane (`xiom pkg`); 0.62.2 shipped 2026-09-30 so the pinning batch is unblocked. Staging unsigned |
 | Packages waves | Wave 44 (eco-v0.1.23/24/25, formatter-fw 0.1.1 normalization) landed 2026-09-30 with zero failures; allowlist settled at 422, production index at 375 entries (registry-lane check agrees). The coordinated publish window closed: `PUBLISH_RATE_MAX` restored to 20 and verified in the recreated production container. Both relays delivered; registry and packages lanes in sync |
@@ -2729,6 +2727,14 @@ now warns when the manifest declares no stage or marks a pre-release version
   links, dashboard deep link) and the documented batch-publish window
   (DEPLOY.md runbook + `.env.example` block + `/validate` preflight note).
   336/336 unit; mobile pass at 390px.
+- `3f8f1e2` **Scoring v2 + package stats strip** (post-2.8.0, owner-approved
+  2026-10-02): uncapped value-weighted reputation -- review/reply/decision/
+  helpful-vote tiers (3/1/0.25, 2/0.5, 1/0.25, 1/0.25) plus per-package
+  `(avg stars / 5) x log2(1 + raters) x 2`; bare ratings score 0,
+  maintainers cannot rate their own packages, unrated packages add nothing,
+  history merges by github id, ties break on most recent contribution. The
+  package hero gains a rating/downloads/watchers/versions strip. 338/338
+  unit; mobile pass at 390px.
 - Release commit on top of `e1a87d9`: version `2.8.0`, CHANGELOG promotion
   ([Unreleased] -> [2.8.0]), this handoff.
 - `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
@@ -2799,25 +2805,28 @@ now warns when the manifest declares no stage or marks a pre-release version
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.8.0 release commit
-`30a84f2` plus the deploy-verify docs commit, clean, 336/336 unit and 20/20
-e2e green.
+notes. This is E:\xiom-lang\registry on main at 3f8f1e2 (2.8.0 `30a84f2` plus
+the post-release scoring v2 / stats strip), clean, 338/338 unit and 20/20 e2e
+green.
 
-State in one line: 2.8.0 (D3 admin pagination/filters, D5 batch profile) is
-live on staging and production and verified (digest byte-exact, production
-signature intact fp f7:6f:5f:f5:15:38:ce:75); all registry-side roadmap
-items are done, the compiler-lane C5 pinning + B3 dry-run landed
-(`1af1873c` in xiom, verified against production), and no relay is open.
+State in one line: 2.8.0 is live on staging and production and verified
+(digest byte-exact, production signature intact fp f7:6f:5f:f5:15:38:ce:75);
+reputation scoring v2 + the package stats strip are on main awaiting the next
+release window; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 336) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 338) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.8.0, email enabled);
    /index-digest.json byte-exact against /index.json on both.
-2. Remaining Track B items are optional compiler-lane polish: B1 packaging
-   guard and B2 `xiom pkg yank`. Nothing is pending from the registry side.
-3. Optional ops follow-ups: sign the staging digest too (parity), or leave
+2. If the owner orders the next cut: bump the version, promote
+   [Unreleased] (scoring v2 + stats strip), update this handoff, push, watch
+   CI, hand ops the deploy (staging first; no migrations, no env changes).
+3. Remaining Track B items are optional compiler-lane polish (B1 packaging
+   guard, B2 `xiom pkg yank`); C5 pinning and B3 `--dry-run` already landed
+   (`1af1873c` in xiom).
+4. Optional ops follow-ups: sign the staging digest too (parity), or leave
    it unsigned. Nothing required.
-4. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
+5. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
    ops opens the publish-rate window per batch when a wave exceeds 20 names);
    C3 is delivered to the playground and their side continues. No registry
    code work remains; the next cut happens when a new requirement arrives.
