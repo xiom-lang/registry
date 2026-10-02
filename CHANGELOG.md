@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-02
+
 ### Community
 
 - **Reputation scoring v2** (owner-approved 2026-10-02): the top-contributors
@@ -21,6 +23,15 @@ The rendered version of this file is at `/whats-new`.
 - **Package stats strip**: rating, downloads, watchers, and version count
   now sit under the package title (the detail rows and the watch control
   remain for the exact numbers and the follow action).
+
+### Operations
+
+- **Admin queue pagination sweep (D3 complete)**: the users, claims, and
+  requests queues are paged like the audit log and reports -- clamped
+  `?page` / `?per_page` (default 50, cap 200), totals, and filter-preserving
+  links. Claims page pending (`?ppage`) and decided (`?dpage`) independently;
+  requests page the active filter group, and the All view keeps the
+  actionable queues in full while paging the growing Closed list.
 
 ## [2.8.0] - 2026-09-30
 
