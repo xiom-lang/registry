@@ -595,61 +595,108 @@ class ReviewStore {
   }
 
   /**
-   * Per-account contribution counters for the A4 board and profiles:
-   * ratings (all), reviews (ratings with text), maintainer replies, and
-   * reviewer decisions. The board applies the caps; this is raw counting.
+   * Per-account contribution counters for the A4 board and profiles
+   * (scoring v2, 2026-10-02): ratings (all, display only), reviews (ratings
+   * with text), maintainer replies, reviewer decisions, net helpful votes
+   * received, and the most recent scored contribution for the recency
+   * tie-break. Rows with a stable github id merge by id, so a GitHub rename
+   * never splits a score; decision-only actors merge by login.
    *
    * @returns {Array<{ githubId: string, login: string, ratings: number,
-   *                   reviews: number, replies: number, decisions: number }>}
+   *                   reviews: number, replies: number, decisions: number,
+   *                   votes: number, latestAt: string }>}
    */
   contributionCounts() {
     const rows = new Map();
-    const entry = (githubId, login) => {
+    const latest = (current, value) => {
+      const at = String(value || '');
+      return at > String(current || '') ? at : current;
+    };
+    const entry = (githubId, login, at = '') => {
+      const id = String(githubId || '');
       const normalized = String(login || '').trim();
-      // Login is the merge key: a reviewer with ratings has one row, and the
-      // stable githubId is carried along when the row has one.
-      const key = normalized ? `login:${normalized.toLowerCase()}` : `id:${String(githubId || '')}`;
+      const key = id ? `id:${id}` : `login:${normalized.toLowerCase()}`;
       if (!rows.has(key)) {
-        rows.set(key, { githubId: String(githubId || ''), login: normalized, ratings: 0, reviews: 0, replies: 0, decisions: 0 });
+        rows.set(key, {
+          githubId: id,
+          login: normalized,
+          ratings: 0,
+          reviews: 0,
+          replies: 0,
+          decisions: 0,
+          votes: 0,
+          latestAt: '',
+        });
       }
       const record = rows.get(key);
       if (!record.login && normalized) record.login = normalized;
-      if (!record.githubId && githubId) record.githubId = String(githubId);
+      if (id && !record.githubId) record.githubId = id;
+      record.latestAt = latest(record.latestAt, at);
       return record;
+    };
+    // Decisions store the actor as a login; merge into the account's row
+    // when one exists (case-insensitive), else keep a login-only row.
+    const entryForActor = (login, at) => {
+      const needle = String(login || '').toLowerCase();
+      for (const record of rows.values()) {
+        if (record.login && record.login.toLowerCase() === needle) {
+          record.latestAt = latest(record.latestAt, at);
+          return record;
+        }
+      }
+      return entry('', login, at);
     };
     if (this.db) {
       for (const row of this.db.all(
-        `SELECT github_id, MAX(login) AS login, COUNT(*) AS count,
+        `SELECT github_id, MAX(login) AS login, MAX(at) AS latest, COUNT(*) AS count,
                 SUM(CASE WHEN review <> '' THEN 1 ELSE 0 END) AS with_text
          FROM review_ratings GROUP BY github_id`,
       )) {
-        const record = entry(row.github_id, row.login);
+        const record = entry(row.github_id, row.login, row.latest);
         record.ratings = Number(row.count) || 0;
         record.reviews = Number(row.with_text) || 0;
       }
       for (const row of this.db.all(
-        'SELECT author_id, MAX(author_login) AS login, COUNT(*) AS count FROM review_replies GROUP BY author_id',
+        `SELECT author_id, MAX(author_login) AS login, MAX(at) AS latest, COUNT(*) AS count
+         FROM review_replies GROUP BY author_id`,
       )) {
-        entry(row.author_id, row.login).replies = Number(row.count) || 0;
+        const record = entry(row.author_id, row.login, row.latest);
+        record.replies = Number(row.count) || 0;
       }
       for (const row of this.db.all(
-        `SELECT actor, COUNT(*) AS count FROM review_decision_history
+        `SELECT actor, MAX(at) AS latest, COUNT(*) AS count FROM review_decision_history
          WHERE actor <> '' GROUP BY actor`,
       )) {
-        entry('', row.actor).decisions = Number(row.count) || 0;
+        const record = entryForActor(row.actor, row.latest);
+        record.decisions = Number(row.count) || 0;
+      }
+      // Net helpful votes received on this account's reviews, floored at 0
+      // (a downvote can reduce help, never create a debt).
+      for (const row of this.db.all(
+        `SELECT r.github_id AS github_id, MAX(r.login) AS login,
+                COALESCE(SUM(v.value), 0) AS net
+         FROM review_ratings r
+         LEFT JOIN review_votes v
+           ON v.package = r.package AND v.review_github_id = r.github_id
+         GROUP BY r.github_id`,
+      )) {
+        if (Number(row.net) <= 0) continue;
+        const record = entry(row.github_id, row.login);
+        record.votes = Number(row.net) || 0;
       }
       return [...rows.values()];
     }
+    // JSON fallback: votes need SQLite, so they stay 0 there.
     for (const byUser of Object.values(this.ratings)) {
       for (const rating of Object.values(byUser)) {
-        const record = entry(rating.githubId, rating.login);
+        const record = entry(rating.githubId, rating.login, rating.at);
         record.ratings += 1;
         if (rating.review) record.reviews += 1;
       }
     }
     for (const record of Object.values(this.packages)) {
       for (const item of record.history || []) {
-        if (item.actor) entry('', item.actor).decisions += 1;
+        if (item.actor) entryForActor(item.actor, item.at).decisions += 1;
       }
     }
     return [...rows.values()];

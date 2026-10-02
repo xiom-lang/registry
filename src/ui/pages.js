@@ -1174,6 +1174,24 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   registry maintainers. Files are unchanged and pinned installs still work.</p>`
     : '';
 
+  // At-a-glance package stats (C1/A5): rating, downloads, watchers, versions.
+  // The detail grid still carries the exact numbers; this strip makes them
+  // impossible to miss above the fold.
+  const ratingInfo = options.rating || null;
+  const statBits = [];
+  if (ratingInfo && ratingInfo.count > 0) {
+    statBits.push(`${ratingInfo.average.toFixed(1)} \u2605 from ${ratingInfo.count} rating${ratingInfo.count === 1 ? '' : 's'}`);
+  }
+  if (options.stats) {
+    const total = Number(options.stats.total) || 0;
+    statBits.push(`${total.toLocaleString('en-US')} download${total === 1 ? '' : 's'}`);
+  }
+  if (watch) statBits.push(`${Number(watch.watchers) || 0} watching`);
+  statBits.push(`${names.length} version${names.length === 1 ? '' : 's'}`);
+  const statsStrip = statBits.length > 0
+    ? `<p class="pkg-stats">${statBits.map((bit) => escapeHtml(bit)).join(' \u00b7 ')}</p>`
+    : '';
+
   // A5: watcher count + follow toggle (signed-in), and the merged public
   // activity trail (releases, reviews, replies, decisions, verified claims).
   const watchBlockHtml = watchBlock(name, watch);
@@ -1201,6 +1219,7 @@ function packagePage(pkg, registryUrl, selectedVersion = '', options = {}) {
   </div>
   ${mutedNotice}
   ${pkg.description ? `<p>${escapeHtml(pkg.description)}</p>` : ''}
+  ${statsStrip}
   <div class="install">${installNode}</div>
   ${detailGrid}
   ${watchBlockHtml}

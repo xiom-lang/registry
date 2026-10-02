@@ -618,6 +618,21 @@ test('profile queries: ratings, replies, decisions, and counters by account', ()
     const carol = counters.find((row) => row.login === 'carol');
     assert.equal(carol.decisions, 2);
     assert.equal(carol.githubId, '', 'decision-only actors merge by login');
+
+    // Scoring v2 additions: net helpful votes received (floored at 0) and the
+    // most recent scored contribution for the recency tie-break.
+    reviews.vote('demo-pkg', '1', { voter: { githubId: '9', login: 'maint' }, value: 1 });
+    reviews.vote('other-pkg', '1', { voter: { githubId: '8', login: 'fan' }, value: 1 });
+    reviews.vote('other-pkg', '1', { voter: { githubId: '7', login: 'critic' }, value: -1 });
+    const withVotes = reviews.contributionCounts();
+    const aliceVotes = withVotes.find((row) => row.githubId === '1');
+    assert.equal(aliceVotes.votes, 1, 'net +1: two up, one down');
+    assert.ok(aliceVotes.latestAt, 'a scored contribution timestamp is present');
+    assert.equal(
+      withVotes.find((row) => row.githubId === '9').votes,
+      0,
+      'accounts that received no votes stay at zero',
+    );
   } finally {
     db.close();
   }

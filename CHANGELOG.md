@@ -6,6 +6,22 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Community
+
+- **Reputation scoring v2** (owner-approved 2026-10-02): the top-contributors
+  board now rewards sustained craft and demonstrated impact with **no
+  ceiling** -- written reviews score 3 each for the first 10, then 1, then
+  0.25; maintainer replies 2 then 0.5; reviewer decisions and helpful votes
+  received 1 then 0.25; and every maintained package adds
+  `(average stars / 5) x log2(1 + raters) x 2`. Bare ratings earn no
+  reputation (they still show on package pages), maintainers can no longer
+  rate their own packages, an unrated package contributes nothing, history
+  merges by GitHub id so renames never split a score, and ties break on the
+  most recent scored contribution. The board states the exact rules.
+- **Package stats strip**: rating, downloads, watchers, and version count
+  now sit under the package title (the detail rows and the watch control
+  remain for the exact numbers and the follow action).
+
 ## [2.8.0] - 2026-09-30
 
 ### Operations

@@ -190,10 +190,16 @@ ${profileHero({ account, role, sponsor, isSelf })}
   return layout({ title: `@${account.login}`, body, nav });
 }
 
+/** Fractional scores read as 12 or 12.25, never 12.00. */
+function formatScore(value) {
+  const score = Number(value) || 0;
+  return Number.isInteger(score) ? String(score) : String(Math.round(score * 100) / 100);
+}
+
 /**
- * Top-contributors board at /contributors. Ranking is the capped, weighted
- * score from src/contributors.js; the page states the rules so the order is
- * explainable.
+ * Top-contributors board at /contributors. Ranking is the uncapped,
+ * value-weighted score from src/contributors.js (scoring v2); the page
+ * states the rules so the order is explainable.
  */
 function contributorsPage({ entries = [], nav = '' } = {}) {
   const list = entries.length === 0
@@ -206,28 +212,35 @@ ${entries.map((entry, index) => {
     if (counts.replies) parts.push(`${counts.replies} repl${counts.replies === 1 ? 'y' : 'ies'}`);
     if (counts.decisions) parts.push(`${counts.decisions} decision${counts.decisions === 1 ? '' : 's'}`);
     if (counts.packages) parts.push(`${counts.packages} package${counts.packages === 1 ? '' : 's'}`);
+    if (counts.votes) parts.push(`${counts.votes} helpful`);
     if (counts.ratings) parts.push(`${counts.ratings} rating${counts.ratings === 1 ? '' : 's'}`);
     return `  <li class="contributor-row">
     <span class="contributor-rank" aria-hidden="true">${index + 1}</span>
     ${profileLink(entry.login)}
     ${entry.sponsor ? sponsorBadge(entry.login, { compact: true }) : ''}
     <span class="pkg-meta contributor-breakdown">${escapeHtml(parts.join(' \u00b7 '))}</span>
-    <span class="contributor-score">${entry.score} pt${entry.score === 1 ? '' : 's'}</span>
+    <span class="contributor-score">${formatScore(entry.score)} pt${entry.score === 1 ? '' : 's'}</span>
   </li>`;
   }).join('\n')}
 </ol>`;
   const body = `<div class="contributors-page">
 <section class="hero">
   <h1>Top contributors</h1>
-  <p>Accounts whose public work helps other users: written reviews, maintainer
-     replies, packages maintained, and reviewer decisions. Each category is
-     capped before scoring, so the board measures a sustained mix of work, never
-     raw volume.</p>
+  <p>Reputation here rewards sustained craft and demonstrated impact: written
+     reviews, maintainer replies, reviewer decisions, helpful votes received,
+     and the quality of the packages you maintain. There is no ceiling -- every
+     term keeps counting -- but the rate declines with volume, so no one can
+     farm their way up.</p>
 </section>
 ${list}
-<p class="pkg-meta contributors-note">Reviews count 3 points (cap 10), maintainer replies 2 (cap 10),
-   packages maintained 2 (cap 5), ratings 1 (cap 20), and reviewer decisions
-   1 (cap 20). <a href="/login">Sign in</a> to add your own contributions.</p>
+<p class="pkg-meta contributors-note">Written reviews score 3 each for the
+   first 10, then 1, then 0.25; maintainer replies 2 then 0.5; reviewer
+   decisions 1 then 0.25; helpful votes received 1 then 0.25 -- all uncapped.
+   Each maintained package adds (average stars / 5) &times; log<sub>2</sub>(1 +
+   raters) &times; 2: a package nobody rated adds nothing, and a package's own
+   maintainers' ratings never count. Ratings without text earn no reputation
+   (they still show on package pages).
+   <a href="/login">Sign in</a> to add your own contributions.</p>
 </div>`;
   return layout({ title: 'Top contributors', body, nav });
 }

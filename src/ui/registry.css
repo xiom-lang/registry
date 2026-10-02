@@ -1412,6 +1412,9 @@ textarea:focus-visible {
 /* The opt-in state line sits below the badge form with room to breathe. */
 .sponsor-state { margin-top: var(--space-md); }
 
+/* At-a-glance package stats (rating / downloads / watchers / versions). */
+.pkg-stats { color: var(--muted); font-size: 14px; margin: var(--space-sm) 0 0; }
+
 .profile-link { color: var(--paper); font-weight: 600; text-decoration: none; }
 .profile-link:hover { text-decoration: underline; }
 

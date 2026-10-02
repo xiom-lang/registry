@@ -1,8 +1,9 @@
-// XIOM Package Registry -- A4 contributor store and scoring tests.
+// XIOM Package Registry -- A4 contributor store and scoring tests (v2).
 // Copyright (c) 2026 Eleftherios Notas and The XIOM Authors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// SESSION.md 21 A4: the capped weighted score, maintainer counting from the
+// SESSION.md 21 A4 + scoring v2 (2026-10-02): the uncapped, value-weighted
+// score, package impact with self-ring exclusion, maintainer maps from the
 // index overlay, the public Sponsors check (with a fake fetch), and the
 // opt-in cache on the platform database.
 
@@ -15,34 +16,100 @@ const { Database } = require('../src/db');
 const {
   ContributorStore,
   checkSponsorListing,
-  contributorScore,
+  contributionScore,
+  packageImpact,
   maintainerCounts,
-  CONTRIBUTOR_CAPS,
-  CONTRIBUTOR_WEIGHTS,
+  maintainerPackages,
+  tieredPoints,
+  CRAFT_TIERS,
 } = require('../src/contributors');
 
-test('contributorScore caps every category and ignores garbage', () => {
-  assert.equal(contributorScore({}), 0);
-  assert.equal(contributorScore({ reviews: 3 }), 3 * CONTRIBUTOR_WEIGHTS.reviews);
-  assert.equal(
-    contributorScore({ reviews: 4000 }),
-    CONTRIBUTOR_CAPS.reviews * CONTRIBUTOR_WEIGHTS.reviews,
-    'raw volume cannot beat the cap',
+test('the score is strictly increasing but volume never scales linearly', () => {
+  assert.equal(contributionScore({}), 0);
+
+  // Tier boundaries: 10 reviews x3, then 40 x1, then 0.25.
+  assert.equal(tieredPoints(10, CRAFT_TIERS.reviews), 30);
+  assert.equal(tieredPoints(11, CRAFT_TIERS.reviews), 31);
+  assert.equal(tieredPoints(50, CRAFT_TIERS.reviews), 70);
+  assert.equal(tieredPoints(51, CRAFT_TIERS.reviews), 70.25);
+
+  // Replies: 10 x2 then 0.5; decisions: 20 x1 then 0.25; votes: 20 x1 then 0.25.
+  assert.equal(tieredPoints(12, CRAFT_TIERS.replies), 21);
+  assert.equal(tieredPoints(21, CRAFT_TIERS.decisions), 20.25);
+  assert.equal(tieredPoints(21, CRAFT_TIERS.votes), 20.25);
+
+  // No ceiling: every extra unit keeps adding something.
+  const dedicated = contributionScore({ reviews: 4000, replies: 500, decisions: 500, votes: 500 });
+  const veteran = contributionScore({ reviews: 100, replies: 30, decisions: 60, votes: 60 });
+  assert.ok(dedicated > veteran, 'a longer contribution history always ranks higher');
+  assert.ok(veteran > contributionScore({ reviews: 10, replies: 10, decisions: 20, votes: 20 }));
+
+  // Bare ratings are not a scoring input at all (they stay on package pages).
+  assert.equal(contributionScore({ ratings: 999 }), 0);
+
+  // Volume is sublinear: doubling output never doubles points.
+  assert.ok(
+    tieredPoints(200, CRAFT_TIERS.reviews) < 2 * tieredPoints(100, CRAFT_TIERS.reviews),
   );
+
+  // Garbage is ignored; fractional impacts add exactly.
+  assert.equal(contributionScore({ reviews: '2' }), 2 * 3, 'numeric strings count');
+  assert.equal(contributionScore({ reviews: -5, votes: 0.9, replies: null }), 0);
+  assert.equal(contributionScore({ impacts: [2.5, 3.25, 'x', null] }), 5.75);
+});
+
+test('packageImpact rewards quality and reach, and excludes self-rings', () => {
+  assert.equal(packageImpact([]), 0, 'no ratings, no impact');
+  assert.equal(packageImpact([{ githubId: '1', login: 'fan', stars: 5 }]), 2, 'one 5-star rater = 2 points');
+
+  const ten = Array.from({ length: 10 }, (_, i) => ({ githubId: String(i), login: `fan${i}`, stars: i === 0 ? 3 : 5 }));
+  const impact = packageImpact(ten);
+  assert.ok(impact > 5.5 && impact < 7, `10 raters at 4.8 avg ~ 6.6 (got ${impact})`);
+
+  // The same account rating twice counts once (one per package anyway).
   assert.equal(
-    contributorScore({ ratings: 999 }),
-    CONTRIBUTOR_CAPS.ratings * CONTRIBUTOR_WEIGHTS.ratings,
+    packageImpact([
+      { githubId: '1', login: 'fan', stars: 5 },
+      { githubId: '1', login: 'fan', stars: 1 },
+    ]),
+    packageImpact([{ githubId: '1', login: 'fan', stars: 5 }]),
   );
+
+  // Maintainers' own ratings never count, even if a legacy row exists.
   assert.equal(
-    contributorScore({ decisions: 999, replies: 999, packages: 999 }),
-    CONTRIBUTOR_CAPS.decisions * CONTRIBUTOR_WEIGHTS.decisions
-      + CONTRIBUTOR_CAPS.replies * CONTRIBUTOR_WEIGHTS.replies
-      + CONTRIBUTOR_CAPS.packages * CONTRIBUTOR_WEIGHTS.packages,
+    packageImpact(
+      [
+        { githubId: '9', login: 'owner', stars: 5 },
+        { githubId: '1', login: 'fan', stars: 5 },
+      ],
+      ['owner'],
+    ),
+    packageImpact([{ githubId: '1', login: 'fan', stars: 5 }]),
   );
-  assert.equal(contributorScore({ reviews: '2' }), 2 * CONTRIBUTOR_WEIGHTS.reviews, 'numeric strings count');
-  assert.equal(contributorScore({ reviews: -5, ratings: 0.9, replies: null }), 0);
-  const capped = contributorScore({ reviews: 10, ratings: 20, replies: 10, decisions: 20, packages: 5 });
-  assert.equal(capped, 30 + 20 + 20 + 20 + 10, 'the maximum is the sum of the capped weights');
+  assert.equal(packageImpact([{ githubId: '9', login: 'owner', stars: 5 }], ['OWNER']), 0);
+
+  // Reach is logarithmic: a ring of 20 is worth far less than sqrt-like growth.
+  const ring = Array.from({ length: 20 }, (_, i) => ({ githubId: String(100 + i), login: `ring${i}`, stars: 5 }));
+  assert.ok(packageImpact(ring) < 10, `20 bought raters stay cheap (got ${packageImpact(ring)})`);
+});
+
+test('maintainerPackages maps logins to their live packages', () => {
+  const index = {
+    packages: {
+      'pkg-a': { versions: { '1.0.0': { publisher: { repository: 'Alice/pkg-a' } } } },
+      'pkg-b': { versions: { '1.0.0': { publisher: { repository: 'alice/pkg-b' } } } },
+      'pkg-c': { versions: {} },
+    },
+  };
+  const map = maintainerPackages(index, {
+    claims: [
+      { package: 'pkg-c', login: 'Bob', status: 'verified' },
+      { package: 'pkg-c', login: 'Eve', status: 'pending' },
+    ],
+  });
+  assert.deepEqual([...map.get('alice')].sort(), ['pkg-a', 'pkg-b']);
+  assert.deepEqual([...map.get('bob')], ['pkg-c']);
+  assert.equal(map.has('eve'), false, 'pending claims stay private');
 });
 
 test('maintainerCounts counts provenance owners and verified claims only', () => {

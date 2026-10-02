@@ -78,8 +78,9 @@ const {
 const {
   ContributorStore,
   checkSponsorListing,
-  contributorScore,
-  maintainerCounts,
+  contributionScore,
+  packageImpact,
+  maintainerPackages,
   CONTRIBUTORS_LIMIT,
 } = require('./contributors');
 const { profilePage, contributorsPage } = require('./ui/profile');
@@ -1047,10 +1048,11 @@ function createApp(config = loadConfig()) {
     }
   }
 
-  // ─── Contributor profiles and Sponsors badge (A4) ─────────────────────────
+  // ─── Contributor profiles and Sponsors badge (A4, scoring v2) ─────────────
   // The board and profiles read public data only: contribution counters from
-  // the platform DB, maintainership from the index overlay. Ranking is the
-  // capped, weighted score in src/contributors.js -- never raw volume.
+  // the platform DB, maintainership and package impact from the index and
+  // rating summaries. Reputation is the v2 score in src/contributors.js --
+  // strictly increasing, value-weighted, never raw volume.
 
   /**
    * C1: attach the aggregates a requested sort needs and nothing more. The
@@ -1069,33 +1071,59 @@ function createApp(config = loadConfig()) {
 
   /** Suspended and banned accounts are not ranked on the board. */
   function contributorBoard(limit = CONTRIBUTORS_LIMIT) {
-    const maintainers = maintainerCounts(indexStore.snapshot(), {
+    const index = indexStore.snapshot();
+    const packagesByLogin = maintainerPackages(index, {
       requests: requests.list(),
       publishers: publisherStore.list(),
       claims: ownership.listClaims(),
     });
+    // package -> its maintainer logins, for excluding self-rings from impact.
+    const maintainersOf = new Map();
+    for (const [login, names] of packagesByLogin) {
+      for (const name of names) {
+        if (!maintainersOf.has(name)) maintainersOf.set(name, new Set());
+        maintainersOf.get(name).add(login);
+      }
+    }
     const rows = [];
     for (const counter of reviews.contributionCounts()) {
       const account = counter.login ? accounts.getByLogin(counter.login) : null;
       if (!account || accountStatus(account) !== 'active') continue;
+      const maintained = packagesByLogin.get(account.login.toLowerCase()) || new Set();
+      // Package impact: only live, unmuted packages; ratings from the
+      // package's own maintainers never count. No ratings -> no impact, so
+      // stub publishing earns nothing.
+      const impacts = [];
+      for (const name of maintained) {
+        const pkg = index.packages[name];
+        if (!pkg || pkg.muted === true) continue;
+        const live = Object.values(pkg.versions || {}).some((entry) => entry.yanked !== true);
+        if (!live) continue;
+        impacts.push(packageImpact(reviews.ratingsFor(name), maintainersOf.get(name) || []));
+      }
       const counts = {
         reviews: counter.reviews,
         ratings: counter.ratings,
         replies: counter.replies,
         decisions: counter.decisions,
-        packages: maintainers.get(account.login.toLowerCase()) || 0,
+        votes: counter.votes,
+        packages: maintained.size,
       };
-      const score = contributorScore(counts);
+      const score = contributionScore({ ...counts, impacts });
       if (score <= 0) continue;
       const sponsor = contributors.sponsorOf(account.githubId);
       rows.push({
         login: account.login,
         score,
         counts,
+        latestAt: counter.latestAt || '',
         sponsor: sponsor.optedIn && sponsor.state === 'sponsor',
       });
     }
-    rows.sort((a, b) => b.score - a.score || a.login.localeCompare(b.login));
+    // Ties break on the most recent scored contribution, then login.
+    rows.sort((a, b) => b.score - a.score
+      || String(b.latestAt).localeCompare(String(a.latestAt))
+      || a.login.localeCompare(b.login));
     const capped = Math.max(1, Math.min(Number(limit) || CONTRIBUTORS_LIMIT, CONTRIBUTORS_LIMIT));
     return rows.slice(0, capped);
   }
@@ -1374,6 +1402,7 @@ function createApp(config = loadConfig()) {
             ownership,
           }),
           stats: stats.forPackage(pkg.name),
+          rating: reviews.ratingSummary(pkg.name),
         }));
     }
     res.json(pkg);
@@ -2673,8 +2702,28 @@ function createApp(config = loadConfig()) {
     (req, res, next) => {
       const { name } = req.params;
       try {
-        if (!indexStore.getPackage(name)) {
+        const pkg = indexStore.getPackage(name);
+        if (!pkg) {
           throw new NotFoundError(`package "${name}" not found`, 'package_not_found');
+        }
+        // Scoring v2: maintainers cannot rate their own package. Self-rings
+        // never count toward the board, so the route refuses them up front.
+        const viewer = accountOf(req);
+        const view = maintainerView({
+          packageName: name,
+          pkg,
+          requests: requests.list(),
+          publishers: publisherStore.list(),
+          claims: ownership.listClaims(),
+          viewer,
+        });
+        if (view.maintainers.some(
+          (entry) => String(entry.login).toLowerCase() === viewer.login.toLowerCase(),
+        )) {
+          throw new BadRequestError(
+            'maintainers cannot rate their own package; ask your users instead',
+            'self_rating',
+          );
         }
         const rating = reviews.rate(name, {
           user: accountOf(req),

@@ -1844,18 +1844,39 @@ test('reviews gain votes, a maintainer reply, and list controls', async () => {
   response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
   assert.match(await response.text(), /&#9650; 0/);
 
-  // A review of one's own cannot be voted on: 888 rates, then self-votes.
+  // Scoring v2: 888 maintains readme-pkg (verified claim), so a self-rating
+  // is refused up front -- self-rings can never feed the reputation board.
   response = await requestAs(voter, '/packages/readme-pkg/rating', {
     method: 'POST',
-    body: new URLSearchParams({ csrf, stars: '4', review: '' }),
+    body: new URLSearchParams({ csrf, stars: '4', review: 'my own package' }),
   });
   assert.equal(response.status, 303);
-  response = await requestAs(voter, '/packages/readme-pkg/reviews/888/vote', {
-    method: 'POST',
-    body: new URLSearchParams({ csrf, value: 'up' }),
-  });
-  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/readme-pkg#reviews');
   response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
+  assert.match(await response.text(), /maintainers cannot rate their own package/);
+  assert.equal(
+    reviews.ratingsFor('readme-pkg').some((entry) => entry.githubId === '888'),
+    false,
+    'no rating row was written',
+  );
+
+  // A review of one's own cannot be voted on: 777 re-rates (allowed, not a
+  // maintainer) and then tries to upvote their own review.
+  const reviewerVote = cookieJar();
+  await login(reviewerVote, 'user-code'); // 777
+  response = await requestAs(reviewerVote, '/packages/readme-pkg', { headers: BROWSER });
+  const reviewerCsrf = csrfFrom(await response.text());
+  response = await requestAs(reviewerVote, '/packages/readme-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewerCsrf, stars: '3', review: 'revised' }),
+  });
+  assert.equal(response.headers.get('location'), '/packages/readme-pkg?rated=1#reviews');
+  response = await requestAs(reviewerVote, '/packages/readme-pkg/reviews/777/vote', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewerCsrf, value: 'up' }),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(reviewerVote, '/packages/readme-pkg', { headers: BROWSER });
   assert.match(await response.text(), /cannot vote on your own review/);
 
   // 888 maintains readme-pkg (verified claim), so 888 can reply to 777.
@@ -1893,7 +1914,7 @@ test('reviews gain votes, a maintainer reply, and list controls', async () => {
   await login(outsider, 'user-code'); // 777
   response = await requestAs(outsider, '/packages/readme-pkg', { headers: BROWSER });
   const outsiderCsrf = csrfFrom(await response.text());
-  response = await requestAs(outsider, '/packages/readme-pkg/reviews/888/reply', {
+  response = await requestAs(outsider, '/packages/readme-pkg/reviews/777/reply', {
     method: 'POST',
     body: new URLSearchParams({ csrf: outsiderCsrf, message: 'Me too.' }),
   });
@@ -1901,17 +1922,18 @@ test('reviews gain votes, a maintainer reply, and list controls', async () => {
   response = await requestAs(outsider, '/packages/readme-pkg', { headers: BROWSER });
   assert.match(await response.text(), /only the package maintainers can reply/);
 
-  // Filters and pagination: 11 extra textless ratings make 13 rows over 2 pages.
+  // Filters and pagination: 11 extra textless ratings plus 777's make 12 rows
+  // over 2 pages.
   for (let i = 0; i < 11; i++) {
     reviews.rate('readme-pkg', { user: { githubId: String(200 + i), login: `ext${i}` }, stars: 3 });
   }
   response = await requestAs(voter, '/packages/readme-pkg', { headers: BROWSER });
   html = await response.text();
-  assert.match(html, /13 reviews/);
+  assert.match(html, /12 reviews/);
   response = await requestAs(voter, '/packages/readme-pkg?reviews_page=2', { headers: BROWSER });
   html = await response.text();
   assert.match(html, /Page 2 of 2/);
-  assert.equal((html.match(/class="rating-item"/g) || []).length, 3);
+  assert.equal((html.match(/class="rating-item"/g) || []).length, 2);
 
   response = await requestAs(voter, '/packages/readme-pkg?reviews_filter=text', { headers: BROWSER });
   html = await response.text();
