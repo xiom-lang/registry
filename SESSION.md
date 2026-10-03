@@ -2639,9 +2639,9 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `96036c3` (2.13.0 release), pushed; clean; Registry CI + CodeQL green |
+| Repo | `main` at the 2.13.1 release commit (after `6fc5214`), pushed; clean; Registry CI + CodeQL green |
 | Tests | `npm test` **357/357**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.12.0 live on staging and production** (ops, 2026-10-03 15:02Z; checkout `dacf342`, production image digest `4de0cea1…` -> `416ebf60…`, no migrations/env), verified externally by the registry lane: health 2.12.0 + email enabled on both, `/whats-new` 2.12.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/requests/check` auth-gated, new CSS (`nav-bell`, `notice-filters`, `field-error`) served; live-check green (staging 226/225, production 452/451, isolation ok). History: 2.11.0 verified 14:13Z; the 2.10.0 false-success incident is in DEPLOY.md's release-identity check. **Staging publisher count 5 explained** (ops): 3 static file entries (stdlib-main-staging 2 scopes, registry-canary, eco-canary 499) + 2 stored app-approved rows added since 2.10.0; the mounted file itself is unchanged. **2.13.0 live on staging and production** (ops, 2026-10-03 16:50Z; checkout `96036c3`, production image digest `416ebf60…` -> `6ad73cb3…`, no env changes), migrations clean: staging and production end at `014-work-assignments,015-work-roles`, `work_assignments` 0 rows, `user_roles` rebuilt with the widened schema and 0 rows; neither boot log shows migration errors. Verified externally by the registry lane: health 2.13.0 + email enabled on both, `/whats-new` 2.13.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/admin/inbox` auth-gated (401 logged out), new CSS (`nav-work`, `status-supervisor`, `work-actions`) served; live-check green (staging 226/225, production 452/451, isolation ok). Remaining manual checks: naming-guard walkthrough, deny flow, blur check, the 2.12.0 UX batch, and the 2.13.0 admin program (work badge counts, assign -> notice -> claim -> unassign, masked reveal + audit row, supervisor grant/remove), plus the mobile visual pass |
+| Deployed | **2.12.0 live on staging and production** (ops, 2026-10-03 15:02Z; checkout `dacf342`, production image digest `4de0cea1…` -> `416ebf60…`, no migrations/env), verified externally by the registry lane: health 2.12.0 + email enabled on both, `/whats-new` 2.12.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/requests/check` auth-gated, new CSS (`nav-bell`, `notice-filters`, `field-error`) served; live-check green (staging 226/225, production 452/451, isolation ok). History: 2.11.0 verified 14:13Z; the 2.10.0 false-success incident is in DEPLOY.md's release-identity check. **Staging publisher count 5 explained** (ops): 3 static file entries (stdlib-main-staging 2 scopes, registry-canary, eco-canary 499) + 2 stored app-approved rows added since 2.10.0; the mounted file itself is unchanged. **2.13.0 live on staging and production** (ops, 2026-10-03 16:50Z; checkout `96036c3`, production image digest `416ebf60…` -> `6ad73cb3…`, no env changes), migrations clean: staging and production end at `014-work-assignments,015-work-roles`, `work_assignments` 0 rows, `user_roles` rebuilt with the widened schema and 0 rows; neither boot log shows migration errors. Verified externally by the registry lane: health 2.13.0 + email enabled on both, `/whats-new` 2.13.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/admin/inbox` auth-gated (401 logged out), new CSS (`nav-work`, `status-supervisor`, `work-actions`) served; live-check green (staging 226/225, production 452/451, isolation ok). **2.13.1 cut 2026-10-03 (owner-ordered) and handed to ops: staging first, no migrations, no env changes; carries the rating-scope fix, the double-submit guard, the activity links, the roles guide, and the supervisor-scope alignment.** Remaining manual checks: naming-guard walkthrough, deny flow, blur check, the 2.12.0 UX batch, and the 2.13.0/2.13.1 admin program (work badge counts, assign -> notice -> claim -> unassign, masked reveal + audit row, supervisor grant/remove, ratings after the fix), plus the mobile visual pass |
 | Deploy pin | **Lifted by the 2.11.0 cut.** The ops pin (`b3f123a`) held production/staging on `c0af724` (2.10.0) and marked main do-not-deploy *while the version string still reads 2.10.0*; 2.11.0 changes the version, so main is deployable again. The release-identity check stays adopted on both sides -- after `git pull` confirm the checkout commit, after `up` confirm `/health` and a changed image digest; `Running` is never the verdict |
 | Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
 | Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; the +2 landed 2026-10-03 (firebird, oracle published; scopes 499 live, production at 452 entries). The coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
@@ -2657,13 +2657,12 @@ now warns when the manifest declares no stage or marks a pre-release version
 2026-10-03 16:50Z) and verified (24.1); it carries the admin program: the
 role-aware work badge, the inspected-user overview with the masked/audited
 email reveal, the `/admin/inbox` assignment layer, and the supervisor role
-with the capability matrix. Post-2.13.0, `[Unreleased]` carries the
-owner-reported fixes: the rating-scope bug (a verified claim anywhere blocked
-rating everywhere), the double-submit guard for identical pending requests,
+with the capability matrix. **2.13.1 was cut 2026-10-03 (owner-ordered)** with
+the rating-scope fix, the double-submit guard for identical pending requests,
 the activity-row links and roles/permissions guide, and the supervisor-scope
 clarification (assignment and reviews only; decisions and moderation are
-admin-only). `[Unreleased]` is otherwise empty; the next cut happens when the
-owner orders it.
+admin-only); 2.13.0 stays live until ops deploys 2.13.1 staging-first.
+`[Unreleased]` is empty; the next cut happens when a new requirement arrives.
 
 **Archive (shipped releases, in order):**
 
@@ -2790,18 +2789,20 @@ owner orders it.
 
 ### 24.3 Next actions, in order
 
-1. **Staging checks (remaining manual items, signed-in session).** The
+1. **Ops: deploy 2.13.1 (owner-ordered 2026-10-03).** Staging first, then
+   production; no migrations, no env changes; confirm the release identity
+   (checkout commit after `git pull`, `/health` 2.13.1 after `up`, image
+   digest changes). Registry-lane verify: health + `/whats-new` 2.13.1,
+   `/index-digest.json` byte-exact and signature-valid on both.
+2. **Staging checks (remaining manual items, signed-in session).** The
    naming-guard walkthrough, the deny flow, the blur check, the 2.12.0 UX
-   batch, and the 2.13.0 admin program: work badge counts, `/admin/inbox`
-   assign -> notice -> claim -> unassign, the masked email + audited reveal
-   on `/admin/users/:id`, and granting/removing supervisor. Plus the mobile
+   batch, and the admin program: work badge counts, `/admin/inbox`
+   assign -> notice -> claim -> unassign, the masked reveal + audit row,
+   supervisor grant/remove, and ratings (a member with a verified claim can
+   rate other packages; their own package stays refused). Plus the mobile
    visual pass. Record the verdict here.
-2. **Deploy record:** 2.13.0 is live on both, migrations clean (014/015,
-   `work_assignments` 0, `user_roles` rebuilt), and externally verified
-   (24.1); the release-identity check held (production image digest changed).
-3. **Next cut (owner-gated):** patch carrying the `[Unreleased]` fixes
-   (rating scope, double-submit guard, activity links, roles guide,
-   supervisor scope). Staging-first, no migrations, no env changes.
+3. **Next cut:** none queued; `[Unreleased]` is empty. The next cut happens
+   when a new requirement arrives.
 4. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
@@ -2828,25 +2829,25 @@ another lane's queue or optional ops follow-up.
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 96036c3 (2.13.0 release),
-clean, 355/355 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at the 2.13.1 release commit
+(after 6fc5214), clean, 357/357 unit and 20/20 e2e green.
 
 State in one line: 2.13.0 (work badge, inspected-user overview, assignment
-inbox, supervisor roles) is live on staging and production and verified
-(health/whats-new/digests, migrations clean, CSS markers), both digests signed
-(production fp f7:6f:5f:f5:15:38:ce:75, staging fp
-0f:07:f7:1a:05:2e:16:f1); the signed-in staging checks remain; no relay is
-open.
+inbox, supervisor roles) is live on staging and production and verified, both
+digests signed (production fp f7:6f:5f:f5:15:38:ce:75, staging fp
+0f:07:f7:1a:05:2e:16:f1); 2.13.1 (rating-scope fix, double-submit guard,
+activity links, roles guide, supervisor scope) is cut and handed to ops for a
+staging-first deploy; the signed-in staging checks remain; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 355) and npm run test:e2e (expect
-   20); /health on staging and production (expect 2.13.0, email enabled);
-   /index-digest.json byte-exact and signature-valid on both.
-2. If the staging checks are still open, run them with a signed-in session:
-   the naming-guard walkthrough, the deny flow, the blur check, the 2.12.0 UX
-   batch, and the 2.13.0 admin program (work badge counts, assign -> notice
-   -> claim -> unassign, masked reveal + audit row, supervisor grant/remove),
-   plus the mobile visual pass. Record the verdict in this section.
+1. Verify state: git pull; npm test (expect 357) and npm run test:e2e (expect
+   20); /health on staging and production; /index-digest.json byte-exact and
+   signature-valid on both.
+2. If ops has deployed 2.13.1 (check /health): verify /whats-new serves the
+   2.13.1 entry, then run the staging checks with a signed-in session (the
+   naming-guard walkthrough, the deny flow, the blur check, the 2.12.0 UX
+   batch, and the admin program including ratings after the fix, plus the
+   mobile visual pass). Record the verdict in this section.
 3. If the owner orders a further cut: bump the version per semver, promote
    [Unreleased], update this handoff, push, watch CI, hand ops the deploy
    (staging first; no migrations, no env changes) and confirm the release

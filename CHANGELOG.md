@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.13.1] - 2026-10-03
+
 ### Fixed
 
 - **Ratings**: a verified maintainer claim now only blocks rating the package
