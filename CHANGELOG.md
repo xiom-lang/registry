@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-03
+
 ### Interface
 
 - **Live name check on the request form**: leaving the package-names field
