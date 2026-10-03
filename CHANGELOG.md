@@ -6,6 +6,34 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Interface
+
+- **Admin work signal**: a role-aware header badge shows pending-work counts
+  (founding/admin/supervisor: every queue; reviewer: claims and flagged
+  packages) and links to the console or the work inbox. The notification bell
+  stays personal; this is the pull-based console signal.
+- **Inspected-user overview** on the admin user page: the account's own
+  publishing list, recent requests and reviews, a public-profile link, and
+  the notification address masked (`a•••@domain`) with a deliberate,
+  audit-logged Reveal action.
+- **Role badges**: founding admin / supervisor / reviewer / member pills in
+  the console, and registry maintainer / supervisor / reviewer on public
+  profiles.
+
+### Operations
+
+- **Work inbox and assignment** (`/admin/inbox`): every pending request,
+  report, and claim in one list with All / Unassigned / Mine filters and
+  priority-first, oldest-first ordering. Admins and supervisors assign to any
+  staff account and set priority; reviewers claim and unassign their own.
+  Every change is audited (`work.assign` / `work.claim` / `work.unassign`)
+  and direct assignments raise a personal, mutable `assignment` notice.
+- **Supervisor role and capability matrix**: reviewer < supervisor < admin <
+  founding admin, enforced through one matrix (`src/capabilities.js`).
+  Supervisors decide requests and reports, moderate packages, and assign
+  work, but cannot manage users or grant roles; the founding tier still comes
+  from the deployment config and cannot be demoted in the console.
+
 ## [2.12.0] - 2026-10-03
 
 ### Interface

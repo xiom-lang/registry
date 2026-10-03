@@ -1681,7 +1681,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     stored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: false, support: true, 'review-reply': true, release: true, 'admin-message': true },
+    { claim: true, report: true, review: false, support: true, 'review-reply': true, release: true, 'admin-message': true, assignment: true },
   );
 
   response = await requestAs(member, '/account/settings', { headers: BROWSER });
@@ -1737,7 +1737,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     restored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true, 'admin-message': true },
+    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true, 'admin-message': true, assignment: true },
   );
 });
 
@@ -2858,4 +2858,200 @@ test('admins message any user through the audited notice path', async () => {
     before + 5,
     'nothing was sent',
   );
+});
+
+// --- Admin work badge and the inspected-user overview -----------------------
+
+test('admins get a work badge and inspect a user with a masked, audited email reveal', async () => {
+  const { accounts, admin } = app.locals.registry;
+  const target = cookieJar();
+  await login(target, 'plain-code'); // 888
+  accounts.setNotifyEmail('888', 'plain@example.com');
+  const { token } = accounts.ensureEmailVerification('888');
+  accounts.verifyEmail('888', token);
+
+  // The admin sees the pull-based work badge; a plain member never does.
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+  let page = await (await requestAs(adminJar, '/account')).text();
+  assert.match(page, /class="nav-work"/);
+  assert.match(page, /href="\/admin"/);
+  assert.match(page, /Admin work, \d+ pending/);
+  assert.match(page, /class="nav-account-group"/);
+  page = await (await requestAs(target, '/account')).text();
+  assert.doesNotMatch(page, /class="nav-work"/);
+  assert.match(page, /nav-account-group.*nav-bell.*nav-account/s, 'bell sits in the profile group');
+
+  // The inspected-user page is that user's overview, not a bounce to /account.
+  page = await (await requestAs(adminJar, '/admin/users/888', { headers: BROWSER })).text();
+  assert.match(page, /id="publishing"/);
+  assert.match(page, /id="activity"/);
+  assert.match(page, /Public profile/);
+  assert.match(page, /p\u2022\u2022\u2022@example\.com/);
+  assert.doesNotMatch(page, /plain@example\.com/, 'the address is masked by default');
+  const csrf = csrfFrom(page);
+
+  // Reveal: audited, and the plain address appears only on the revealed view.
+  let response = await requestAs(adminJar, '/admin/users/888/reveal-email', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get('location'), /\?revealed=1#contact$/);
+  page = await (await requestAs(adminJar, '/admin/users/888?revealed=1')).text();
+  assert.match(page, /plain@example\.com/);
+  assert.ok(
+    admin.auditFor('888', 10).some((entry) => entry.action === 'user.reveal-email'),
+    'the reveal is audit-logged',
+  );
+
+  // A member cannot reveal.
+  const memberJar = cookieJar();
+  await login(memberJar, 'user-code');
+  const memberCsrf = csrfFrom(await (await requestAs(memberJar, '/account')).text());
+  response = await requestAs(memberJar, '/admin/users/888/reveal-email', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: memberCsrf }),
+  });
+  assert.equal(response.status, 403);
+});
+
+// --- Admin work inbox: assignment, claim, unassign, notice, audit -----------
+
+test('the admin inbox assigns and claims work with notices and audit', async () => {
+  const { reviews, ownership, work, notifications, admin } = app.locals.registry;
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777, a reviewer in this harness
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'inbox-lib' }),
+  });
+  const requestId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  const report = reviews.createReport({
+    packageName: 'readme-pkg',
+    reporter: { githubId: '777', login: 'user-user' },
+    reason: 'spam',
+    note: 'Inbox fixture report.',
+  });
+  ownership.claim('inbox-claim-pkg', { user: { githubId: '888', login: 'plain-user' } });
+  const claimItemId = 'inbox-claim-pkg:888';
+
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+  let page = await (await requestAs(adminJar, '/admin/inbox', { headers: BROWSER })).text();
+  assert.match(page, /Unassigned \(\d+\)/);
+  assert.match(page, new RegExp(requestId));
+  assert.match(page, /inbox-claim-pkg/);
+  assert.match(page, new RegExp(`/admin/inbox/report/${report.id}/assign`));
+  const adminCsrf = csrfFrom(page);
+
+  // Assign the request to the reviewer, high priority: notice + audit.
+  response = await requestAs(adminJar, `/admin/inbox/request/${requestId}/assign`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, assignee: '777', priority: 'high' }),
+  });
+  assert.equal(response.status, 303);
+  const assignment = work.get('request', requestId);
+  assert.equal(assignment.assigneeId, '777');
+  assert.equal(assignment.priority, 'high');
+  assert.equal(notifications.listFor('777')[0].kind, 'assignment');
+  assert.match(notifications.listFor('777')[0].subject, /Assigned:/);
+  assert.ok(admin.recentAudit(20).some((entry) => entry.action === 'work.assign'));
+
+  // The reviewer sees it under Mine and claims the unassigned claim item.
+  page = await (await requestAs(user, '/admin/inbox?filter=mine', { headers: BROWSER })).text();
+  assert.match(page, new RegExp(requestId));
+  const reviewerCsrf = csrfFrom(page);
+  response = await requestAs(user, `/admin/inbox/claim/${encodeURIComponent(claimItemId)}/claim`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewerCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(work.get('claim', claimItemId).assigneeId, '777');
+  assert.ok(admin.recentAudit(20).some((entry) => entry.action === 'work.claim'));
+
+  // Reviewers cannot assign to others (admin-only route).
+  response = await requestAs(user, `/admin/inbox/report/${report.id}/assign`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: reviewerCsrf, assignee: '4242' }),
+  });
+  assert.equal(response.status, 403);
+
+  // Admin unassigns the request; it returns to the unassigned filter.
+  response = await requestAs(adminJar, `/admin/inbox/request/${requestId}/unassign`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(work.get('request', requestId), null);
+  page = await (await requestAs(adminJar, '/admin/inbox?filter=unassigned', { headers: BROWSER })).text();
+  assert.match(page, new RegExp(requestId));
+  assert.ok(admin.recentAudit(20).some((entry) => entry.action === 'work.unassign'));
+
+  // Dashboard shows the two work cards.
+  page = await (await requestAs(adminJar, '/admin', { headers: BROWSER })).text();
+  assert.match(page, /Unassigned work/);
+  assert.match(page, /Assigned to me/);
+});
+
+// --- Supervisor role: capability tier between reviewer and admin ------------
+
+test('supervisors sit between reviewers and admins in the capability matrix', async () => {
+  const { admin } = app.locals.registry;
+  const target = cookieJar();
+  await login(target, 'plain-code'); // 888
+  const founder = cookieJar();
+  await login(founder, 'admin-code'); // 4242 (founding)
+
+  // Grant supervisor from the user page.
+  let page = await (await requestAs(founder, '/admin/users/888', { headers: BROWSER })).text();
+  assert.match(page, /Make supervisor/);
+  const founderCsrf = csrfFrom(page);
+  let response = await requestAs(founder, '/admin/users/888/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: founderCsrf, role: 'supervisor' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(admin.roleOf('888'), 'supervisor');
+
+  // Badges: supervisor pill in the console and on the public profile.
+  page = await (await requestAs(founder, '/admin/users/888', { headers: BROWSER })).text();
+  assert.match(page, /status-supervisor/);
+  assert.match(page, /Remove supervisor/);
+  page = await (await requestAs(target, '/account/plain-user', { headers: BROWSER })).text();
+  assert.match(page, /registry supervisor/);
+
+  // A pending item for the inbox.
+  const user = cookieJar();
+  await login(user, 'user-code');
+  response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'supervisor-lib' }),
+  });
+  const requestId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  // Supervisors work the inbox and assign, but cannot manage users or roles.
+  page = await (await requestAs(target, '/admin/inbox', { headers: BROWSER })).text();
+  assert.ok(page.includes('supervisor-lib'), 'the item is visible in the inbox');
+  const supervisorCsrf = csrfFrom(page);
+  response = await requestAs(target, `/admin/inbox/request/${requestId}/assign`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: supervisorCsrf, assignee: '777' }),
+  });
+  assert.equal(response.status, 303, 'supervisors can assign');
+  response = await requestAs(target, '/admin/users', { headers: BROWSER });
+  assert.equal(response.status, 403);
+  response = await requestAs(target, '/admin/users/777/role', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: supervisorCsrf, role: 'reviewer' }),
+  });
+  assert.equal(response.status, 403);
+
+  // The supervisor's header badge links to the inbox, not the admin console.
+  page = await (await requestAs(target, '/account', { headers: BROWSER })).text();
+  assert.match(page, /class="nav-work" href="\/admin\/inbox"/);
 });

@@ -25,7 +25,7 @@ const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 // + 21 A5). Only these can be muted from /account/settings; every other
 // outbox kind is unconditional.
 const NOTIFY_KINDS = Object.freeze([
-  'claim', 'report', 'review', 'support', 'review-reply', 'release', 'admin-message',
+  'claim', 'report', 'review', 'support', 'review-reply', 'release', 'admin-message', 'assignment',
 ]);
 const DEFAULT_NOTIFY_KINDS = Object.freeze({
   claim: true,
@@ -35,6 +35,7 @@ const DEFAULT_NOTIFY_KINDS = Object.freeze({
   'review-reply': true,
   release: true,
   'admin-message': true,
+  assignment: true,
 });
 
 function clean(value, maxLength) {

@@ -743,6 +743,7 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('review-reply', 'Replies to your reviews')}
       ${kindRow('release', 'New releases of packages you watch')}
       ${kindRow('admin-message', 'Messages from the registry team')}
+      ${kindRow('assignment', 'Admin work assigned to you')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
     <h3 id="sponsors" class="account-subhead">GitHub Sponsors badge</h3>

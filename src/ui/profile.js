@@ -41,6 +41,7 @@ function profileLink(login) {
 
 const ROLE_PILLS = {
   admin: 'registry maintainer',
+  supervisor: 'registry supervisor',
   reviewer: 'registry reviewer',
 };
 

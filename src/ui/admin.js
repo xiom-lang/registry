@@ -24,6 +24,7 @@ const { REASON_LABELS, decisionPill, claimRow } = require('./review');
 
 const ADMIN_SECTIONS = [
   ['/admin', 'Overview', 'overview'],
+  ['/admin/inbox', 'Inbox', 'inbox'],
   ['/admin/requests', 'Requests', 'requests'],
   ['/admin/packages', 'Packages', 'packages'],
   ['/admin/claims', 'Claims', 'claims'],
@@ -125,6 +126,8 @@ ${email.failures.map((failure) => `  <li class="audit-row">
 </section>
 ${adminTabs('overview')}
 <div class="console-grid">
+  ${card('/admin/inbox?filter=unassigned', 'Unassigned work', counts.workUnassigned, 'pending items nobody owns')}
+  ${card('/admin/inbox?filter=mine', 'Assigned to me', counts.workMine, 'your work inbox')}
   ${card('/admin/requests', 'Pending requests', counts.pendingRequests, 'waiting for a decision')}
   ${card('/admin/requests?filter=approved', 'Awaiting fulfilment', counts.awaitingFulfilment, 'approved tokens to mint')}
   ${card('/admin/reports', 'Open reports', counts.openReports, 'community reports to resolve')}
@@ -140,6 +143,88 @@ ${outbox}
   <p class="pkg-meta"><a href="/admin/audit">View the full audit log &rarr;</a></p>
 </section>`;
   return layout({ title: 'Admin console', body, nav });
+}
+
+/** Unified work inbox: every pending queue item with assignment controls. */
+function adminInboxPage({
+  account,
+  items = [],
+  filter = '',
+  staff = [],
+  isAdmin = false,
+  counts = { total: 0, unassigned: 0, mine: 0 },
+  csrf,
+  notice = '',
+  error = '',
+  nav = '',
+}) {
+  const tabs = isAdmin
+    ? adminTabs('inbox')
+    : `<nav class="account-tabs" aria-label="Admin console">
+  <a class="account-tab active" href="/admin/inbox" aria-current="page">Inbox</a>
+  <a class="account-tab" href="/review">Review queue</a>
+</nav>`;
+  const rows = items.map((item) => {
+    const assignment = item.assignment;
+    const mine = assignment && assignment.assigneeId === account.githubId;
+    const priorityOptions = ['', 'high'].map((value) => `<option value="${value}"`
+      + `${(assignment ? (assignment.priority || '') : '') === value ? ' selected' : ''}>`
+      + `${value === 'high' ? 'high priority' : 'normal'}</option>`).join('');
+    const assigneeOptions = staff.map((entry) => `<option value="${escapeHtml(entry.githubId)}"`
+      + `${assignment && assignment.assigneeId === entry.githubId ? ' selected' : ''}>`
+      + `@${escapeHtml(entry.login)} (${escapeHtml(entry.role)})</option>`).join('');
+    const action = `/admin/inbox/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`;
+    return `  <li class="request-card">
+    <div class="request-head">
+      <span class="mono">${escapeHtml(item.kind)}</span>
+      <a class="pkg-name" href="${escapeHtml(item.link)}">${escapeHtml(item.target)}</a>
+      ${assignment && assignment.priority === 'high' ? '<span class="status-pill status-denied">high</span>' : ''}
+      <span class="pkg-meta">${escapeHtml(item.summary)} &middot; ${formatWhen(item.createdAt)}</span>
+    </div>
+    <p class="pkg-meta">${assignment
+    ? `assigned to @${escapeHtml(assignment.assigneeLogin)}`
+      + `${assignment.assignedBy ? ` by @${escapeHtml(assignment.assignedBy)}` : ''}`
+      + ` &middot; ${formatWhen(assignment.assignedAt)}`
+    : '<span class="status-pill status-pending">unassigned</span>'}</p>
+    <div class="work-actions">
+      ${isAdmin ? `<form method="post" action="${action}/assign" class="inline-form">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+        <input type="hidden" name="filter" value="${escapeHtml(filter)}">
+        <select name="assignee" aria-label="Assign to">${assigneeOptions}</select>
+        <select name="priority" aria-label="Priority">${priorityOptions}</select>
+        <button class="button" type="submit">Assign</button>
+      </form>` : ''}
+      ${assignment ? '' : `<form method="post" action="${action}/claim" class="inline-form">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+        <input type="hidden" name="filter" value="${escapeHtml(filter)}">
+        <button class="button" type="submit">Claim</button>
+      </form>`}
+      ${assignment && (isAdmin || mine) ? `<form method="post" action="${action}/unassign" class="inline-form">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+        <input type="hidden" name="filter" value="${escapeHtml(filter)}">
+        <button class="button" type="submit">Unassign</button>
+      </form>` : ''}
+    </div>
+  </li>`;
+  }).join('\n');
+  const body = `<section class="hero">
+  <h1>Work inbox</h1>
+  <p>Every pending request, report, and claim in one list. ${isAdmin
+    ? 'Assign items to admins or reviewers, set priority, and keep one owner per item.'
+    : 'Claim an item to take ownership; only an admin can reassign someone else\u2019s work.'}
+     Assignment notices are personal; the console badge counts what is waiting.</p>
+</section>
+${tabs}
+${noticeBox(notice, error)}
+${filterChips('/admin/inbox', [
+    ['', `All (${counts.total})`],
+    ['unassigned', `Unassigned (${counts.unassigned})`],
+    ['mine', `Mine (${counts.mine})`],
+  ], filter)}
+${items.length === 0
+    ? '<p class="pkg-meta">Nothing matches that filter.</p>'
+    : `<ul class="request-list">\n${rows}\n</ul>`}`;
+  return layout({ title: 'Admin inbox', body, nav });
 }
 
 function auditList(entries, empty) {
@@ -483,7 +568,10 @@ ${paged ? adminPagination('/admin/reports', { filter }, paged.page, paged.totalP
 
 function rolePill(user) {
   if (user.role === 'admin') {
-    return `<span class="status-pill status-approved">${user.configAdmin ? 'admin (config)' : 'admin'}</span>`;
+    return `<span class="status-pill status-approved">${user.configAdmin ? 'founding admin' : 'admin'}</span>`;
+  }
+  if (user.role === 'supervisor') {
+    return '<span class="status-pill status-supervisor">supervisor</span>';
   }
   if (user.role === 'reviewer') {
     return `<span class="status-pill status-pending">${user.configReviewer ? 'reviewer (config)' : 'reviewer'}</span>`;
@@ -516,19 +604,23 @@ function userActions(user, csrf, viewerIsConfigAdmin = false) {
       <button class="button" type="submit">Make admin</button>
     </form>`);
   }
-  if (!protectedAccount) {
-    if (user.role === 'reviewer' && !user.configReviewer) {
-      actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
+  const roleForm = (role, label) => `<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
       <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-      <input type="hidden" name="role" value="">
-      <button class="button" type="submit">Remove reviewer</button>
-    </form>`);
-    } else if (!adminTarget && !user.configReviewer) {
-      actions.push(`<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/role">
-      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
-      <input type="hidden" name="role" value="reviewer">
-      <button class="button" type="submit">Make reviewer</button>
-    </form>`);
+      <input type="hidden" name="role" value="${role}">
+      <button class="button" type="submit">${label}</button>
+    </form>`;
+  if (!protectedAccount && !adminTarget) {
+    if (user.role === 'supervisor') {
+      actions.push(roleForm('', 'Remove supervisor'));
+    } else if (user.role === 'reviewer' && user.configReviewer) {
+      // Config reviewer: grants can only add capability.
+      actions.push(roleForm('supervisor', 'Make supervisor'));
+    } else if (user.role === 'reviewer') {
+      actions.push(roleForm('', 'Remove reviewer'));
+      actions.push(roleForm('supervisor', 'Make supervisor'));
+    } else {
+      actions.push(roleForm('reviewer', 'Make reviewer'));
+      actions.push(roleForm('supervisor', 'Make supervisor'));
     }
   }
   if (!protectedAccount && (!adminTarget || canManageAdmin)) {
@@ -614,6 +706,13 @@ ${paged ? adminPagination('/admin/users', { q }, paged.page, paged.totalPages) :
   return layout({ title: 'Admin users', body, nav });
 }
 
+/** `a•••@domain` for the admin contact section; reveals are audited. */
+function maskEmail(value) {
+  const at = String(value || '').indexOf('@');
+  if (at <= 0) return '';
+  return `${value.slice(0, 1)}\u2022\u2022\u2022${value.slice(at)}`;
+}
+
 function adminUserPage({
   account,
   user,
@@ -623,6 +722,11 @@ function adminUserPage({
   error = '',
   viewerIsConfigAdmin = false,
   emailState = 'none',
+  notifyEmail = '',
+  emailRevealed = false,
+  maintained = [],
+  userRequests = [],
+  userRatings = [],
   nav = '',
 }) {
   const emailHint = emailState === 'verified'
@@ -630,11 +734,17 @@ function adminUserPage({
     : (emailState === 'unverified'
       ? 'The notification address is not verified yet, so delivery is in-app only.'
       : 'No notification address is set, so delivery is in-app only.');
+  const emailStatePill = emailState === 'verified'
+    ? '<span class="status-pill status-approved">verified</span>'
+    : (emailState === 'unverified'
+      ? '<span class="status-pill status-pending">unverified</span>'
+      : '<span class="pkg-meta">none set</span>');
   const body = `<section class="hero account-hero">
   <div>
     <h1>@${escapeHtml(user.login)}</h1>
     <div class="meta-row">
       <span><a href="https://github.com/${encodeURIComponent(user.login)}" rel="noopener">github.com/${escapeHtml(user.login)}</a></span>
+      <span><a href="/account/${encodeURIComponent(user.login)}">Public profile &rarr;</a></span>
       <span>Joined ${formatWhen(user.createdAt)}</span>
       <span>Last sign-in ${formatWhen(user.lastLoginAt)}</span>
       <span>${rolePill(user)}</span>
@@ -645,6 +755,52 @@ function adminUserPage({
 ${adminTabs('users')}
 ${noticeBox(notice, error)}
 <div class="account-grid">
+  <section id="contact">
+    <h2>Account</h2>
+    <p class="pkg-meta">Notification address:
+      ${notifyEmail
+    ? `<span class="mono">${escapeHtml(emailRevealed ? notifyEmail : maskEmail(notifyEmail))}</span>
+        ${emailStatePill}
+        ${emailRevealed
+    ? ''
+    : `<form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/reveal-email" class="inline-form">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+        <button class="button" type="submit">Reveal</button>
+      </form>`}`
+    : emailStatePill}
+    </p>
+    ${emailRevealed || !notifyEmail
+    ? ''
+    : '<p class="pkg-meta">Masked by default; revealing writes an audit row.</p>'}
+  </section>
+  <section id="publishing">
+    <h2>Publishing <span class="count">${maintained.length}</span></h2>
+    ${maintained.length === 0
+    ? '<p class="pkg-meta">No maintained packages.</p>'
+    : `<ul class="plain-list">
+      ${maintained.map((entry) => `<li><a href="/packages/${encodeURIComponent(entry.name)}">${escapeHtml(entry.name)}</a>
+        <span class="pkg-meta">${escapeHtml(entry.claimStatus || (entry.sources || []).join(', '))}</span></li>`).join('\n      ')}
+    </ul>`}
+  </section>
+  <section id="activity">
+    <h2>Activity</h2>
+    <h3 class="account-subhead">Recent requests</h3>
+    ${userRequests.length === 0
+    ? '<p class="pkg-meta">No requests filed.</p>'
+    : `<ul class="plain-list">
+      ${userRequests.map((record) => `<li><span class="mono">${escapeHtml(shortId(record.id))}</span>
+        ${escapeHtml(kindLabel(record))} &middot; ${escapeHtml(requestTarget(record))}
+        ${statusPill(record.status)}
+        <span class="pkg-meta">${formatWhen(record.createdAt)}</span></li>`).join('\n      ')}
+    </ul>`}
+    <h3 class="account-subhead">Recent reviews</h3>
+    ${userRatings.length === 0
+    ? '<p class="pkg-meta">No reviews written.</p>'
+    : `<ul class="plain-list">
+      ${userRatings.map((rating) => `<li><a href="/packages/${encodeURIComponent(rating.package)}">${escapeHtml(rating.package)}</a>
+        <span class="pkg-meta">${rating.stars}/5${rating.review ? ' with a written review' : ''} &middot; ${formatWhen(rating.at)}</span></li>`).join('\n      ')}
+    </ul>`}
+  </section>
   <section>
     <h2>Actions</h2>
     <div class="user-actions">${userActions(user, csrf, viewerIsConfigAdmin)}</div>
@@ -762,6 +918,7 @@ ${noticeBox(notice, error)}
 
 module.exports = {
   adminDashboardPage,
+  adminInboxPage,
   adminRequestsPage,
   adminPackagesPage,
   adminClaimsPage,

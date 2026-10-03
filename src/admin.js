@@ -13,7 +13,7 @@
 
 const { BadRequestError, ConflictError } = require('./errors');
 
-const ROLE_VALUES = new Set(['reviewer', 'admin']);
+const ROLE_VALUES = new Set(['reviewer', 'supervisor', 'admin']);
 const STATUS_VALUES = new Set(['active', 'suspended', 'banned']);
 
 class AdminStore {
@@ -65,7 +65,7 @@ class AdminStore {
   setRole({ account, role, actor, note = '' }) {
     const target = String(account.githubId);
     if (role !== '' && !ROLE_VALUES.has(role)) {
-      throw new BadRequestError('role must be "reviewer", "admin", or empty', 'invalid_role');
+      throw new BadRequestError('role must be "reviewer", "supervisor", "admin", or empty', 'invalid_role');
     }
     if (String(actor.githubId) === target && role !== 'admin') {
       throw new ConflictError(

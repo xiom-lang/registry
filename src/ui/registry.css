@@ -929,6 +929,7 @@ table.versions tr:hover td { background: var(--panel); }
 .site-header .nav-account-signout:hover { background: var(--panel-raised); color: var(--paper); }
 
 /* Header notification bell: unread count next to the account control. */
+.nav-account-group { align-items: center; display: inline-flex; gap: 6px; }
 .nav-bell {
   align-items: center;
   color: var(--paper-dim);
@@ -950,6 +951,31 @@ table.versions tr:hover td { background: var(--panel); }
   padding: 3px 5px;
   text-align: center;
 }
+/* Admin/reviewer work badge: pending queues, pull-based. */
+.nav-work {
+  align-items: center;
+  color: var(--paper-dim);
+  display: inline-flex;
+  gap: 5px;
+  padding: 6px 4px;
+  position: relative;
+}
+.nav-work:hover { color: var(--paper); }
+.nav-work svg { display: block; }
+.nav-work-count {
+  background: #ffc400;
+  border-radius: 999px;
+  color: #1a1400;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 17px;
+  padding: 3px 5px;
+  text-align: center;
+}
+/* Simple owner/activity lists on the admin user overview. */
+.plain-list { margin: var(--space-sm) 0; padding-left: var(--space-lg); }
+.plain-list li { margin: 4px 0; }
 
 /* Inbox triage: filter chips and per-notice actions. */
 .notice-filters {
@@ -965,6 +991,21 @@ table.versions tr:hover td { background: var(--panel); }
   flex-wrap: wrap;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
+}
+/* Assignment controls on the admin work inbox. */
+.work-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+.work-actions select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  padding: 6px 8px;
 }
 @media (max-width: 640px) {
   .nav-account > summary span { max-width: 120px; }
@@ -1205,6 +1246,7 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 .status-pending { border-color: rgba(105, 184, 255, 0.55); color: #69b8ff; }
+.status-supervisor { border-color: rgba(196, 151, 255, 0.55); color: #c497ff; }
 .status-approved { border-color: var(--verified-dim); color: var(--verified); }
 .status-denied { border-color: var(--error); color: var(--error); }
 .status-fulfilled { border-color: var(--signal-dim); color: var(--signal); }

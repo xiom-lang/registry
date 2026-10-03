@@ -323,6 +323,50 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: '014-work-assignments',
+    up(db) {
+      // Admin work assignments (owner, 2026-10-03): one row per assigned
+      // queue item. The item stores stay authoritative; this only answers
+      // "who owns this right now" for the admin inbox. Claim item ids are
+      // `${package}:${githubId}`; request ids are `req_*`, report ids `rep_*`.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS work_assignments (
+          kind TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          assignee_id TEXT NOT NULL DEFAULT '',
+          assignee_login TEXT NOT NULL DEFAULT '',
+          assigned_by TEXT NOT NULL DEFAULT '',
+          assigned_at TEXT NOT NULL DEFAULT '',
+          priority TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (kind, item_id)
+        );
+        CREATE INDEX IF NOT EXISTS work_assignments_assignee ON work_assignments (assignee_id, kind);
+      `);
+    },
+  },
+  {
+    id: '015-work-roles',
+    up(db) {
+      // Supervisor role (owner, 2026-10-03): the capability tier between
+      // reviewer and admin -- decides requests/reports, yanks, and assigns
+      // work, but never manages users or grants roles. SQLite cannot widen a
+      // CHECK constraint, so rebuild the tiny table and copy the grants.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_roles_v2 (
+          github_id TEXT PRIMARY KEY,
+          login TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('reviewer', 'supervisor', 'admin')),
+          granted_by TEXT NOT NULL,
+          granted_at TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO user_roles_v2 (github_id, login, role, granted_by, granted_at)
+          SELECT github_id, login, role, granted_by, granted_at FROM user_roles;
+        DROP TABLE user_roles;
+        ALTER TABLE user_roles_v2 RENAME TO user_roles;
+      `);
+    },
+  },
 ];
 
 class Database {

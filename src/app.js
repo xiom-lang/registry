@@ -37,6 +37,8 @@ const { createJwksCache } = require('./oidc');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
 const { checkScopes } = require('./name-guard');
 const { repositoryError, workflowError, refsError } = require('./publishers');
+const { WorkStore } = require('./work');
+const { hasCapability } = require('./capabilities');
 const oauth = require('./oauth');
 const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
 const { AccountStore } = require('./accounts');
@@ -101,6 +103,7 @@ const {
 } = require('./ui/account');
 const {
   adminDashboardPage,
+  adminInboxPage,
   adminRequestsPage,
   adminPackagesPage,
   adminClaimsPage,
@@ -330,6 +333,9 @@ function createApp(config = loadConfig()) {
   // SQLite platform layer: notification outbox + optional email sender
   // (SESSION.md section 18). In-app notices always work; email needs SMTP_URL.
   const notifications = new NotificationStore({ db });
+  // Admin work assignments (who owns a pending queue item) share the same
+  // database; the queue stores stay authoritative (SESSION.md section 24).
+  const work = new WorkStore({ db });
   // User administration (roles, suspension, audit) shares the platform
   // database. Config allowlists stay the bootstrap; stored grants add to them
   // and can never subtract (SESSION.md section 20).
@@ -480,10 +486,52 @@ function createApp(config = loadConfig()) {
     && configReviewerLogins.has(String(account.login).toLowerCase());
   const isAdmin = (account) => Boolean(account)
     && (isConfigAdmin(account) || admin.roleOf(account.githubId) === 'admin');
+
+  /**
+   * Staff role for the capability matrix (src/capabilities.js):
+   * member | reviewer | supervisor | admin | founding. `founding` is the
+   * deployment-config admin; it cannot be demoted and holds everything.
+   */
+  function staffRoleOf(account) {
+    if (!account) return 'member';
+    if (isConfigAdmin(account)) return 'founding';
+    const stored = admin.roleOf(account.githubId);
+    if (stored === 'admin' || stored === 'supervisor' || stored === 'reviewer') return stored;
+    if (isConfigReviewer(account)) return 'reviewer';
+    return 'member';
+  }
+
+  /** One capability check for every route that needs more than "signed in". */
+  const can = (account, capability) => hasCapability(staffRoleOf(account), capability);
+
   const isReviewer = (account) => Boolean(account)
-    && (isAdmin(account) || isConfigReviewer(account) || admin.roleOf(account.githubId) === 'reviewer');
+    && (isAdmin(account) || isConfigReviewer(account)
+      || ['reviewer', 'supervisor'].includes(admin.roleOf(account.githubId)));
   const accountStatus = (account) => (account ? admin.statusOf(account.githubId) : 'active');
-  const roleFor = (account) => (isAdmin(account) ? 'admin' : (isReviewer(account) ? 'reviewer' : 'member'));
+  const roleFor = (account) => {
+    const role = staffRoleOf(account);
+    return role === 'founding' ? 'admin' : role;
+  };
+
+  /**
+   * Pending-work count for the header badge. -1 means "no badge for this
+   * role". Reviewers see claims and flagged packages; admins see every queue.
+   * This is the pull-based signal -- notices stay personal.
+   */
+  function adminWorkCount(account) {
+    if (!account) return -1;
+    const claims = ownership.pendingCount();
+    const flagged = reviews.listDecisions().filter((entry) => entry.status === 'flagged').length;
+    const staffRole = staffRoleOf(account);
+    if (staffRole === 'founding' || staffRole === 'admin' || staffRole === 'supervisor') {
+      const all = requests.list();
+      const requestsPending = all
+        .filter((record) => record.status === 'pending' || record.status === 'approved').length;
+      return requestsPending + reviews.listReports({ status: 'open' }).length + claims + flagged;
+    }
+    if (staffRole === 'reviewer') return claims + flagged;
+    return -1;
+  }
 
   /** Suspended accounts keep browsing but cannot create content. */
   function requireWriteAccess(req, _res, next) {
@@ -567,11 +615,27 @@ function createApp(config = loadConfig()) {
       + '</svg>'
       + (unread > 0 ? `<span class="nav-bell-count">${unread > 99 ? '99+' : unread}</span>` : '')
       + '</a>';
+    // Admin/reviewer work badge (pull-based; notices stay personal). Sits in
+    // the same tight group as the bell, immediately left of the profile.
+    const workCount = adminWorkCount(account);
+    const staffRole = staffRoleOf(account);
+    const workHref = staffRole === 'founding' || staffRole === 'admin'
+      ? '/admin'
+      : (staffRole === 'supervisor' ? '/admin/inbox' : '/review');
+    const work = workCount >= 0
+      ? `<a class="nav-work" href="${workHref}"`
+        + ` aria-label="${staffRole === 'reviewer' ? 'Review' : 'Admin'} work, ${workCount} pending">`
+        + '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+        + '<path d="M12 3l7 3v5.2c0 4.3-2.9 8.2-7 9.8-4.1-1.6-7-5.5-7-9.8V6l7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>'
+        + '</svg>'
+        + (workCount > 0 ? `<span class="nav-work-count">${workCount > 99 ? '99+' : workCount}</span>` : '')
+        + '</a>'
+      : '';
     return {
-      primary: `${bell}<details class="nav-account">
+      primary: `<span class="nav-account-group">${bell}${work}<details class="nav-account">
       <summary>${avatar}<span${current}>${escapeHtml(label)}</span></summary>
       <nav class="nav-account-panel" aria-label="Account">${panel}</nav>
-    </details>`,
+    </details></span>`,
       menu,
     };
   }
@@ -2352,13 +2416,105 @@ function createApp(config = loadConfig()) {
     next();
   }
 
+  /** Reviewers and admins share the work inbox; notices stay personal. */
+  function requireStaff(req, _res, next) {
+    const account = accountOf(req);
+    if (!account) return next(new UnauthorizedError('sign in to continue', 'login_required'));
+    if (!isAdmin(account) && !isReviewer(account)) {
+      return next(new ForbiddenError('admin or reviewer required', 'staff_required'));
+    }
+    next();
+  }
+
+  /** Route guard for one matrix capability (src/capabilities.js). */
+  function requireCapability(capability) {
+    return (req, _res, next) => {
+      const account = accountOf(req);
+      if (!account) return next(new UnauthorizedError('sign in to continue', 'login_required'));
+      if (!can(account, capability)) {
+        return next(new ForbiddenError(`capability "${capability}" required`, 'capability_required'));
+      }
+      return next();
+    };
+  }
+
+  /** Accounts that can take work: admins and reviewers (config or granted). */
+  function staffAccounts() {
+    return accounts.list()
+      .map((entry) => {
+        const role = isConfigAdmin(entry)
+          ? 'admin'
+          : (isConfigReviewer(entry) ? 'reviewer' : (admin.roleOf(entry.githubId) || 'member'));
+        return { githubId: entry.githubId, login: entry.login, role };
+      })
+      .filter((entry) => entry.role === 'admin' || entry.role === 'reviewer')
+      .sort((a, b) => a.login.localeCompare(b.login));
+  }
+
+  /** Every pending queue item, normalized for the assignment inbox. */
+  function workItems() {
+    const items = [];
+    for (const record of requests.list()) {
+      if (record.status !== 'pending') continue;
+      items.push({
+        kind: 'request',
+        id: record.id,
+        target: (record.scopes || []).join(', ') || record.repository || record.id,
+        summary: `${record.kind} request by @${record.requester ? record.requester.login : '?'}`,
+        createdAt: record.createdAt,
+        link: `/admin/requests?updated=${encodeURIComponent(record.id)}`,
+      });
+    }
+    for (const report of reviews.listReports({ status: 'open' })) {
+      items.push({
+        kind: 'report',
+        id: report.id,
+        target: report.package,
+        summary: `${report.reason} report by @${report.reporterLogin || report.reporter || '?'}`,
+        createdAt: report.createdAt,
+        link: '/admin/reports',
+      });
+    }
+    for (const claim of ownership.listClaims({ status: 'pending' })) {
+      items.push({
+        kind: 'claim',
+        id: `${claim.package}:${claim.githubId}`,
+        target: claim.package,
+        summary: `maintainer claim by @${claim.login}`,
+        createdAt: claim.claimedAt,
+        link: '/admin/claims',
+      });
+    }
+    return items;
+  }
+
+  /** True when the id names a real pending item of that kind. */
+  function workItemExists(kind, itemId) {
+    if (kind === 'request') return Boolean(requests.list().find((record) => record.id === itemId));
+    if (kind === 'report') return Boolean(reviews.getReport(itemId));
+    if (kind === 'claim') {
+      const [name, githubId] = String(itemId).split(':');
+      const claim = ownership.claimFor(name || '', githubId || '');
+      return Boolean(claim && claim.status === 'pending');
+    }
+    return false;
+  }
+
+  /** Human label for assignment notices. */
+  function workItemLabel(kind, itemId) {
+    const item = workItems().find((entry) => entry.kind === kind && entry.id === itemId);
+    return item ? `${kind} ${item.target}` : `${kind} ${itemId}`;
+  }
+
   function accountUserView(account) {
     const storedRole = admin.roleOf(account.githubId);
     const configAdmin = isConfigAdmin(account);
     const configReviewer = isConfigReviewer(account);
     const role = configAdmin || storedRole === 'admin'
       ? 'admin'
-      : ((configReviewer || storedRole === 'reviewer') ? 'reviewer' : 'member');
+      : (storedRole === 'supervisor'
+        ? 'supervisor'
+        : ((configReviewer || storedRole === 'reviewer') ? 'reviewer' : 'member'));
     const state = admin.stateRecord(account.githubId);
     return {
       githubId: account.githubId,
@@ -2381,6 +2537,15 @@ function createApp(config = loadConfig()) {
     const context = adminPageContext(req);
     const allRequests = requests.list();
     const decisions = reviews.listDecisions().filter((entry) => entry.status);
+    const inboxItems = workItems();
+    const assignments = work.all();
+    const unassigned = inboxItems
+      .filter((item) => !assignments.get(`${item.kind}\u0000${item.id}`)).length;
+    const mine = inboxItems
+      .filter((item) => {
+        const assignment = assignments.get(`${item.kind}\u0000${item.id}`);
+        return Boolean(assignment && assignment.assigneeId === context.account.githubId);
+      }).length;
     res.type('html').send(adminDashboardPage({
       ...context,
       counts: {
@@ -2391,6 +2556,8 @@ function createApp(config = loadConfig()) {
         muted: decisions.filter((entry) => entry.status === 'muted').length,
         users: accounts.list().length,
         ownershipClaims: ownership.pendingCount(),
+        workUnassigned: unassigned,
+        workMine: mine,
       },
       email: {
         enabled: mailer.enabled,
@@ -2400,6 +2567,174 @@ function createApp(config = loadConfig()) {
       recentAudit: admin.recentAudit(8),
     }));
   });
+
+  // Unified work inbox: every pending request/report/claim in one list with
+  // assignment. Admins assign to any staff account; reviewers can claim and
+  // unassign their own. Every mutation is audited; assignment notices are
+  // personal and mutable (kind `assignment`).
+  app.get('/admin/inbox', generalLimit, requireStaff, (req, res) => {
+    const context = adminPageContext(req);
+    const filter = ['unassigned', 'mine'].includes(String(req.query.filter))
+      ? String(req.query.filter)
+      : '';
+    const assignments = work.all();
+    const decorated = workItems()
+      .map((item) => ({ ...item, assignment: assignments.get(`${item.kind}\u0000${item.id}`) || null }))
+      .filter((item) => {
+        if (filter === 'unassigned') return !item.assignment;
+        if (filter === 'mine') {
+          return Boolean(item.assignment && item.assignment.assigneeId === context.account.githubId);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const ap = a.assignment && a.assignment.priority === 'high' ? 0 : 1;
+        const bp = b.assignment && b.assignment.priority === 'high' ? 0 : 1;
+        return ap - bp || String(a.createdAt).localeCompare(String(b.createdAt));
+      });
+    const all = workItems();
+    res.type('html').send(adminInboxPage({
+      ...context,
+      items: decorated,
+      filter,
+      staff: staffAccounts(),
+      isAdmin: isAdmin(context.account),
+      counts: {
+        total: all.length,
+        unassigned: all.filter((item) => !assignments.get(`${item.kind}\u0000${item.id}`)).length,
+        mine: all.filter((item) => {
+          const assignment = assignments.get(`${item.kind}\u0000${item.id}`);
+          return Boolean(assignment && assignment.assigneeId === context.account.githubId);
+        }).length,
+      },
+    }));
+  });
+
+  function workActionRedirect(req) {
+    const filter = String(req.body.filter || '') === 'mine' ? '?filter=mine' : '';
+    return `/admin/inbox${filter}`;
+  }
+
+  app.post(
+    '/admin/inbox/:kind/:id/assign',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireCapability('work.assign'),
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const actor = accountOf(req);
+        const kind = String(req.params.kind);
+        const itemId = String(req.params.id);
+        if (!workItemExists(kind, itemId)) {
+          throw new NotFoundError('work item not found', 'work_item_not_found');
+        }
+        const assignee = accounts.get(String(req.body.assignee || ''));
+        if (!assignee) throw new BadRequestError('pick an assignee', 'assignee_required');
+        const priority = String(req.body.priority || '');
+        work.assign(kind, itemId, { assignee, actor, priority });
+        admin.audit({
+          actor,
+          action: 'work.assign',
+          subjectType: kind,
+          subjectId: itemId,
+          subjectLogin: assignee.login,
+          detail: priority ? `priority ${priority}` : '',
+        });
+        notifyAccount({
+          account: assignee,
+          kind: 'assignment',
+          subject: `Assigned: ${workItemLabel(kind, itemId)}`,
+          body: `@${actor.login} assigned this to you. Open the inbox to work it.`,
+          link: '/admin/inbox?filter=mine',
+        });
+        res.redirect(303, workActionRedirect(req));
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, workActionRedirect(req));
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/inbox/:kind/:id/claim',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireStaff,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const actor = accountOf(req);
+        const kind = String(req.params.kind);
+        const itemId = String(req.params.id);
+        if (!workItemExists(kind, itemId)) {
+          throw new NotFoundError('work item not found', 'work_item_not_found');
+        }
+        const existing = work.get(kind, itemId);
+        if (existing && existing.assigneeId !== actor.githubId) {
+          throw new ConflictError('this item is already assigned', 'work_taken');
+        }
+        work.assign(kind, itemId, { assignee: actor, actor, priority: existing ? existing.priority : '' });
+        admin.audit({
+          actor,
+          action: 'work.claim',
+          subjectType: kind,
+          subjectId: itemId,
+          subjectLogin: actor.login,
+          detail: '',
+        });
+        res.redirect(303, workActionRedirect(req));
+      } catch (err) {
+        if (err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, workActionRedirect(req));
+        }
+        return next(err);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/inbox/:kind/:id/unassign',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireStaff,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const actor = accountOf(req);
+        const kind = String(req.params.kind);
+        const itemId = String(req.params.id);
+        const existing = work.get(kind, itemId);
+        if (!existing) {
+          throw new NotFoundError('work item is not assigned', 'work_not_assigned');
+        }
+        if (!can(actor, 'work.assign') && existing.assigneeId !== actor.githubId) {
+          throw new ForbiddenError('only an admin can unassign someone else', 'work_unassign_forbidden');
+        }
+        work.unassign(kind, itemId);
+        admin.audit({
+          actor,
+          action: 'work.unassign',
+          subjectType: kind,
+          subjectId: itemId,
+          subjectLogin: existing.assigneeLogin,
+          detail: '',
+        });
+        res.redirect(303, workActionRedirect(req));
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError
+          || err instanceof NotFoundError || err instanceof ForbiddenError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, workActionRedirect(req));
+        }
+        return next(err);
+      }
+    },
+  );
 
   app.get('/admin/requests', generalLimit, requireAdminPage, (req, res) => {
     const context = adminPageContext(req);
@@ -2643,17 +2978,33 @@ function createApp(config = loadConfig()) {
     const emailState = account.notifyEmail && account.notifyEmailVerifiedAt
       ? 'verified'
       : (account.notifyEmail ? 'unverified' : 'none');
+    const revealed = String(req.query.revealed || '') === '1';
+    const notice = req.query.messaged === '1'
+      ? 'Message queued: it appears in the user\'s in-app notices and emails only if their address is verified.'
+      : (req.query.messaged === 'muted'
+        ? 'Not delivered: this user has muted registry messages in Settings.'
+        : (revealed ? 'Notification address revealed; the reveal is audit-logged.' : context.notice));
     res.type('html').send(adminUserPage({
       ...context,
       user: accountUserView(account),
       audit: admin.auditFor(account.githubId, 30),
       viewerIsConfigAdmin: isConfigAdmin(accountOf(req)),
       emailState,
-      notice: req.query.messaged === '1'
-        ? 'Message queued: it appears in the user\'s in-app notices and emails only if their address is verified.'
-        : (req.query.messaged === 'muted'
-          ? 'Not delivered: this user has muted registry messages in Settings.'
-          : context.notice),
+      notifyEmail: account.notifyEmail || '',
+      emailRevealed: revealed,
+      // The inspected account's own view: packages it maintains, its requests,
+      // and its reviews -- so the admin console never bounces to their account.
+      maintained: maintainedPackages({
+        login: account.login,
+        githubId: account.githubId,
+        index: indexStore.snapshot(),
+        requests: requests.list(),
+        publishers: publisherStore.list(),
+        claims: ownership.listClaims(),
+      }).filter((entry) => entry.sources.length > 0 || entry.claimStatus === 'verified'),
+      userRequests: requests.list({ requesterId: account.githubId }).slice(0, 8),
+      userRatings: reviews.ratingsBy(account.githubId, { limit: 8 }),
+      notice,
     }));
   });
 
@@ -2808,6 +3159,38 @@ function createApp(config = loadConfig()) {
           303,
           `/admin/users/${encodeURIComponent(target.githubId)}?messaged=${delivered ? '1' : 'muted'}`,
         );
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/users/${encodeURIComponent(String(req.params.githubId))}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // Revealing a notification address is a deliberate, audited action: the
+  // admin user page masks it by default; this marks the reveal in the audit
+  // trail and re-renders with the plain address for that view.
+  app.post(
+    '/admin/users/:githubId/reveal-email',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const target = accounts.get(String(req.params.githubId));
+        if (!target) throw new NotFoundError('account not found', 'account_not_found');
+        admin.audit({
+          actor: accountOf(req),
+          action: 'user.reveal-email',
+          subjectType: 'user',
+          subjectId: target.githubId,
+          subjectLogin: target.login,
+          detail: 'notification address revealed',
+        });
+        res.redirect(303, `/admin/users/${encodeURIComponent(target.githubId)}?revealed=1#contact`);
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
           req.session.flash = { error: err.message };
@@ -3737,6 +4120,7 @@ function createApp(config = loadConfig()) {
     db,
     notifications,
     admin,
+    work,
     ownership,
     support,
     contributors,
