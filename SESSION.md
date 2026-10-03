@@ -2639,9 +2639,9 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.11.0 release commit (after `d3f3ba1`; `91259c3` fixes + `c2a6388` live name check), pushed; clean; Registry CI + CodeQL green |
+| Repo | `main` at `64f8a3d` (2.11.0 release, after `d3f3ba1`; `91259c3` fixes + `c2a6388` live name check), pushed; clean; Registry CI + CodeQL green |
 | Tests | `npm test` **349/349**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.10.0 on staging and production** (ops, 2026-10-03): staging first, then production; no migrations/env. One incident: the first production attempt ran without `git pull`, so a fully cached build reproduced the 2.9.0 image, compose said Running, and health stayed 2.9.0 -- caught by the version check and fixed by re-running with the pull (DEPLOY.md now carries the release-identity check). The re-run was clean: HEAD `c0af724`, fresh image digests, both boots 2.10.0 + email enabled at 13:24Z; registry-lane re-verified: `/whats-new` serves the 2.10.0 entry, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), live-check green (staging 226/225, production 452/451, isolation ok). **2.11.0 cut 2026-10-03 (owner-ordered, ASAP) and handed to ops: staging first, then production; no migrations/env.** The naming-guard walkthrough plus the fixed deny flow and the live name check are the remaining manual checks |
+| Deployed | **2.10.0 on staging and production** (ops, 2026-10-03): staging first, then production; no migrations/env. One incident: the first production attempt ran without `git pull`, so a fully cached build reproduced the 2.9.0 image, compose said Running, and health stayed 2.9.0 -- caught by the version check and fixed by re-running with the pull (DEPLOY.md now carries the release-identity check). The re-run was clean: HEAD `c0af724`, fresh image digests, both boots 2.10.0 + email enabled at 13:24Z; registry-lane re-verified: `/whats-new` serves the 2.10.0 entry, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), live-check green (staging 226/225, production 452/451, isolation ok). **2.11.0 live on staging and production (ops, 2026-10-03 14:13Z): both checkouts 64f8a3d, fresh image digests, no migrations/env; verified externally by the registry lane** -- health 2.11.0 + email enabled on both, `/whats-new` serves 2.11.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `GET /requests/check` present and auth-gated (302 -> `/login`), `scope-check` CSS served. Remaining manual checks (signed-in session): naming-guard walkthrough, the deny flow (`Request denied: <scope>`; no Enter/ack flip to approve), and the blur check. Ops flagged staging OIDC publishers at 5 (was 4) -- host-side check of `/etc/xiom-registry/staging/trusted-publishers.json` queued; production unchanged at 2 |
 | Deploy pin | **Lifted by the 2.11.0 cut.** The ops pin (`b3f123a`) held production/staging on `c0af724` (2.10.0) and marked main do-not-deploy *while the version string still reads 2.10.0*; 2.11.0 changes the version, so main is deployable again. The release-identity check stays adopted on both sides -- after `git pull` confirm the checkout commit, after `up` confirm `/health` and a changed image digest; `Running` is never the verdict |
 | Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
 | Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; the +2 landed 2026-10-03 (firebird, oracle published; scopes 499 live, production at 452 entries). The coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
@@ -2653,9 +2653,9 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ### 24.2 Release history and the current window
 
-**Current window:** **2.11.0 was cut 2026-10-03 (owner-ordered, ASAP)** and
-carries the live name check (`c2a6388`) and the decision-notice/decision-form
-fixes (`91259c3`); 2.10.0 stays live until ops deploys 2.11.0 staging-first.
+**Current window:** **2.11.0 is live on staging and production** (ops,
+2026-10-03 14:13Z) and verified (24.1); it carries the live name check
+(`c2a6388`) and the decision-notice/decision-form fixes (`91259c3`).
 `[Unreleased]` is empty; the next cut happens when a new requirement arrives.
 
 **Archive (shipped releases, in order):**
@@ -2783,19 +2783,16 @@ fixes (`91259c3`); 2.10.0 stays live until ops deploys 2.11.0 staging-first.
 
 ### 24.3 Next actions, in order
 
-1. **Ops: deploy 2.11.0 (owner-ordered 2026-10-03, ASAP).** Staging first,
-   then production; no migrations, no env changes; confirm the release
-   identity (checkout commit after `git pull`, `/health` after `up`; the
-   image digest must change). Registry-lane verify: `/health` 2.11.0 +
-   email enabled on both, `/whats-new` serves the 2.11.0 entry,
-   `/index-digest.json` byte-exact and signature-valid.
-2. **Staging checks (remaining manual items).** The naming-guard walkthrough
-   (lookalike name -> warning + ack; published package the requester does not
-   maintain -> refused at the door; scope overlapping a live grant ->
-   approval blocked), the fixed deny flow (notice reads
-   `Request denied: <scope>`; no Enter/ack trap can turn a deny into an
-   approve), and the request-form live name check (errors/advisories on
-   blur). Record the verdict here.
+1. **Staging checks (remaining manual items, signed-in session).** The
+   naming-guard walkthrough (lookalike name -> warning + ack; unmaintained
+   published name -> refused at the door; live-grant scope overlap ->
+   approval blocked), the deny flow (notice reads `Request denied: <scope>`;
+   no Enter/ack path can flip a deny into an approve), and the request-form
+   live name check (errors/advisories on blur). Record the verdict here.
+2. **Deploy record:** 2.11.0 is live on both and externally verified (24.1);
+   the release-identity check held (production image digest changed). Open
+   ops follow-up: confirm the staging OIDC publisher count (5, was 4) by
+   reading the staging trusted-publishers file.
 3. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
@@ -2822,26 +2819,24 @@ optional ops follow-up.
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.11.0 release commit
-(after d3f3ba1), clean, 349/349 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at 64f8a3d (2.11.0 release),
+clean, 349/349 unit and 20/20 e2e green.
 
-State in one line: 2.10.0 (naming guard) is live on staging and production
-and verified, both digests signed (production fp f7:6f:5f:f5:15:38:ce:75,
-staging fp 0f:07:f7:1a:05:2e:16:f1); 2.11.0 (live name check on the request
-form + the decision-notice/decision-form fixes) is cut and handed to ops for
-a staging-first deploy; no relay is open.
+State in one line: 2.11.0 (live name check + decision-form/notice fixes) is
+live on staging and production and verified (health/digests/whats-new, route
++ CSS presence), both digests signed (production fp f7:6f:5f:f5:15:38:ce:75,
+staging fp 0f:07:f7:1a:05:2e:16:f1); the remaining manual staging checks
+need a signed-in session; no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 349) and npm run test:e2e (expect
-   20); /health on staging and production; /index-digest.json byte-exact and
-   signature-valid on both.
-2. If ops has deployed 2.11.0 (check /health): verify /whats-new serves the
-   2.11.0 entry, then run the staging checks -- naming-guard walkthrough
-   (lookalike warning + ack; unmaintained published name refused at the door;
-   live-grant scope overlap blocked), a deny whose notice says
-   "Request denied: <scope>" (and cannot be turned into an approve by Enter),
-   and the request-form live name check (errors/advisories on blur). Record
-   the verdict in this section.
+   20); /health on staging and production (expect 2.11.0, email enabled);
+   /index-digest.json byte-exact and signature-valid on both.
+2. If the staging checks are still open, run them with a signed-in session:
+   the naming-guard walkthrough, the deny flow (notice says
+   "Request denied: <scope>"; Enter/ack cannot flip it to approve), and the
+   request-form live name check (errors/advisories on blur). Record the
+   verdict in this section.
 3. If the owner orders a further cut: bump the version per semver, promote
    [Unreleased], update this handoff, push, watch CI, hand ops the deploy
    (staging first; no migrations, no env changes) and confirm the release
