@@ -6,7 +6,7 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
-## [2.11.0] - 2026-10-03
+## [2.12.0] - 2026-10-03
 
 ### Interface
 
@@ -19,6 +19,19 @@ The rendered version of this file is at `/whats-new`.
   form's status line gains a green check / amber `!` / red cross state, with
   submit disabled only while a fresh check says a hard rule would refuse the
   request. Advisory: the door re-checks at submit.
+
+### Operations
+
+- **Admin message this user**: admins write a subject and message on the user
+  page; it lands in the user's in-app notices and emails only to a verified
+  address, with the address itself never shown. Every send is audit-logged and
+  capped at five per target per hour; users can mute the new `admin-message`
+  kind in Settings.
+
+## [2.11.0] - 2026-10-03
+
+### Interface
+
 - **Live name check on the request form**: leaving the package-names field
   runs the same naming-guard check the door uses (`GET /requests/check`,
   read-only) and shows errors and advisories inline, so a reserved, taken,
@@ -32,11 +45,6 @@ The rendered version of this file is at `/whats-new`.
 
 ### Operations
 
-- **Admin message this user**: admins write a subject and message on the user
-  page; it lands in the user's in-app notices and emails only to a verified
-  address, with the address itself never shown. Every send is audit-logged and
-  capped at five per target per hour; users can mute the new `admin-message`
-  kind in Settings.
 - **Decision-form safety in the admin queue**: the name-warning
   acknowledge is enforced server-side at approval only, so the checkbox can
   no longer block a Deny click; and Enter in a decision note no longer
