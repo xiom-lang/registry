@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-03
+
 ### Publishing
 
 - **Naming guard at the door and at approval**: publish-scope requests now
