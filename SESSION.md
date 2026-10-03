@@ -1965,9 +1965,10 @@ email, community->maintainer contact, review votes/replies) is recorded in
 **Status 2026-10-02:** **2.9.0 is live on staging and production and
 verified** (reputation scoring v2, package stats strip, admin paging sweep;
 digest byte-exact and signed on both -- production `f7:6f:5f:f5:15:38:ce:75`,
-staging `0f:07:f7:1a:05:2e:16:f1`). All registry-side roadmap items are done;
-the remaining Track B work is compiler-lane (`xiom pkg`), with C5 pinning and
-B3 `--dry-run` already landed.
+staging `0f:07:f7:1a:05:2e:16:f1`). **Post-2.9.0 on `main`: the naming guard
+(`4150b8c`)** -- request-time and approval-time name/scope checks. All
+registry-side roadmap items are done; the remaining Track B work is
+compiler-lane (`xiom pkg`), with C5 pinning and B3 `--dry-run` already landed.
 
 ### Track A -- finish the community layer (the section 18 expansion)
 
@@ -2741,6 +2742,16 @@ now warns when the manifest declares no stage or marks a pre-release version
   queues full while paging Closed. 339/339 unit; mobile pass.
 - Release commit on top of `3ec2308`: version `2.9.0`, CHANGELOG promotion
   ([Unreleased] -> [2.9.0], Community + Operations), this handoff.
+- `4150b8c` **Naming guard** (post-2.9.0, CHANGELOG Unreleased):
+  `src/name-guard.js` checks publish scopes at the door and again at
+  approval -- invalid names, the reserved `xiom`/`xiom.*`/`xiom-*` namespace,
+  separator twins of published names, and scopes over published packages the
+  requester does not maintain are refused; only listed maintainers may
+  request publish rights over an existing package (claim first). Lookalikes
+  and "xiom" mentions are recorded on the request and require an explicit
+  acknowledge at approval; scope overlaps hard-block, so two grants can never
+  hold the same name. Admin queue shows the warnings with the ack checkbox.
+  346/346 unit; PUBLISHING.md documents the rules.
 - Release commit on top of `e1a87d9`: version `2.8.0`, CHANGELOG promotion
   ([Unreleased] -> [2.8.0]), this handoff.
 - `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
