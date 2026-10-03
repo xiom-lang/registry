@@ -2642,7 +2642,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 | Repo | `main` at the 2.9.0 release commit (on top of `3ec2308`; scoring v2 `3f8f1e2`; paging sweep `3ec2308`); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **339/339**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.9.0 on staging and production** (ops, 2026-10-02; both boots healthy, email enabled, no migrations/env, index sha unchanged, `/index-digest.json` byte-exact on both, production signature intact, **staging now signed with its own key**). Registry-lane verification green (production index 446 entries) |
-| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75`. **Staging signed since 2026-10-02**: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fingerprint `0f:07:f7:1a:05:2e:16:f1` (optional staging pin for the compiler lane). C5 pinning landed in `xiom` at `1af1873c` |
+| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75`. **Staging signed since 2026-10-02**: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fingerprint `0f:07:f7:1a:05:2e:16:f1`. **Compiler lane recorded the staging pin on 2026-10-03** (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`) with production unchanged; nothing further is required from the registry lane. C5 pinning landed in `xiom` at `1af1873c` |
 | Packages waves | Wave 44 (eco-v0.1.23/24/25, formatter-fw 0.1.1 normalization) landed 2026-09-30 with zero failures; allowlist settled at 422, production index at 375 entries (registry-lane check agrees). The coordinated publish window closed: `PUBLISH_RATE_MAX` restored to 20 and verified in the recreated production container. Both relays delivered; registry and packages lanes in sync |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
@@ -2792,8 +2792,7 @@ now warns when the manifest declares no stage or marks a pre-release version
    (ed25519, public key `f76f5ff5...9673`, fp `f7:6f:5f:f5:15:38:ce:75`); staging
    is unsigned. The public key goes to the compiler lane (`xiom pkg`) for
    pinning; **0.62.2 shipped 2026-09-30 16:37Z**, so the xiom-pkg batch is
-   unblocked. Remaining
-   optional: sign staging too, or leave it unsigned (no dependency).
+   unblocked. Staging was signed on 2026-10-02 with its own key (see 24.1).
 5. **2.8.0 deploy: DONE (ops, 2026-09-30).** Live on both environments;
    health 2.8.0 + email enabled, no migrations or env changes, digest
    byte-exact on both, production signature intact, `/whats-new` serves the
@@ -2819,38 +2818,46 @@ now warns when the manifest declares no stage or marks a pre-release version
 9. **2.9.0 deploy: DONE (ops, 2026-10-02).** Live on both environments; no
    migrations/env steps; digest byte-exact and signed on both (staging got
    its own key, fp `0f:07:f7:1a:05:2e:16:f1`). Ops is exercising the UI
-   walkthrough. The staging public key is an optional pin for the compiler
-   lane.
+   walkthrough. The staging public key is recorded by the compiler lane as
+   its optional pin (2026-10-03).
 
 ### 24.4 Paste-ready prompt for the next session
 
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.9.0 release commit
-`017c92e` plus the deploy-verify docs commit, clean, 339/339 unit and 20/20
-e2e green.
+notes. This is E:\xiom-lang\registry on main at fe60616 (2.9.0 release
+`017c92e` plus the post-release naming guard `4150b8c`/`de490aa`/`fe60616`),
+clean, 346/346 unit and 20/20 e2e green.
 
 State in one line: 2.9.0 (reputation scoring v2, package stats strip, admin
-paging sweep) is live on staging and production and verified; both digests
-are signed (production fp f7:6f:5f:f5:15:38:ce:75, staging fp
-0f:07:f7:1a:05:2e:16:f1); no relay is open.
+paging sweep) is live on staging and production and verified, both digests
+signed (production fp f7:6f:5f:f5:15:38:ce:75, staging fp
+0f:07:f7:1a:05:2e:16:f1); the naming guard is on main awaiting the next
+release window; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 339) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 346) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.9.0, email enabled);
    /index-digest.json byte-exact and signature-valid on both.
-2. Optional compiler-lane pin: staging's index key
-   0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb
-   (fp 0f:07:f7:1a:05:2e:16:f1) can be pinned for staging tests; production's
-   pin is already in use.
-3. Remaining Track B items are optional compiler-lane polish (B1 packaging
-   guard, B2 `xiom pkg yank`); C5 pinning and B3 `--dry-run` already landed
-   (`1af1873c` in xiom).
+2. If the owner orders the next cut: bump the version (the naming guard is a
+   feature -> minor), promote [Unreleased] (Publishing: name/scope checks),
+   update this handoff, push, watch CI, hand ops the deploy (staging first;
+   no migrations, no env changes). Staging walkthrough: file a request with a
+   lookalike name (warning + ack required), one over a published package you
+   do not maintain (refused at the door), and one overlapping a live grant
+   (approval blocked).
+3. Compiler-lane queue: the staging index-key pin is recorded on their side
+   (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`, fp
+   `0f:07:f7:1a:05:2e:16:f1`); production is unchanged. Their remaining
+   optional polish (B1 packaging guard, B2 `xiom pkg yank`, install `trust`
+   wording, `--resolve` outside a workspace) stays post-release and needs
+   nothing from the registry.
 4. Packages' README staleness runs on their lane (chunked 0.1.1 republishes;
    ops opens the publish-rate window per batch when a wave exceeds 20 names);
-   C3 is delivered to the playground and their side continues. No registry
-   code work remains; the next cut happens when a new requirement arrives.
+   C3 is delivered to the playground and their side continues. No further
+   registry code work is planned; the next cut happens when a new requirement
+   arrives.
 
 Rules: keep the 2.0/2.1/2.2 guarantees (sessions never publish, every
 approval/decision audited, one-click trusted publishers, /index.json protocol
