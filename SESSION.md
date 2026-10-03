@@ -2639,9 +2639,9 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.12.0 release commit (after `00fdc0b`), pushed; clean; Registry CI + CodeQL green |
+| Repo | `main` at `dacf342` (2.12.0 release), pushed; clean; Registry CI + CodeQL green |
 | Tests | `npm test` **351/351**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.10.0 deploy history**: ops, 2026-10-03; the false-success incident (stale clone + fully cached build) is recorded in DEPLOY.md's release-identity check. **2.11.0 live on staging and production** (ops, 2026-10-03 14:13Z; both checkouts `64f8a3d`, fresh image digests, no migrations/env), verified externally by the registry lane: health 2.11.0 + email enabled on both, `/whats-new` 2.11.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/requests/check` present and auth-gated, `scope-check` CSS served; live-check green (staging 226/225, production 452/451, isolation ok). **2.12.0 cut 2026-10-03 (owner-ordered) and handed to ops: staging first, then production; no migrations/env; carries the UX batch (notification triage, publisher-field check + icons, admin messaging).** Remaining manual checks: naming-guard walkthrough, deny flow, blur check, and the mobile visual pass |
+| Deployed | **2.12.0 live on staging and production** (ops, 2026-10-03 15:02Z; checkout `dacf342`, production image digest `4de0cea1…` -> `416ebf60…`, no migrations/env), verified externally by the registry lane: health 2.12.0 + email enabled on both, `/whats-new` 2.12.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `/requests/check` auth-gated, new CSS (`nav-bell`, `notice-filters`, `field-error`) served; live-check green (staging 226/225, production 452/451, isolation ok). History: 2.11.0 verified 14:13Z; the 2.10.0 false-success incident is in DEPLOY.md's release-identity check. **Staging publisher count 5 explained** (ops): 3 static file entries (stdlib-main-staging 2 scopes, registry-canary, eco-canary 499) + 2 stored app-approved rows added since 2.10.0; the mounted file itself is unchanged. Remaining manual checks: naming-guard walkthrough, deny flow, blur check, the UX batch, and the mobile visual pass |
 | Deploy pin | **Lifted by the 2.11.0 cut.** The ops pin (`b3f123a`) held production/staging on `c0af724` (2.10.0) and marked main do-not-deploy *while the version string still reads 2.10.0*; 2.11.0 changes the version, so main is deployable again. The release-identity check stays adopted on both sides -- after `git pull` confirm the checkout commit, after `up` confirm `/health` and a changed image digest; `Running` is never the verdict |
 | Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
 | Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; the +2 landed 2026-10-03 (firebird, oracle published; scopes 499 live, production at 452 entries). The coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
@@ -2653,13 +2653,13 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ### 24.2 Release history and the current window
 
-**Current window:** **2.12.0 was cut 2026-10-03 (owner-ordered)** and carries
-the UX batch: notification triage (header bell, All/Unread filter, per-notice
-read/unread, open-through), the publisher-field live check with
-green/amber/red state icons, and audited admin messaging (no address exposure,
-5/hour cap, mutable `admin-message` kind). 2.11.0 stays live until ops deploys
-2.12.0 staging-first (no migrations/env). `[Unreleased]` is empty; the next
-cut happens when a new requirement arrives.
+**Current window:** **2.12.0 is live on staging and production** (ops,
+2026-10-03 15:02Z) and verified (24.1); it carries the UX batch: notification
+triage (header bell, All/Unread filter, per-notice read/unread, open-through),
+the publisher-field live check with green/amber/red state icons, and audited
+admin messaging (no address exposure, 5/hour cap, mutable `admin-message`
+kind). `[Unreleased]` is empty; the next cut happens when a new requirement
+arrives.
 
 **Archive (shipped releases, in order):**
 
@@ -2786,18 +2786,16 @@ cut happens when a new requirement arrives.
 
 ### 24.3 Next actions, in order
 
-1. **Ops: deploy 2.12.0 (owner-ordered 2026-10-03).** Staging first, then
-   production; no migrations, no env changes; confirm the release identity
-   (checkout commit after `git pull`, `/health` after `up`, image digest must
-   change). Registry-lane verify: `/health` 2.12.0 + email enabled,
-   `/whats-new` serves the 2.12.0 entry, `/index-digest.json` byte-exact and
-   signature-valid on both.
-2. **Staging checks (remaining manual items, signed-in session).** The
+1. **Staging checks (remaining manual items, signed-in session).** The
    naming-guard walkthrough, the deny flow, the blur check, and the new UX
    batch: header bell + unread count, per-notice read/unread + filters,
    publisher-field messages + state icons, admin "Message this user"
    (audited, no address shown), plus the mobile visual pass on the new
    styles. Record the verdict here.
+2. **Deploy record:** 2.12.0 is live on both and externally verified (24.1);
+   the release-identity check held (production image digest changed). The
+   staging publisher count (5) is explained: 3 static file entries + 2
+   stored app-approved rows; the mounted file is unchanged.
 3. **Next cut:** none queued; `[Unreleased]` is empty. The next cut happens
    when a new requirement arrives.
 4. **Compiler lane (theirs; nothing needed from the registry):** C5
@@ -2826,23 +2824,22 @@ another lane's queue or optional ops follow-up.
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.12.0 release commit
-(after 00fdc0b), clean, 351/351 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at dacf342 (2.12.0 release),
+clean, 351/351 unit and 20/20 e2e green.
 
-State in one line: 2.11.0 is live on staging and production and verified,
-both digests signed (production fp f7:6f:5f:f5:15:38:ce:75, staging fp
-0f:07:f7:1a:05:2e:16:f1); 2.12.0 (notification triage, publisher-field check
-+ icons, admin messaging) is cut and handed to ops for a staging-first
-deploy; the signed-in staging checks remain; no relay is open.
+State in one line: 2.12.0 (notification triage, publisher-field check +
+icons, admin messaging) is live on staging and production and verified
+(health/whats-new/digests, CSS markers), both digests signed (production fp
+f7:6f:5f:f5:15:38:ce:75, staging fp 0f:07:f7:1a:05:2e:16:f1); the signed-in
+staging checks remain; no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 351) and npm run test:e2e (expect
-   20); /health on staging and production; /index-digest.json byte-exact and
-   signature-valid on both.
-2. If ops has deployed 2.12.0 (check /health): verify /whats-new serves the
-   2.12.0 entry, then run the staging checks with a signed-in session (the
-   naming-guard walkthrough, the deny flow, the blur check, the new UX
-   batch, and the mobile visual pass). Record the verdict in this section.
+   20); /health on staging and production (expect 2.12.0, email enabled);
+   /index-digest.json byte-exact and signature-valid on both.
+2. If the staging checks are still open, run them with a signed-in session:
+   the naming-guard walkthrough, the deny flow, the blur check, the new UX
+   batch, and the mobile visual pass. Record the verdict in this section.
 3. If the owner orders a further cut: bump the version per semver, promote
    [Unreleased], update this handoff, push, watch CI, hand ops the deploy
    (staging first; no migrations, no env changes) and confirm the release
