@@ -2818,7 +2818,12 @@ roles/permissions guide, and the supervisor-scope clarification.
    (`ac3c58f`). Position relayed: explicit release per the 6D.1 contract;
    Drop/auto-release is a future language design item, not requested this
    cycle. B1 list is verbatim in PUBLISHING.md; B2 is the live
-   `POST /packages/{name}/{version}/yank` contract. Remaining
+   `POST /packages/{name}/{version}/yank` contract. **2026-10-03 follow-up
+   (compiler):** both asks are queued exactly as stated -- pinned-archive
+   green confirmation for `iter.range` after the fix (the smoke lock is
+   promoted then) and lz4 stays filed at the top of their queue;
+   Drop/auto-release remains noted as a future language-design item, not
+   this cycle. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
