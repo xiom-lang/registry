@@ -8,6 +8,11 @@ The rendered version of this file is at `/whats-new`.
 
 ### Interface
 
+- **Live name check on the request form**: leaving the package-names field
+  runs the same naming-guard check the door uses (`GET /requests/check`,
+  read-only) and shows errors and advisories inline, so a reserved, taken,
+  or lookalike name is caught before the form is submitted. Advisory only:
+  the door and the approval re-run the authoritative checks.
 - **Decision notices name the package**: every request-decision notice
   (approved, denied, fulfilled, trusted-publisher approved/updated/revoked)
   now names the requested scopes -- the first three in the subject with a

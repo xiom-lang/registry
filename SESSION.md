@@ -2654,9 +2654,13 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 **Current window:** 2.10.0 (**naming guard** `4150b8c` -- door/approval name
 and scope checks; docs `de490aa`, checkbox style `fe60616`) is **live on
-staging and production** since 2026-10-03 and verified (24.1). `[Unreleased]`
-is empty; no further registry code work is queued -- the next cut happens
-when a new requirement arrives.
+staging and production** since 2026-10-03 and verified (24.1). Post-2.10.0 on
+`main`, `[Unreleased]` now carries the owner-requested follow-ups: the
+request-form live name check (`GET /requests/check`, read-only, inline
+errors/advisories on blur) and the decision-notice/decision-form fixes
+(`91259c3`: every decision notice names the scopes; the ack checkbox no
+longer blocks Deny; Enter in a decision note no longer implicitly approves).
+Next cut: minor, when the owner orders it.
 
 **Archive (shipped releases, in order):**
 

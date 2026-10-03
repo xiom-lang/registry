@@ -1435,6 +1435,11 @@ textarea:focus-visible {
 }
 .name-warning-list { margin: var(--space-sm) 0; padding-left: var(--space-lg); }
 
+/* Request-form live name check (advisory; the door re-checks at submit). */
+.scope-check { display: grid; gap: 4px; margin: 0; font-size: 13px; }
+.scope-check-error { color: var(--error); }
+.scope-check-warn { color: #ffc400; }
+
 .profile-link { color: var(--paper); font-weight: 600; text-decoration: none; }
 .profile-link:hover { text-decoration: underline; }
 

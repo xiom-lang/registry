@@ -39,7 +39,7 @@ const { checkScopes } = require('./name-guard');
 const oauth = require('./oauth');
 const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
 const { AccountStore } = require('./accounts');
-const { RequestStore } = require('./requests');
+const { RequestStore, MAX_SCOPES } = require('./requests');
 const { ReviewStore } = require('./reviews');
 const { PublisherStore } = require('./publisher-store');
 const { Database } = require('./db');
@@ -2013,6 +2013,31 @@ function createApp(config = loadConfig()) {
       }
     },
   );
+
+  // Read-only pre-check for the request form: the same door check without
+  // queueing anything. Purely advisory -- the POST and the admin approval
+  // re-run the authoritative checks, because the index and the live grants
+  // can change between the blur and the submit.
+  app.get('/requests/check', generalLimit, requireAccount, (req, res) => {
+    const raw = String(req.query.scopes || '');
+    res.set('Cache-Control', 'no-store');
+    if (raw.length > 1024) {
+      return res.json({
+        scopes: [], errors: ['scope list is too long'], warnings: [], overlaps: [],
+      });
+    }
+    const scopes = parseScopeInput(raw);
+    if (scopes.length > MAX_SCOPES) {
+      return res.json({
+        scopes: scopes.slice(0, MAX_SCOPES),
+        errors: [`at most ${MAX_SCOPES} scopes per request`],
+        warnings: [],
+        overlaps: [],
+      });
+    }
+    const check = guardScopes(scopes, { account: accountOf(req) });
+    return res.json({ scopes, ...check });
+  });
 
   // ─── Naming guard (request-time and approval-time) ────────────────────────
   // Scopes are checked when a request is filed and re-checked when it is

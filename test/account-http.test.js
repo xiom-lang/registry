@@ -2617,3 +2617,58 @@ test('denying a warned request still records a denial, not an approval', async (
   assert.equal(notice.subject, 'Request denied: readme-pq');
   assert.match(notice.body, /readme-pq/);
 });
+
+// --- Read-only name check for the request form ------------------------------
+
+test('the request form has a read-only name check endpoint', async () => {
+  const { requests } = app.locals.registry;
+  const anon = cookieJar();
+  let response = await requestAs(anon, '/requests/check?scopes=readme-pk');
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location'), /^\/login/);
+
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  const before = requests.list({ requesterId: '777' }).length;
+
+  // Taken, reserved, and lookalike names answer with the door's own verdicts.
+  response = await requestAs(user, '/requests/check?scopes=readme-pkg');
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.deepEqual(body.scopes, ['readme-pkg']);
+  assert.match(body.errors[0], /already published; only its maintainers/);
+  assert.deepEqual(body.warnings, []);
+  assert.deepEqual(body.overlaps, []);
+
+  response = await requestAs(user, '/requests/check?scopes=xiom.new-thing');
+  body = await response.json();
+  assert.match(body.errors[0], /reserved first-party namespace/);
+
+  response = await requestAs(user, '/requests/check?scopes=readme-pk');
+  body = await response.json();
+  assert.deepEqual(body.errors, []);
+  assert.match(body.warnings[0], /looks like published "readme-pkg"/);
+
+  response = await requestAs(user, '/requests/check?scopes=fresh-check-tool');
+  body = await response.json();
+  assert.deepEqual(body, {
+    scopes: ['fresh-check-tool'], errors: [], warnings: [], overlaps: [],
+  });
+  assert.equal(
+    requests.list({ requesterId: '777' }).length,
+    before,
+    'the check files nothing',
+  );
+
+  response = await requestAs(
+    user,
+    `/requests/check?scopes=${encodeURIComponent('a,b,c,d,e,f,g,h,i')}`,
+  );
+  body = await response.json();
+  assert.match(body.errors[0], /at most 8 scopes per request/);
+
+  // The form carries the status line and the blur wiring.
+  const page = await (await requestAs(user, '/account/requests')).text();
+  assert.match(page, /id="scope-check"/);
+  assert.match(page, /\/requests\/check\?scopes=/);
+});

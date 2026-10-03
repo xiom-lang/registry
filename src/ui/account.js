@@ -182,6 +182,7 @@ function requestForm({ csrf, defaults = {}, disabled = false }) {
       <small>Comma-separated. A namespace like <code>my-ns</code> covers
       <code>my-ns.*</code>; <code>*</code> is never granted from this form.</small>
     </label>
+    <p class="scope-check" id="scope-check" role="status" aria-live="polite" hidden></p>
   </div>
   <fieldset class="publisher-fields">
     <legend>Trusted publisher details (only for a trusted-publisher request)</legend>
@@ -216,7 +217,69 @@ function requestForm({ csrf, defaults = {}, disabled = false }) {
     </label>
   </div>
   <button class="button primary" type="submit"${disabled ? ' disabled' : ''}>Submit request</button>
-</form>`;
+</form>
+<script>
+// The door check, before the door: advisory only. The POST and the admin
+// approval re-run the authoritative checks, so a stale or failed check here
+// never blocks or authorizes anything.
+(function () {
+  var form = document.getElementById('request');
+  if (!form) return;
+  var input = form.querySelector('input[name="scopes"]');
+  var status = document.getElementById('scope-check');
+  if (!input || !status) return;
+  var inFlight = null;
+  var lastChecked = null;
+
+  function render(result) {
+    while (status.firstChild) status.removeChild(status.firstChild);
+    var lines = [];
+    (result.errors || []).forEach(function (text) {
+      lines.push({ text: text, kind: 'error' });
+    });
+    (result.warnings || []).forEach(function (text) {
+      lines.push({ text: text, kind: 'warn' });
+    });
+    (result.overlaps || []).forEach(function (text) {
+      lines.push({ text: text + ' (an admin decides this at approval)', kind: 'warn' });
+    });
+    lines.forEach(function (line) {
+      var item = document.createElement('span');
+      item.className = 'scope-check-' + line.kind;
+      item.textContent = line.text;
+      status.appendChild(item);
+    });
+    status.hidden = lines.length === 0;
+  }
+
+  function check() {
+    var value = input.value.trim();
+    if (!value) {
+      lastChecked = null;
+      render({});
+      return;
+    }
+    if (value === lastChecked) return;
+    lastChecked = value;
+    if (inFlight) inFlight.abort();
+    inFlight = new AbortController();
+    fetch('/requests/check?scopes=' + encodeURIComponent(value), {
+      headers: { Accept: 'application/json' },
+      signal: inFlight.signal,
+    }).then(function (response) {
+      if (!response.ok) throw new Error('check failed');
+      return response.json();
+    }).then(function (result) {
+      if (input.value.trim() === value) render(result);
+    }).catch(function () {
+      // Advisory: a failed or superseded check stays silent; submit re-checks.
+    });
+  }
+
+  input.addEventListener('blur', check);
+  input.addEventListener('change', check);
+})();
+</script>`;
 }
 
 /** Full request history table for /account/requests. */
