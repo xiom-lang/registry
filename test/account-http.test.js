@@ -570,8 +570,8 @@ test('approving a trusted publisher activates it and revoking removes it', async
     body: new URLSearchParams({
       csrf,
       kind: 'publisher',
-      scopes: 'readme-pkg',
-      repository: 'alice/readme-pkg',
+      scopes: 'publisher-demo',
+      repository: 'alice/publisher-demo',
       workflow: 'publish-registry.yml',
       refs: 'refs/heads/main',
     }),
@@ -593,7 +593,7 @@ test('approving a trusted publisher activates it and revoking removes it', async
   const { config } = app.locals.registry;
   const entry = config.publishers.find((candidate) => candidate.requestId === id);
   assert.ok(entry, 'approved entry is in the live publisher list');
-  assert.equal(entry.repository, 'alice/readme-pkg');
+  assert.equal(entry.repository, 'alice/publisher-demo');
   assert.equal(entry.workflow, 'publish-registry.yml');
   assert.equal(entry.firstParty, false);
 
@@ -2387,4 +2387,141 @@ test('fulfilled token grants can request rotation', async () => {
   assert.equal(app.locals.registry.requests.get(rotationId).status, 'approved');
   const notices = app.locals.registry.notifications.listFor('777');
   assert.equal(notices[0].subject, 'Token rotation approved');
+});
+
+// --- Naming guard: the door and the approval both check names ---------------
+
+test('requests check names at the door and scope overlaps at approval', async () => {
+  const { requests } = app.locals.registry;
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  const before = requests.list({ requesterId: '777' }).length;
+
+  // Door: taken, reserved, and separator-twin names are refused with a
+  // reason, and nothing is filed.
+  for (const [scopes, pattern] of [
+    ['readme-pkg', /is already published; only its maintainers/],
+    ['xiom.new-thing', /reserved first-party namespace/],
+    ['readme.pkg', /differs from published .*readme-pkg.* only by dots and hyphens/],
+  ]) {
+    response = await requestAs(user, '/requests', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes }),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/account/requests');
+    const page = await (await requestAs(user, '/account/requests')).text();
+    assert.match(page, pattern);
+  }
+  assert.equal(requests.list({ requesterId: '777' }).length, before, 'refused requests were not filed');
+
+  // A listed maintainer of a published package may request publish rights
+  // over it: plain-user maintains readme-pkg via a verified claim.
+  const maintainerJar = cookieJar();
+  await login(maintainerJar, 'plain-code'); // 888
+  response = await requestAs(maintainerJar, '/account/requests');
+  const maintainerCsrf = csrfFrom(await response.text());
+  response = await requestAs(maintainerJar, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: maintainerCsrf, kind: 'token', scopes: 'readme-pkg' }),
+  });
+  assert.equal(response.status, 303);
+  const maintainerRequestId = new URL(response.headers.get('location'), baseUrl)
+    .searchParams.get('created');
+  const maintainerRequest = requests.get(maintainerRequestId);
+  assert.equal(maintainerRequest.status, 'pending');
+  assert.ok(maintainerRequest.warnings.some((warning) => /covers your existing package/.test(warning)));
+
+  // A fresh name goes through untouched.
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'fresh-tool' }),
+  });
+  const freshId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  assert.equal(requests.get(freshId).status, 'pending');
+
+  // A lookalike is allowed but flagged; the admin queue shows the warning and
+  // approval requires the explicit acknowledge, recorded in the decision note.
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'readme-pk' }),
+  });
+  const lookalikeId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  const lookalike = requests.get(lookalikeId);
+  assert.equal(lookalike.status, 'pending');
+  assert.ok(lookalike.warnings.some((warning) => /looks like published "readme-pkg"/.test(warning)));
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/account');
+  const adminCsrf = csrfFrom(await response.text());
+  const queue = await (await requestAs(admin, '/admin/requests', { headers: BROWSER })).text();
+  assert.match(queue, /Name check:/);
+  assert.match(queue, /I checked these name warnings/);
+
+  response = await requestAs(admin, `/admin/requests/${lookalikeId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(requests.get(lookalikeId).status, 'pending', 'no decision without the acknowledge');
+  response = await requestAs(admin, `/admin/requests/${lookalikeId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve', ack: '1' }),
+  });
+  assert.equal(response.status, 303);
+  const decided = requests.get(lookalikeId);
+  assert.equal(decided.status, 'approved');
+  assert.match(decided.history.at(-1).note, /name warnings acknowledged/);
+
+  // Scope exclusivity: a live grant blocks a second scope over the same name.
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: userCsrf,
+      kind: 'publisher',
+      scopes: 'overlap-demo',
+      repository: 'alice/overlap-demo',
+      workflow: 'publish.yml',
+      refs: 'refs/heads/main',
+    }),
+  });
+  const grantId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  response = await requestAs(admin, `/admin/requests/${grantId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(requests.get(grantId).status, 'fulfilled', 'the publisher grant activated');
+
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'overlap-demo' }),
+  });
+  const duplicateId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  assert.ok(requests.get(duplicateId).warnings.some((warning) => /overlaps the scope of/.test(warning)));
+  response = await requestAs(admin, `/admin/requests/${duplicateId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve', ack: '1' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(requests.get(duplicateId).status, 'pending', 'the overlap blocks approval');
+  const blocked = await (await requestAs(admin, '/admin/requests')).text();
+  assert.match(blocked, /Not approved: .*overlaps the scope of/);
+
+  // Cleanup so later tests start clean: revoke the grant, close the rest.
+  response = await requestAs(admin, `/admin/requests/${grantId}/revoke`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, note: 'test cleanup' }),
+  });
+  assert.equal(response.status, 303);
+  for (const id of [duplicateId, freshId, maintainerRequestId]) {
+    response = await requestAs(admin, `/admin/requests/${id}/decision`, {
+      method: 'POST',
+      body: new URLSearchParams({ csrf: adminCsrf, action: 'deny', note: 'test cleanup' }),
+    });
+    assert.equal(response.status, 303);
+  }
 });

@@ -189,6 +189,16 @@ function pendingRow(record, csrf) {
   <form class="decision-form" method="post" action="/admin/requests/${encodeURIComponent(record.id)}/decision">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
     <input name="note" placeholder="Decision note (required to deny)" maxlength="500" aria-label="Decision note">
+    ${Array.isArray(record.warnings) && record.warnings.length > 0
+    ? `<div class="name-warnings">
+      <p class="pkg-meta"><strong>Name check:</strong> review before approving &mdash;</p>
+      <ul class="name-warning-list">
+${record.warnings.map((warning) => `        <li class="pkg-meta">${escapeHtml(warning)}</li>`).join('\n')}
+      </ul>
+      <label class="radio-row"><input type="checkbox" name="ack" value="1" required>
+        <span>I checked these name warnings</span></label>
+    </div>`
+    : ''}
     <button class="button primary" type="submit" name="action" value="approve">Approve${record.kind === 'publisher' ? ' &amp; activate' : ''}</button>
     <button class="button danger" type="submit" name="action" value="deny">Deny</button>
   </form>

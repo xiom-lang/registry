@@ -35,6 +35,7 @@ const { ArtifactStore } = require('./storage');
 const { authenticate, assertPublishScope, safeEqual } = require('./tokens');
 const { createJwksCache } = require('./oidc');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
+const { checkScopes } = require('./name-guard');
 const oauth = require('./oauth');
 const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
 const { AccountStore } = require('./accounts');
@@ -1945,17 +1946,42 @@ function createApp(config = loadConfig()) {
     requireCsrf,
     (req, res, next) => {
       try {
+        const kind = String(req.body.kind || 'token');
+        const scopes = String(req.body.scopes || '');
+        let warnings = [];
+        if (kind === 'token' || kind === 'publisher') {
+          // The door check: validate the requested names before anything is
+          // queued. Hard errors stop the request; lookalike advisories ride
+          // along for the admin to acknowledge at approval.
+          const check = guardScopes(parseScopeInput(scopes), { account: accountOf(req) });
+          if (check.errors.length > 0) {
+            req.session.flash = {
+              error: check.errors[0],
+              form: {
+                kind,
+                scopes,
+                repository: String(req.body.repository || ''),
+                workflow: String(req.body.workflow || ''),
+                refs: String(req.body.refs || ''),
+                note: String(req.body.note || ''),
+              },
+            };
+            return res.redirect(303, '/account/requests');
+          }
+          warnings = [...check.warnings, ...check.overlaps];
+        }
         const created = requests.create({
-          kind: String(req.body.kind || 'token'),
+          kind,
           requester: accountOf(req),
-          scopes: String(req.body.scopes || ''),
+          scopes,
           repository: String(req.body.repository || ''),
           workflow: String(req.body.workflow || ''),
           refs: String(req.body.refs || ''),
           note: String(req.body.note || ''),
+          warnings,
         });
-          res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
-        } catch (err) {
+        return res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
+      } catch (err) {
           if (err instanceof BadRequestError || err instanceof ConflictError) {
             // Keep the submission on the round trip so the user can fix it.
             req.session.flash = {
@@ -1975,6 +2001,61 @@ function createApp(config = loadConfig()) {
       }
     },
   );
+
+  // ─── Naming guard (request-time and approval-time) ────────────────────────
+  // Scopes are checked when a request is filed and re-checked when it is
+  // approved. Hard errors (invalid/reserved/taken/separator-twins) block at
+  // both doors; lookalike warnings must be acknowledged at approval; scope
+  // overlaps are advisory at the door and a hard block at approval.
+
+  /** Live non-first-party grants for the overlap check. */
+  function liveGrants(excludeRequestId = '') {
+    const grants = publisherStore.list()
+      .filter((entry) => entry.requestId !== excludeRequestId)
+      .map((entry) => ({
+        label: `trusted publisher ${entry.repository} / ${entry.workflow}`,
+        scopes: entry.scopes,
+      }));
+    for (const token of config.tokens || []) {
+      if (token.firstParty) continue;
+      grants.push({ label: `token "${token.label}"`, scopes: token.scopes || [] });
+    }
+    return grants;
+  }
+
+  /** Published packages the requester is a listed maintainer of. */
+  function maintainedNameSet(account) {
+    if (!account) return new Set();
+    return new Set(maintainedPackages({
+      login: account.login,
+      githubId: account.githubId,
+      index: indexStore.snapshot(),
+      requests: requests.list(),
+      publishers: publisherStore.list(),
+      claims: ownership.listClaims(),
+    })
+      .filter((entry) => entry.sources.length > 0 || entry.claimStatus === 'verified')
+      .map((entry) => entry.name));
+  }
+
+  function guardScopes(scopeList, {
+    ownScopes = [],
+    excludeRequestId = '',
+    account = null,
+  } = {}) {
+    return checkScopes({
+      scopes: scopeList,
+      index: indexStore.snapshot(),
+      grants: liveGrants(excludeRequestId),
+      ownScopes,
+      maintainerNames: maintainedNameSet(account),
+    });
+  }
+
+  const parseScopeInput = (value) => String(value || '')
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim().toLowerCase())
+    .filter(Boolean);
 
   // B4/B5: owner-facing changes to something already granted. The owner
   // asks; an admin executes from the queue, so these routes create requests
@@ -2019,6 +2100,18 @@ function createApp(config = loadConfig()) {
       if (!target) return;
       try {
         const account = accountOf(req);
+        const scopes = String(req.body.scopes || '');
+        // The edit keeps the entry's own scopes legitimate; anything new is
+        // re-checked at the door, and again at approval.
+        const check = guardScopes(parseScopeInput(scopes), {
+          ownScopes: target.scopes,
+          excludeRequestId: target.id,
+          account,
+        });
+        if (check.errors.length > 0) {
+          req.session.flash = { error: check.errors[0] };
+          return res.redirect(303, '/account/requests');
+        }
         const created = requests.create({
           kind: 'publisher-edit',
           requester: { githubId: account.githubId, login: account.login },
@@ -2026,8 +2119,9 @@ function createApp(config = loadConfig()) {
           repository: String(req.body.repository || ''),
           workflow: String(req.body.workflow || ''),
           refs: String(req.body.refs || ''),
-          scopes: String(req.body.scopes || ''),
+          scopes,
           note: String(req.body.note || ''),
+          warnings: [...check.warnings, ...check.overlaps],
         });
         return res.redirect(303, `/account/requests?created=${encodeURIComponent(created.id)}`);
       } catch (err) {
@@ -2574,8 +2668,41 @@ function createApp(config = loadConfig()) {
       try {
         const actor = accountOf(req).login;
         const action = String(req.body.action || '');
-        const note = String(req.body.note || '');
+        let note = String(req.body.note || '');
         const request = requests.get(req.params.id);
+        // Approval-time naming guard: re-check state (a name may have been
+        // published since the request) and enforce scope exclusivity. Hard
+        // issues block; warnings need an explicit acknowledge, recorded in
+        // the decision note.
+        if (action === 'approve'
+          && ['publisher', 'token', 'publisher-edit'].includes(request.kind)) {
+          const editTarget = request.kind === 'publisher-edit'
+            ? publisherStore.find(request.targetRequestId)
+            : null;
+          const requesterAccount = accounts.get(String(request.requester.githubId))
+            || accounts.getByLogin(request.requester.login);
+          const check = guardScopes(request.scopes, {
+            ownScopes: editTarget ? editTarget.scopes : [],
+            excludeRequestId: editTarget ? editTarget.requestId : '',
+            account: requesterAccount,
+          });
+          const blocked = [...check.errors, ...check.overlaps];
+          if (blocked.length > 0) {
+            req.session.flash = { error: `Not approved: ${blocked[0]}` };
+            return res.redirect(303, '/admin/requests');
+          }
+          if (check.warnings.length > 0) {
+            if (String(req.body.ack || '') !== '1') {
+              req.session.flash = {
+                error: 'Name-check warnings need an explicit acknowledge: '
+                  + check.warnings[0],
+              };
+              return res.redirect(303, '/admin/requests');
+            }
+            const marker = `[name warnings acknowledged: ${check.warnings.join('; ')}]`;
+            note = note ? `${note} ${marker}` : marker;
+          }
+        }
         let updated;
         if (request.kind === 'publisher-revoke' && action === 'approve') {
           // B4: execute the owner's revocation request against the live entry

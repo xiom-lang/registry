@@ -278,6 +278,28 @@ warnings; conflicts (409, the version exists), signature rules (422), scope
 denials (403), and malformed input (400) are reported exactly as `/publish`
 would. It is rate-limited like a publish and changes nothing.
 
+### Names and scopes
+
+Every publish scope is checked **before your request is queued**, and again
+when a maintainer approves it:
+
+- Names are lowercase dot-separated segments (letters, digits, hyphens; dots
+  separate namespaces).
+- The `xiom`, `xiom.*`, and `xiom-*` namespaces are reserved for official
+  packages and cannot be requested from the form.
+- A name that differs from a published package only by dots vs hyphens
+  (`my-lib` vs `my.lib`) is refused: readers and search treat them as the
+  same, so it would be impossible to tell apart.
+- If a name is **already published**, only its **listed maintainers** can
+  request publish rights over it: claim maintainership first (the package
+  page has *I maintain this package*, a reviewer verifies it), then request.
+  Everyone else is refused at the door.
+- Lookalike names (a typo away) and names mentioning "xiom" are allowed but
+  flagged: the request carries the warning, the admin queue shows it, and the
+  approver must explicitly acknowledge it before it can be approved.
+- Two grants may never hold the same name or namespace. An overlap with a
+  live grant is shown at the door and **blocks approval**.
+
 ### Token hygiene
 
 - One token per purpose; ask for the smallest scope that works.

@@ -6,6 +6,20 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Publishing
+
+- **Naming guard at the door and at approval**: publish-scope requests now
+  validate names before they are queued, and the approval re-checks them
+  (state may have changed). Refused with a reason: invalid names, the
+  reserved `xiom` / `xiom.*` / `xiom-*` namespace, separator twins of
+  published names (`my-lib` vs `my.lib`), and scopes over a published package
+  the requester does not maintain -- only listed maintainers may request
+  publish rights over an existing package (claim first, then request).
+  Lookalike names and names mentioning "xiom" are allowed but stored on the
+  request and must be explicitly acknowledged in the admin queue before
+  approval; scope overlaps with a live grant are advisory at the door and a
+  hard block at approval, so two grants can never hold the same name.
+
 ## [2.9.0] - 2026-10-02
 
 ### Community

@@ -240,6 +240,11 @@ class RequestStore {
     const requester = normalizeRequester(input.requester);
     const scopes = parseScopeList(input.scopes);
     const note = clean(input.note, MAX_NOTE);
+    // Naming-guard advisories recorded at the door (lookalike names, scope
+    // overlaps): shown in the admin queue and acknowledged at approval.
+    const warnings = Array.isArray(input.warnings)
+      ? [...new Set(input.warnings.map((warning) => clean(warning, 200)).filter(Boolean))].slice(0, 10)
+      : [];
     const targetRequestId = clean(input.targetRequestId, 32);
     if (TARGET_KINDS.has(kind) && !/^req_[0-9a-f]{12}$/.test(targetRequestId)) {
       throw new BadRequestError(
@@ -279,6 +284,7 @@ class RequestStore {
       requester,
       ...details,
       ...(TARGET_KINDS.has(kind) ? { targetRequestId } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
       ...(note ? { note } : {}),
       createdAt: now,
       history: [{ at: now, actor: requester.login, action: 'created' }],
@@ -458,6 +464,11 @@ function normalizeRecord(id, entry) {
   }
   if (/^req_[0-9a-f]{12}$/.test(String(entry.targetRequestId || ''))) {
     record.targetRequestId = String(entry.targetRequestId);
+  }
+  if (Array.isArray(entry.warnings)) {
+    const warnings = [...new Set(entry.warnings.map((warning) => clean(warning, 200)).filter(Boolean))]
+      .slice(0, 10);
+    if (warnings.length > 0) record.warnings = warnings;
   }
   if (clean(entry.note, MAX_NOTE)) record.note = clean(entry.note, MAX_NOTE);
   for (const field of ['decidedAt', 'decidedBy', 'fulfilledAt', 'fulfilledBy', 'mintReference']) {

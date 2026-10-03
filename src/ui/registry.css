@@ -1415,6 +1415,16 @@ textarea:focus-visible {
 /* At-a-glance package stats (rating / downloads / watchers / versions). */
 .pkg-stats { color: var(--muted); font-size: 14px; margin: var(--space-sm) 0 0; }
 
+/* Naming-guard warnings on the admin request queue (approval ack). */
+.name-warnings {
+  background: rgba(255, 196, 0, 0.08);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  border-radius: var(--radius);
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+}
+.name-warning-list { margin: var(--space-sm) 0; padding-left: var(--space-lg); }
+
 .profile-link { color: var(--paper); font-weight: 600; text-decoration: none; }
 .profile-link:hover { text-decoration: underline; }
 
