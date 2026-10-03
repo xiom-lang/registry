@@ -2649,7 +2649,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ staging override) and ops confirmed it configured on both hosts (2026-09-29) -- live checks enabled |
 | Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
-| stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014` |
+| stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014`. **2026-10-03: compiler lane relayed the v0.62.3 pin.** Registry lane verified the official archive against the published `SHA256SUMS`: the manifest itself hashes `8839e5cc86463887375ba7f412a8727ee58cc296e95164ef4b42d60213a03a48` and the linux-x64 archive `4cc5d62b0f90a68d6d86bc722f5e214148bda0d9fed830dba2ec75d0a5eb3f52`, both matching the manifest and GitHub's asset digests (all 9 assets cross-checked). Packages side applied: stdlib `COMPILER_VERSION` -> v0.62.3 and `publish-registry.yml` now `sha256sum -c`s the exact archive entry before use (`e36d86d`). A fresh v0.62.3 stdlib baseline is the next stdlib-lane action before the next release |
 
 ### 24.2 Release history and the current window
 
@@ -2803,8 +2803,12 @@ roles/permissions guide, and the supervisor-scope clarification.
 4. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
-   Remaining optional polish: B1 packaging guard, B2 `xiom pkg yank`,
-   install `trust` wording, `--resolve` outside a workspace.
+   **2026-10-03: their v0.62.3 pin relay is applied** -- the archive was
+   verified here against the published SHA256SUMS, and the packages side
+   pinned `COMPILER_VERSION` + added the checksum gate (`e36d86d`); stdlib
+   re-baseline on v0.62.3 is theirs before the next release. Remaining
+   optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
+   wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
    names, staging first; ops opens the publish-rate window only for larger
    batches). The README staleness ruling stands: no version-less refresh --
@@ -2818,8 +2822,8 @@ roles/permissions guide, and the supervisor-scope clarification.
    retune (D6, after the staging characterization run). Optional: nothing.
 
 No registry code work is pending. The live registry-lane items are the
-2.11.0 staging checks and the owner-gated next cut; everything else is
-another lane's queue or optional ops follow-up.
+2.13.1 staging checks; everything else is another lane's queue or optional
+ops follow-up.
 
 ### 24.4 Paste-ready prompt for the next session
 
