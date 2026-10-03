@@ -2633,24 +2633,33 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ---
 
-## 24. Session handoff (2026-09-29, registry lane)
+## 24. Session handoff (2026-10-03, registry lane)
 
 ### 24.1 State snapshot
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.9.0 release commit (on top of `3ec2308`; scoring v2 `3f8f1e2`; paging sweep `3ec2308`); clean; Registry CI + CodeQL green |
-| Tests | `npm test` **339/339**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.9.0 on staging and production** (ops, 2026-10-02; both boots healthy, email enabled, no migrations/env, index sha unchanged, `/index-digest.json` byte-exact on both, production signature intact, **staging now signed with its own key**). Registry-lane verification green (production index 446 entries) |
-| Index digest key | Production `INDEX_SIGNING_KEY` set on the host (seed only in `.env`, generated via `scripts/index-key.js`); public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fingerprint `f7:6f:5f:f5:15:38:ce:75`. **Staging signed since 2026-10-02**: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fingerprint `0f:07:f7:1a:05:2e:16:f1`. **Compiler lane recorded the staging pin on 2026-10-03** (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`) with production unchanged; nothing further is required from the registry lane. C5 pinning landed in `xiom` at `1af1873c` |
-| Packages waves | Wave 44 (eco-v0.1.23/24/25, formatter-fw 0.1.1 normalization) landed 2026-09-30 with zero failures; allowlist settled at 422, production index at 375 entries (registry-lane check agrees). The coordinated publish window closed: `PUBLISH_RATE_MAX` restored to 20 and verified in the recreated production container. Both relays delivered; registry and packages lanes in sync |
+| Repo | `main` at `7b78de9` (2.9.0 release `017c92e`; post-release naming guard `4150b8c` + docs `de490aa` + style `fe60616` + cross-lane sync `7b78de9`); clean; Registry CI + CodeQL green |
+| Tests | `npm test` **346/346**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Deployed | **2.9.0 on staging and production** (ops, 2026-10-02): no migrations/env, `/index-digest.json` byte-exact on both, **both digests signed** (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`). Registry-lane verification green; the catalog is at ~446 production entries and growing |
+| Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
+| Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; allowlist 422; the coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
-| Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ `XIOM_STAGING_GITHUB_SPONSORS_TOKEN`) after the rollout gap (`3c5d76b`, guarded by test). **Confirmed configured on both hosts 2026-09-29 (ops: token present in both containers after recreate; health 2.6.0 + email enabled 17:48Z), so live checks are enabled** |
+| Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ staging override) and ops confirmed it configured on both hosts (2026-09-29) -- live checks enabled |
 | Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
 | stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014` |
 
-### 24.2 Shipped in 2.5.0 (hashes)
+### 24.2 Release history and the current window
+
+**Current window (what the next release carries):** 2.9.0 is live
+(reputation scoring v2 `3f8f1e2`, package stats strip, admin paging sweep
+`3ec2308`). Post-2.9.0 on `main`, awaiting the next cut: the **naming guard**
+(`4150b8c` door/approval name and scope checks, docs `de490aa`, checkbox
+style `fe60616`). Nothing else is queued; the next release would be a minor
+bump for the guard.
+
+**Archive (shipped releases, in order):**
 
 - `9b10975` **A10 -- discovery facets**: `/packages` and `/search` gain
   `?stage=all|stable|incubating|deprecated` (effective manifest stage, resolved
@@ -2772,63 +2781,44 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ### 24.3 Next actions, in order
 
-1. **Deploys 2.5.0 and 2.6.0: DONE and verified** (see 24.1; ops pastes
-   green, migrations through 013, live-check green on both).
-2. **stdlib canary: DONE** (see 24.1). Staging `36501800456` and production
-   `36495200014` both published `xiom-std@0.62.0`; artifact digest, size,
-   ed25519 signature, and the official/signed badge re-verified independently
-   against the served bytes on both instances. Production provenance carries
-   `refs/tags/stdlib-v0.62.0` + commit `0e63101`. No open relay remains from
-   the 0.62.0 blocker.
-3. **Tell the playground lane** the C3 deliverable is ready: `npm run
-   export-bundle -- --registry https://registry.xiom-lang.org --out <dir>`
-   (`--latest-only` to shrink), layout + integrity rules in `OFFLINE.md`;
-   the client lane owns offline resolution semantics. Production export
-   verified 384 artifacts / 15,516,333 bytes.
-4. **2.7.0 deploy: DONE (ops, 2026-09-29).** Live on both environments with
-   health 2.7.0 + email enabled, no migrations or env needed, `/index-digest.json`
-   byte-exact against `/index.json` on both (independently verified), live-check
-   complete. Ops also set the optional C5 key: production's digest is signed
-   (ed25519, public key `f76f5ff5...9673`, fp `f7:6f:5f:f5:15:38:ce:75`); staging
-   is unsigned. The public key goes to the compiler lane (`xiom pkg`) for
-   pinning; **0.62.2 shipped 2026-09-30 16:37Z**, so the xiom-pkg batch is
-   unblocked. Staging was signed on 2026-10-02 with its own key (see 24.1).
-5. **2.8.0 deploy: DONE (ops, 2026-09-30).** Live on both environments;
-   health 2.8.0 + email enabled, no migrations or env changes, digest
-   byte-exact on both, production signature intact, `/whats-new` serves the
-   2.8.0 changelog. Ops is exercising the admin walkthrough.
-6. **2.6.0 deploy: DONE** (live 2026-09-29 16:38Z; both services recreated
-   17:48Z with the Sponsors token; health 2.6.0 + email enabled).
-7. **README staleness ruling (for the packages lane, 2026-09-29): no
-   version-less refresh.** Package pages render the README from the stored
-   immutable artifact (`src/readme.js`: "from the stored artifact, never from
-   a GitHub fetch"), and the page shows the viewed version's README (latest
-   by default). A refresh would either fetch GitHub at render time (SSRF,
-   availability, contradicts artifacts-as-source-of-truth) or rewrite an
-   existing version's bytes (breaks sha256 pins, the ed25519 signature, and
-   the OIDC provenance record) -- both rejected, and an index-level overlay
-   was rejected as display text detached from what users install. Direction
-   for packages: proceed with the chunked `0.1.1` republishes from
-   `packages@da3289f`, latest-version scope, ~50/batch with the
-   `PUBLISH_RATE_MAX` window and staging-first checks; no registry code
-   change needed. The republish hold can lift.
-8. **Ops backlog** (section 21 Track D): fulfiller worker confirmation (D1),
+1. **Deploy history: all done and verified.** 2.5.0, 2.6.0, 2.7.0, 2.8.0,
+   and 2.9.0 are live on staging and production (see 24.1 for the current
+   snapshot); the stdlib 0.62.0 canary is closed on both environments
+   (provenance `refs/tags/stdlib-v0.62.0` + commit `0e63101`). Nothing needs
+   redeploying.
+2. **Next release window (owner-gated): cut a minor for the naming guard.**
+   When the owner orders it: bump the version, promote [Unreleased]
+   (Publishing: name/scope checks), refresh 24.1/24.4, push, watch CI, hand
+   ops the deploy (staging first; no migrations, no env changes). Staging
+   walkthrough: a lookalike name (warning + ack required), a published name
+   the requester does not maintain (refused at the door), and a scope
+   overlapping a live grant (approval blocked).
+3. **Compiler lane (theirs; nothing needed from the registry):** C5
+   index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
+   pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
+   Remaining optional polish: B1 packaging guard, B2 `xiom pkg yank`,
+   install `trust` wording, `--resolve` outside a workspace.
+4. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
+   names, staging first; ops opens the publish-rate window only for larger
+   batches). The README staleness ruling stands: no version-less refresh --
+   a patch bump whose artifact carries the fixed README is the fix.
+5. **Playground lane:** C3 is delivered (`E:\xiom-lang\registry-bundle` +
+   tarball with pinned hashes in 24.1); their offline example continues.
+6. **Ops backlog** (section 21 Track D): fulfiller worker confirmation (D1),
    ops-repo template cleanup (D2), backup/restore drill (D4), resource-cap
-   retune (D6, after the staging characterization run).
-9. **2.9.0 deploy: DONE (ops, 2026-10-02).** Live on both environments; no
-   migrations/env steps; digest byte-exact and signed on both (staging got
-   its own key, fp `0f:07:f7:1a:05:2e:16:f1`). Ops is exercising the UI
-   walkthrough. The staging public key is recorded by the compiler lane as
-   its optional pin (2026-10-03).
+   retune (D6, after the staging characterization run). Optional: nothing.
+
+No registry code work is pending. Everything above is either owner-gated
+(the next cut), another lane's queue, or optional ops follow-up.
 
 ### 24.4 Paste-ready prompt for the next session
 
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at fe60616 (2.9.0 release
-`017c92e` plus the post-release naming guard `4150b8c`/`de490aa`/`fe60616`),
-clean, 346/346 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at 7b78de9 (2.9.0 release
+`017c92e` plus the post-release naming guard `4150b8c`/`de490aa`/`fe60616`
+and the cross-lane sync `7b78de9`), clean, 346/346 unit and 20/20 e2e green.
 
 State in one line: 2.9.0 (reputation scoring v2, package stats strip, admin
 paging sweep) is live on staging and production and verified, both digests
