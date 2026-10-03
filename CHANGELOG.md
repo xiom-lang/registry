@@ -6,6 +6,30 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ratings**: a verified maintainer claim now only blocks rating the package
+  it belongs to. The rating route passed every claim on the registry into the
+  maintainer check, so a single verified claim blocked its holder from rating
+  any package.
+
+### Interface
+
+- **Recent requests** on the admin user page link each row into the console
+  request (the full id stays in the tooltip) instead of showing a truncated
+  id chip.
+- **Roles and permissions guide** on `/admin/users`, rendered from the
+  capability matrix so the page and the enforcement cannot drift.
+
+### Operations
+
+- **Double-submit guard**: an identical pending request (same kind and target
+  details) is refused with a pointer to the existing one, so a double-click
+  or refresh-resubmit cannot queue the same request twice.
+- **Supervisor scope clarified**: supervisors hold reviewer capabilities plus
+  work assignment; publishing decisions, moderation, and user management stay
+  admin-only (matrix and guide updated).
+
 ## [2.13.0] - 2026-10-03
 
 ### Interface

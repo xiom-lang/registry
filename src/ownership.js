@@ -117,6 +117,7 @@ function deriveMaintainers(packageName, pkg, { requests = [], publishers = [] } 
  *           claims?: object, viewer?: object|null, reviewer?: boolean }} input
  */
 function maintainerView({ packageName, pkg, requests = [], publishers = [], claims = {}, viewer = null, reviewer = false }) {
+  const name = String(packageName).toLowerCase();
   const derived = deriveMaintainers(packageName, pkg, { requests, publishers });
   const byLogin = new Map(derived.map((entry) => [entry.login.toLowerCase(), { ...entry, claim: null }]));
   const pending = [];
@@ -125,6 +126,10 @@ function maintainerView({ packageName, pkg, requests = [], publishers = [], clai
 
   for (const claim of Object.values(claims)) {
     if (!claim || !CLAIM_STATUSES.has(claim.status)) continue;
+    // Defensive: only claims for this package count. `claimsFor(name)` has no
+    // package field; a flat all-packages list (misuse) is ignored here so a
+    // claim elsewhere can never make someone a maintainer of this package.
+    if (claim.package && String(claim.package).toLowerCase() !== name) continue;
     if (viewer && claim.githubId === viewer.githubId) viewerClaim = claim;
     if (claim.status === 'verified') {
       const key = claim.login.toLowerCase();

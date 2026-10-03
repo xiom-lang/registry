@@ -21,6 +21,7 @@ const {
   historyLine,
 } = require('./account');
 const { REASON_LABELS, decisionPill, claimRow } = require('./review');
+const { capabilitiesFor } = require('../capabilities');
 
 const ADMIN_SECTIONS = [
   ['/admin', 'Overview', 'overview'],
@@ -702,8 +703,50 @@ ${paged ? `<p class="pkg-meta">${paged.total} account${paged.total === 1 ? '' : 
 ${filtered.length === 0
     ? '<p class="pkg-meta">No accounts match.</p>'
     : `<ul class="request-list">\n${filtered.map((user) => userCard(user, csrf, viewerIsConfigAdmin)).join('\n')}\n</ul>`}
-${paged ? adminPagination('/admin/users', { q }, paged.page, paged.totalPages) : ''}`;
+${paged ? adminPagination('/admin/users', { q }, paged.page, paged.totalPages) : ''}
+<section>
+  <h2>Roles and permissions</h2>
+  <p class="pkg-meta">Roles are cumulative and enforced server-side by one capability
+     matrix. Publishing requests, reports, package moderation, and user management are
+     admin-only.</p>
+  ${rolesGuide()}
+</section>`;
   return layout({ title: 'Admin users', body, nav });
+}
+
+/** Human labels for matrix capabilities, used by the roles explainer. */
+const CAPABILITY_LABELS = {
+  'review.claim': 'verify maintainer claims',
+  'review.flag': 'flag packages in the review queue',
+  'work.claim': 'claim items in the work inbox',
+  'work.assign': 'assign work to any staff member and set priority',
+  'request.decide': 'decide publishing and token requests',
+  'report.resolve': 'resolve or dismiss community reports',
+  'package.moderate': 'flag, mute, and yank published packages',
+  'publisher.manage': 'manage trusted publishers',
+  'user.manage': 'suspend, ban, and restore accounts',
+  'role.grant': 'grant and revoke reviewer, supervisor, and admin roles',
+};
+
+/**
+ * The roles explainer renders straight from the capability matrix, so the
+ * page and the enforcement can never drift.
+ */
+function rolesGuide() {
+  const ladder = [['reviewer', 'Reviewer'], ['supervisor', 'Supervisor'], ['admin', 'Admin']];
+  let previous = new Set();
+  const rows = ladder.map(([role, label]) => {
+    const caps = [...capabilitiesFor(role)];
+    const added = caps.filter((cap) => !previous.has(cap));
+    previous = new Set(caps);
+    const text = added.map((cap) => CAPABILITY_LABELS[cap] || cap).join('; ');
+    return `  <li><strong>${label}</strong>: ${text}.</li>`;
+  }).join('\n');
+  return `<ul class="plain-list">
+${rows}
+  <li><strong>Founding admin</strong>: everything above, plus granting roles and managing
+    admin accounts. It comes from the deployment config and cannot be demoted in the console.</li>
+</ul>`;
 }
 
 /** `a•••@domain` for the admin contact section; reveals are audited. */
@@ -788,8 +831,9 @@ ${noticeBox(notice, error)}
     ${userRequests.length === 0
     ? '<p class="pkg-meta">No requests filed.</p>'
     : `<ul class="plain-list">
-      ${userRequests.map((record) => `<li><span class="mono">${escapeHtml(shortId(record.id))}</span>
-        ${escapeHtml(kindLabel(record))} &middot; ${escapeHtml(requestTarget(record))}
+      ${userRequests.map((record) => `<li><a href="/admin/requests?updated=${encodeURIComponent(record.id)}"
+          title="${escapeHtml(record.id)}">${escapeHtml(kindLabel(record))}</a>
+        &middot; <span class="pkg-meta">${escapeHtml(requestTarget(record))}</span>
         ${statusPill(record.status)}
         <span class="pkg-meta">${formatWhen(record.createdAt)}</span></li>`).join('\n      ')}
     </ul>`}

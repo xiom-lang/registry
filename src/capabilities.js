@@ -15,9 +15,11 @@ const MATRIX = Object.freeze({
   reviewer: Object.freeze([
     'review.claim', 'review.flag', 'work.claim',
   ]),
+  // Supervisors coordinate: everything a reviewer does, plus assignment of
+  // work to any staff member. Decisions, moderation, and user management
+  // stay with admins (owner, 2026-10-03).
   supervisor: Object.freeze([
     'review.claim', 'review.flag', 'work.claim', 'work.assign',
-    'request.decide', 'report.resolve', 'package.moderate',
   ]),
   admin: Object.freeze([
     'review.claim', 'review.flag', 'work.claim', 'work.assign',

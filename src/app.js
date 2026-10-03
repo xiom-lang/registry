@@ -3453,7 +3453,7 @@ function createApp(config = loadConfig()) {
           pkg,
           requests: requests.list(),
           publishers: publisherStore.list(),
-          claims: ownership.listClaims(),
+          claims: ownership.claimsFor(name),
           viewer,
         });
         if (view.maintainers.some(

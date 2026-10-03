@@ -24,9 +24,11 @@ test('the capability matrix is cumulative and founding holds everything', () => 
   assert.equal(hasCapability('reviewer', 'request.decide'), false);
   assert.equal(hasCapability('reviewer', 'work.claim'), true);
   assert.equal(hasCapability('supervisor', 'work.assign'), true);
-  assert.equal(hasCapability('supervisor', 'request.decide'), true);
+  assert.equal(hasCapability('supervisor', 'request.decide'), false);
+  assert.equal(hasCapability('supervisor', 'package.moderate'), false);
   assert.equal(hasCapability('supervisor', 'user.manage'), false);
   assert.equal(hasCapability('supervisor', 'role.grant'), false);
+  assert.equal(hasCapability('admin', 'request.decide'), true);
   assert.equal(hasCapability('admin', 'user.manage'), true);
   assert.deepEqual(ROLES, ['member', 'reviewer', 'supervisor', 'admin', 'founding']);
 });

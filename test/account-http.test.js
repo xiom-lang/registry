@@ -3055,3 +3055,117 @@ test('supervisors sit between reviewers and admins in the capability matrix', as
   page = await (await requestAs(target, '/account', { headers: BROWSER })).text();
   assert.match(page, /class="nav-work" href="\/admin\/inbox"/);
 });
+
+// --- Rating scope, duplicate requests, and the roles guide ------------------
+
+test('a verified claim only blocks rating its own package', async () => {
+  const { ownership, reviews } = app.locals.registry;
+  const plain = cookieJar();
+  await login(plain, 'plain-code'); // 888
+
+  // 888 holds a verified claim on notify-claim-pkg (the claim flow ran here or
+  // earlier in the suite); ensure it exists for an isolated run too.
+  if (!ownership.claimFor('notify-claim-pkg', '888')) {
+    ownership.claim('notify-claim-pkg', { user: { githubId: '888', login: 'plain-user' } });
+  }
+  const claim = ownership.claimFor('notify-claim-pkg', '888');
+  if (claim.status === 'pending') {
+    ownership.decide('notify-claim-pkg', '888', {
+      actor: { githubId: '4242', login: 'admin' },
+      status: 'verified',
+      note: 'fixture',
+    });
+  }
+
+  // A claim elsewhere must not block rating: notify-report-pkg is not theirs.
+  let page = await (await requestAs(plain, '/packages/notify-report-pkg', { headers: BROWSER })).text();
+  let response = await requestAs(plain, '/packages/notify-report-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: csrfFrom(page), stars: '4', review: 'solid package' }),
+  });
+  assert.equal(response.status, 303);
+  const ratingPage = await (await requestAs(plain, '/packages/notify-report-pkg', { headers: BROWSER })).text();
+  const flash = (ratingPage.match(/<p class="error-box" role="alert">([^<]*)<\/p>/) || [])[1] || '';
+  assert.ok(
+    reviews.ratingsBy('888', { limit: 100 }).some((entry) => entry.package === 'notify-report-pkg'),
+    `the rating lands on an unmaintained package (flash: ${flash})`,
+  );
+
+  // The package they do maintain stays refused.
+  page = await (await requestAs(plain, '/packages/notify-claim-pkg', { headers: BROWSER })).text();
+  response = await requestAs(plain, '/packages/notify-claim-pkg/rating', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: csrfFrom(page), stars: '5', review: '' }),
+  });
+  assert.equal(response.status, 303);
+  page = await (await requestAs(plain, '/packages/notify-claim-pkg', { headers: BROWSER })).text();
+  assert.match(page, /maintainers cannot rate their own package/);
+  assert.ok(
+    !reviews.ratingsBy('888', { limit: 100 }).some((entry) => entry.package === 'notify-claim-pkg'),
+    'no self rating is stored',
+  );
+});
+
+test('an identical pending request is refused (double-submit guard)', async () => {
+  const { requests } = app.locals.registry;
+  const jar = cookieJar();
+  await login(jar, 'plain-code'); // 888
+  let response = await requestAs(jar, '/account/requests');
+  const csrf = csrfFrom(await response.text());
+
+  // Publisher: the same repository/workflow/refs/scopes twice.
+  const publisherForm = {
+    csrf,
+    kind: 'publisher',
+    scopes: 'dup-guard',
+    repository: 'plain-user/dup-guard',
+    workflow: 'publish-registry.yml',
+    refs: 'refs/tags/v*',
+  };
+  const publisherCount = () => requests.list({ requesterId: '888' })
+    .filter((record) => record.status === 'pending'
+      && record.repository === 'plain-user/dup-guard').length;
+  response = await requestAs(jar, '/requests', {
+    method: 'POST', body: new URLSearchParams(publisherForm),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(publisherCount(), 1);
+  response = await requestAs(jar, '/requests', {
+    method: 'POST', body: new URLSearchParams(publisherForm),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(publisherCount(), 1, 'the double submit is refused');
+  let page = await (await requestAs(jar, '/account/requests')).text();
+  assert.match(page, /an identical request is already pending/);
+
+  // Token: same scopes twice.
+  const tokenForm = { csrf, kind: 'token', scopes: 'dup-token-lib' };
+  const tokenCount = () => requests.list({ requesterId: '888' })
+    .filter((record) => record.status === 'pending'
+      && (record.scopes || []).includes('dup-token-lib')).length;
+  response = await requestAs(jar, '/requests', {
+    method: 'POST', body: new URLSearchParams(tokenForm),
+  });
+  assert.equal(response.status, 303);
+  response = await requestAs(jar, '/requests', {
+    method: 'POST', body: new URLSearchParams(tokenForm),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(tokenCount(), 1, 'the duplicate token request is refused');
+
+  // The admin user page links each activity row into the console request.
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+  const created = requests.list({ requesterId: '888' })
+    .find((record) => record.repository === 'plain-user/dup-guard');
+  page = await (await requestAs(adminJar, '/admin/users/888', { headers: BROWSER })).text();
+  assert.match(page, new RegExp(`/admin/requests\\?updated=${created.id}`));
+  assert.doesNotMatch(page, /<code class="mono" title="req_/);
+
+  // And the users page explains what each role can do.
+  page = await (await requestAs(adminJar, '/admin/users', { headers: BROWSER })).text();
+  assert.match(page, /Roles and permissions/);
+  assert.match(page, /assign work to any staff member and set priority/);
+  assert.match(page, /decide publishing and token requests/);
+  assert.match(page, /cannot be demoted in the console/);
+});

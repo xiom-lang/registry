@@ -115,6 +115,22 @@ function normalizePublisherRequest({ repository, workflow, refs, scopes }) {
 }
 
 /**
+ * Identity of a request's target details, for the double-submit guard: two
+ * pending requests with the same signature ask for exactly the same thing.
+ * Works for a stored record and for a candidate built from create() inputs.
+ */
+function requestSignature(entry) {
+  const kind = String((entry && entry.kind) || '');
+  const scopes = Array.isArray(entry && entry.scopes) ? entry.scopes.join(',') : '';
+  if (kind === 'token' || kind === 'token-rotation') return `${kind}|${scopes}`;
+  if (kind === 'publisher-edit' || kind === 'publisher-revoke') {
+    return `${kind}|${(entry && entry.targetRequestId) || ''}`;
+  }
+  const refs = Array.isArray(entry && entry.refs) ? entry.refs.join(',') : '';
+  return `${kind}|${(entry && entry.repository) || ''}|${(entry && entry.workflow) || ''}|${refs}|${scopes}`;
+}
+
+/**
  * JSON-file request queue with an audit trail per request. Every transition is
  * appended to the record's `history`; nothing is ever deleted.
  */
@@ -271,6 +287,18 @@ class RequestStore {
           `you already have a pending change for ${targetRequestId} (${duplicate.id}); `
           + 'wait for a decision',
           'duplicate_pending_change',
+        );
+      }
+    } else {
+      // Double-submit guard (owner report 2026-10-03): an identical pending
+      // request -- same kind and same target details -- is refused, so a
+      // double-click or a refresh-resubmit cannot queue the same item twice.
+      const candidate = requestSignature({ kind, scopes, ...details });
+      const duplicate = pending.find((entry) => requestSignature(entry) === candidate);
+      if (duplicate) {
+        throw new ConflictError(
+          `an identical request is already pending (${duplicate.id}); wait for a decision`,
+          'duplicate_request',
         );
       }
     }
