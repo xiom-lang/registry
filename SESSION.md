@@ -2639,11 +2639,11 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at the 2.10.0 release commit (on top of `6e859e5`; naming guard `4150b8c` + docs `de490aa` + style `fe60616`); clean; Registry CI + CodeQL green |
+| Repo | `main` at `c0af724` (2.10.0 release, on top of `6e859e5`; naming guard `4150b8c` + docs `de490aa` + style `fe60616`); clean; Registry CI + CodeQL green |
 | Tests | `npm test` **346/346**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
-| Deployed | **2.9.0 on staging and production** (ops, 2026-10-02): no migrations/env, `/index-digest.json` byte-exact on both, **both digests signed** (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`). Re-verified 2026-10-03: health 2.9.0 + email enabled, digests byte-exact and signature-valid, 346/346 unit + 20/20 e2e. **2.10.0 cut 2026-10-03, awaiting ops (staging first; no migrations, no env changes).** The catalog is at ~446 production entries and growing |
+| Deployed | **2.10.0 on staging and production** (ops, 2026-10-03): staging first, then production; no migrations/env. One incident: the first production attempt ran without `git pull`, so a fully cached build reproduced the 2.9.0 image, compose said Running, and health stayed 2.9.0 -- caught by the version check and fixed by re-running with the pull (DEPLOY.md now carries the release-identity check). The re-run was clean: HEAD `c0af724`, fresh image digests, both boots 2.10.0 + email enabled at 13:24Z; registry-lane re-verified: `/whats-new` serves the 2.10.0 entry, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), live-check green (staging 226/225, production 452/451, isolation ok). The naming-guard staging walkthrough is the remaining manual check |
 | Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
-| Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; allowlist 422; the coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
+| Packages waves | Wave 44 (eco-v0.1.23/24/25) landed 2026-09-30 with zero failures; the +2 landed 2026-10-03 (firebird, oracle published; scopes 499 live, production at 452 entries). The coordinated publish window closed (`PUBLISH_RATE_MAX` restored to 20 and verified). Republish waves continue on the packages lane, <20 names at a time |
 | Migrations | `001-notifications` ... `013-download-stats`; every JSON store on the data volume is a rollback mirror |
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ staging override) and ops confirmed it configured on both hosts (2026-09-29) -- live checks enabled |
@@ -2652,12 +2652,11 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 ### 24.2 Release history and the current window
 
-**Current window:** 2.9.0 is live on both environments (reputation scoring v2
-`3f8f1e2`, package stats strip, admin paging sweep `3ec2308`). **2.10.0 was
-cut 2026-10-03** for the **naming guard** (`4150b8c` door/approval name and
-scope checks, docs `de490aa`, checkbox style `fe60616`); ops deploys
-staging-first, no migrations or env changes. `[Unreleased]` is empty; nothing
-else is queued.
+**Current window:** 2.10.0 (**naming guard** `4150b8c` -- door/approval name
+and scope checks; docs `de490aa`, checkbox style `fe60616`) is **live on
+staging and production** since 2026-10-03 and verified (24.1). `[Unreleased]`
+is empty; no further registry code work is queued -- the next cut happens
+when a new requirement arrives.
 
 **Archive (shipped releases, in order):**
 
@@ -2761,6 +2760,9 @@ else is queued.
   acknowledge at approval; scope overlaps hard-block, so two grants can never
   hold the same name. Admin queue shows the warnings with the ack checkbox.
   346/346 unit; PUBLISHING.md documents the rules.
+- Release commit on top of `6e859e5`: version `2.10.0`, CHANGELOG promotion
+  ([Unreleased] -> [2.10.0], Publishing: naming guard), this handoff.
+  **Deployed 2026-10-03** (staging first; no migrations/env).
 - Release commit on top of `e1a87d9`: version `2.8.0`, CHANGELOG promotion
   ([Unreleased] -> [2.8.0]), this handoff.
 - `b04a955` **Instagram footer** (post-2.6.0, CHANGELOG Unreleased): the
@@ -2781,17 +2783,14 @@ else is queued.
 
 ### 24.3 Next actions, in order
 
-1. **Ops: deploy 2.10.0 (owner-ordered 2026-10-03).** Staging first, then
-   production; no migrations, no env changes. The 2.9.0/2.8.0/... deploy
-   history and the stdlib 0.62.0 canary remain closed as in previous
-   sections.
-2. **Registry-lane verification after the deploy:** `/health` says 2.10.0 +
-   email enabled on both, `/whats-new` renders the 2.10.0 entry, and
-   `/index-digest.json` stays byte-exact and signature-valid (production
-   `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`). Staging
-   walkthrough for the naming guard: a lookalike name (warning + ack
-   required), a published name the requester does not maintain (refused at
-   the door), and a scope overlapping a live grant (approval blocked).
+1. **Naming-guard walkthrough (the remaining manual check).** On staging:
+   file a request with a lookalike name (warning + ack required), one over a
+   published package the requester does not maintain (refused at the door),
+   and one overlapping a live grant (approval blocked). Record the verdict
+   here.
+2. **Deploy record:** 2.10.0 is live on both and verified (24.1); the
+   false-success incident is recorded there, and DEPLOY.md gained the
+   release-identity check.
 3. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
@@ -2800,45 +2799,44 @@ else is queued.
 4. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
    names, staging first; ops opens the publish-rate window only for larger
    batches). The README staleness ruling stands: no version-less refresh --
-   a patch bump whose artifact carries the fixed README is the fix.
+   a patch bump whose artifact carries the fixed README is the fix. The +2
+   (firebird, oracle) landed 2026-10-03 (scopes 499 live, production 452
+   entries).
 5. **Playground lane:** C3 is delivered (`E:\xiom-lang\registry-bundle` +
    tarball with pinned hashes in 24.1); their offline example continues.
 6. **Ops backlog** (section 21 Track D): fulfiller worker confirmation (D1),
    ops-repo template cleanup (D2), backup/restore drill (D4), resource-cap
    retune (D6, after the staging characterization run). Optional: nothing.
 
-No registry code work is pending. The only live registry-lane items are the
-2.10.0 deploy + walkthrough; everything else is another lane's queue or
-optional ops follow-up.
+No registry code work is pending. The only live registry-lane item is the
+naming-guard walkthrough; everything else is another lane's queue or optional
+ops follow-up.
 
 ### 24.4 Paste-ready prompt for the next session
 
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at the 2.10.0 release commit
-(2.9.0 `017c92e` plus the post-release naming guard `4150b8c`/`de490aa`/
-`fe60616`), clean, 346/346 unit and 20/20 e2e green (re-run on the cut).
+notes. This is E:\xiom-lang\registry on main at c0af724 (2.10.0 release,
+carrying the naming guard 4150b8c), clean, 346/346 unit and 20/20 e2e green.
 
-State in one line: 2.9.0 (reputation scoring v2, package stats strip, admin
-paging sweep) is live on staging and production and verified, both digests
-signed (production fp f7:6f:5f:f5:15:38:ce:75, staging fp
-0f:07:f7:1a:05:2e:16:f1); 2.10.0 (naming guard) is cut on main awaiting the
-ops deploy (staging first; no migrations, no env changes); no relay is open.
+State in one line: 2.10.0 (naming guard) is live on staging and production
+and verified, both digests signed (production fp f7:6f:5f:f5:15:38:ce:75,
+staging fp 0f:07:f7:1a:05:2e:16:f1); the only registry-lane item left is the
+manual naming-guard staging walkthrough; no relay is open.
 
 First actions:
 1. Verify state: git pull; npm test (expect 346) and npm run test:e2e (expect
-   20); /health on staging and production; /index-digest.json byte-exact and
-   signature-valid on both.
-2. If ops has deployed 2.10.0 (check /health): verify /whats-new serves the
-   2.10.0 entry and run the naming-guard staging walkthrough -- file a
-   request with a lookalike name (warning + ack required), one over a
-   published package you do not maintain (refused at the door), and one
-   overlapping a live grant (approval blocked). Record the verdict in this
-   section.
-3. If the owner orders a further cut: bump the version per semver, promote
+   20); /health on staging and production (expect 2.10.0, email enabled);
+   /index-digest.json byte-exact and signature-valid on both.
+2. If the walkthrough is still open: on staging, file a request with a
+   lookalike name (warning + ack required), one over a published package you
+   do not maintain (refused at the door), and one overlapping a live grant
+   (approval blocked). Record the verdict in this section.
+3. If the owner orders the next cut: bump the version per semver, promote
    [Unreleased], update this handoff, push, watch CI, hand ops the deploy
-   (staging first; no migrations, no env changes).
+   (staging first; no migrations, no env changes) and confirm the release
+   identity afterwards (git log + /health, never just `Running`).
 4. Compiler-lane queue: their staging index-key pin is recorded
    (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`, fp
    `0f:07:f7:1a:05:2e:16:f1`); production is unchanged. Their remaining

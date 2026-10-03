@@ -348,6 +348,15 @@ curl -s http://127.0.0.1:3200/health
 `docker compose up -d --build` without a service would rebuild the shared
 image and recreate **both** services; use one of the two blocks above.
 
+**Release identity check (learned 2026-10-03):** a fully cached build from a
+stale clone is a *false success* -- `docker compose ps` says `Running` while
+the old image serves the old version, so the deploy looks green but `/health`
+stays on the previous release. That is what happened on the first 2.10.0
+production attempt (clone still at the previous release commit; no
+`git pull`). After `git pull`, confirm the checkout is the release commit
+(`git log --oneline -1`); after `up -d`, confirm `/health` reports the target
+version. Never treat `Running` as the verdict.
+
 The image must contain every **root-level file the service reads at runtime**
 (`CHANGELOG.md` for `/whats-new`, `PUBLISHING.md` for the `/publish` fallback).
 A missing file makes the container exit before it ever listens -- that is what
