@@ -1249,6 +1249,16 @@ textarea:focus-visible {
   min-width: 200px;
   padding: 8px 10px;
 }
+/* Checkboxes inside a decision form are controls, not text fields. */
+.decision-form input[type="checkbox"] {
+  accent-color: var(--signal);
+  flex: 0 0 auto;
+  height: 16px;
+  margin-top: 4px;
+  min-width: 0;
+  padding: 0;
+  width: 16px;
+}
 .count { color: var(--muted); font-size: 14px; font-weight: 400; }
 .request-table td { vertical-align: top; }
 
