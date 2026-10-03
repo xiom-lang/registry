@@ -2649,7 +2649,7 @@ now warns when the manifest declares no stage or marks a pre-release version
 | Guarantees | Sessions never publish; approvals/decisions audited; one-click trusted publishers; `/index.json` protocol untouched |
 | Sponsors badge | Opt-in + cached `hasSponsorsListing`; compose declares `GITHUB_SPONSORS_TOKEN` (+ staging override) and ops confirmed it configured on both hosts (2026-09-29) -- live checks enabled |
 | Offline bundle | **Delivered to the playground 2026-09-29** (`--latest-only`, production source): directory `E:\xiom-lang\registry-bundle` (343 packages, 342 artifacts, 14,804,564 bytes; `index.json` sha256 `02280fa79e28c34a76a0c9e02a57eb47bfa570cf17698d4f60ad8238c723a21d`; `xiom.hello@0.1.0` `2fc7a2aa…6e8`, `xiom.csv@0.1.0` `8d779431…bb5`), transfer tarball `E:\xiom-lang\registry-bundle.tar.gz` sha256 `aed9703a4abbc0b11ee13b9b21def1fb992a51766c97c9186e367c3a97367da5`; `--verify` clean. Exporter now copies `OFFLINE.md` into bundles (`cb0b447`). Earlier full export (all versions) verified at 384 artifacts / 15,516,333 bytes |
-| stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014`. **2026-10-03: compiler lane relayed the v0.62.3 pin.** Registry lane verified the official archive against the published `SHA256SUMS`: the manifest itself hashes `8839e5cc86463887375ba7f412a8727ee58cc296e95164ef4b42d60213a03a48` and the linux-x64 archive `4cc5d62b0f90a68d6d86bc722f5e214148bda0d9fed830dba2ec75d0a5eb3f52`, both matching the manifest and GitHub's asset digests (all 9 assets cross-checked). Packages side applied: stdlib `COMPILER_VERSION` -> v0.62.3 and `publish-registry.yml` now `sha256sum -c`s the exact archive entry before use (`e36d86d`). The stdlib lane is running the fresh v0.62.3 baseline on their own workspace (observed in progress 2026-10-03 ~21:55 local with their `stdlib_ws\v0623\x` compiler -- check_modules/smokes/barename stages); the registry lane's duplicate battery was stopped to avoid CPU contention, and their results land in the stdlib `docs/VERIFICATION_BASELINE.md`. Wave 62 (net batch 5: sse+websocket+ws+dns+multipart = 41 pub, then the remaining low dirs) is their follow-up |
+| stdlib canary | **`xiom-std@0.62.0` DONE (2026-09-29):** staging canary run `36501800456` (dispatch, refs/heads/main) published at 01:07:44Z; production tag-push run `36495200014` published at 01:09:40Z after the staging verdict. Both verified independently: artifact sha256 `1fd336c65e41f84e2c6d6369c05d9116c4a012a64db7f62b5c4927add4234674` (size 1,077,790, identical bytes on both), ed25519 verifies against the per-run ephemeral key, badge `pgk_verified_official.webp` + official/signed pills. Production provenance: `xiom-lang/stdlib`, `publish-registry.yml`, `refs/tags/stdlib-v0.62.0`, commit `0e631018100b157539614cc92fc471f22663baff`, run `36495200014`. **2026-10-03: compiler lane relayed the v0.62.3 pin.** Registry lane verified the official archive against the published `SHA256SUMS`: the manifest itself hashes `8839e5cc86463887375ba7f412a8727ee58cc296e95164ef4b42d60213a03a48` and the linux-x64 archive `4cc5d62b0f90a68d6d86bc722f5e214148bda0d9fed830dba2ec75d0a5eb3f52`, both matching the manifest and GitHub's asset digests (all 9 assets cross-checked). Packages side applied: stdlib `COMPILER_VERSION` -> v0.62.3 and `publish-registry.yml` now `sha256sum -c`s the exact archive entry before use (`e36d86d`). The stdlib lane ran the baseline themselves (`cfb624b`) and wave 62 (`584ffd1`); the cell/RefCell finding closed stdlib-side (`ac3c58f`, green on v0.62.3 + v0.61.3), leaving `iter.range` C001 and lz4 as the compiler-side v0.62.3 regressions (compiler accepted both, 2026-10-03). Wave 63 (net batch 6) and the low dirs are their follow-up |
 
 ### 24.2 Release history and the current window
 
@@ -2805,14 +2805,20 @@ roles/permissions guide, and the supervisor-scope clarification.
    **2026-10-03: their v0.62.3 pin relay is applied** -- the archive was
    verified here against the published SHA256SUMS, and the packages side
    pinned `COMPILER_VERSION` + added the checksum gate (`e36d86d`); the
-   stdlib lane is running the fresh v0.62.3 baseline themselves (registry's
-   duplicate run was stopped), then wave 62 coverage. **2026-10-03 relay
-   answered:** compiler requested the three v0.62.3-only regression reports
-   in standard format plus the B1 filter list, B2 API contract, `trust`
-   wording, and the `--resolve` shape; the registry supplied all four (three
-   compiler-side regressions: `smoke_iter_range` C001, cell/RefCell rc=1,
-   lz4 rc=5; B1 list now verbatim in PUBLISHING.md; B2 is the live
-   `POST /packages/{name}/{version}/yank` contract). Remaining
+   stdlib lane ran the fresh v0.62.3 baseline themselves (registry's
+   duplicate run was stopped) and wave 62 (`cfb624b`, `584ffd1`).
+   **2026-10-03 relay answered:** compiler requested the v0.62.3-only
+   regression reports in standard format plus the B1 filter list, B2 API
+   contract, `trust` wording, and the `--resolve` shape; the registry
+   supplied all four. Compiler triage: `iter.range contains` C001 accepted
+   (state-change amplifier identified) and lz4 accepted (top of their
+   queue); cell/RefCell was stdlib-side (smokes missed the documented
+   `Ref.release`/`RefMut.release`; the v0.61.3 copy-by-value RefCell masked
+   it) and is fixed with green verification on v0.62.3 + v0.61.3
+   (`ac3c58f`). Position relayed: explicit release per the 6D.1 contract;
+   Drop/auto-release is a future language design item, not requested this
+   cycle. B1 list is verbatim in PUBLISHING.md; B2 is the live
+   `POST /packages/{name}/{version}/yank` contract. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
