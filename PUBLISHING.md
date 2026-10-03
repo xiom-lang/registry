@@ -75,9 +75,15 @@ Rules the registry enforces:
 - `description` is one sentence and shows up in search results.
 - `repository` should be the public URL of this repository.
 
-> **Do not commit build output.** `xiom pkg publish` packages the whole
-> directory. Put `target/`, `dist/`, downloaded toolchains, and editor junk in
-> `.gitignore`, and publish from a clean checkout.
+> **Do not commit build output.** The publish guard (next client patch)
+> refuses build and artifact entries by default: directories `target/`,
+> `build/`, `dist/`, `out/`, `.git/`, `.toolchain/`, `.xiom_ai_cache/`,
+> `node_modules/`, and files `*.exe`, `*.o`, `*.obj`, `*.a`, `*.lib`,
+> `*.dll`, `*.so`, `*.dylib`, `*.wasm`, `*.pdb`, `.DS_Store`, `Thumbs.db`.
+> Extend the list with `.xiomignore` (gitignore syntax); entries explicitly
+> declared in `package.xi` are kept. `--force` overrides for intentional
+> cases. Module collection uses the same filter, and publishing from a clean
+> checkout stays the habit.
 
 ---
 
