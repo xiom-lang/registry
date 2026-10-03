@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-03
+
 ### Interface
 
 - **Admin work signal**: a role-aware header badge shows pending-work counts
