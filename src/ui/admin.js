@@ -622,8 +622,14 @@ function adminUserPage({
   notice = '',
   error = '',
   viewerIsConfigAdmin = false,
+  emailState = 'none',
   nav = '',
 }) {
+  const emailHint = emailState === 'verified'
+    ? 'The notification address is verified, so the message also goes out by email.'
+    : (emailState === 'unverified'
+      ? 'The notification address is not verified yet, so delivery is in-app only.'
+      : 'No notification address is set, so delivery is in-app only.');
   const body = `<section class="hero account-hero">
   <div>
     <h1>@${escapeHtml(user.login)}</h1>
@@ -642,6 +648,27 @@ ${noticeBox(notice, error)}
   <section>
     <h2>Actions</h2>
     <div class="user-actions">${userActions(user, csrf, viewerIsConfigAdmin)}</div>
+  </section>
+  <section>
+    <h2>Message this user</h2>
+    <p class="pkg-meta">${escapeHtml(emailHint)} The address itself stays private; the send is
+       audit-logged and capped at 5 per hour.</p>
+    <form method="post" action="/admin/users/${encodeURIComponent(user.githubId)}/message" class="email-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      <div class="form-grid">
+        <label class="form-field">
+          <span>Subject</span>
+          <input name="subject" maxlength="120" required autocomplete="off"
+            placeholder="About your publish request">
+        </label>
+        <label class="form-field">
+          <span>Message</span>
+          <textarea name="body" rows="5" maxlength="1000" required
+            placeholder="Plain text; the user sees exactly this"></textarea>
+        </label>
+      </div>
+      <button class="button primary" type="submit">Send message</button>
+    </form>
   </section>
   <section>
     <h2>Audit trail</h2>

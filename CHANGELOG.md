@@ -10,6 +10,15 @@ The rendered version of this file is at `/whats-new`.
 
 ### Interface
 
+- **Notification triage**: the header carries a bell with the unread count;
+  the inbox gains All/Unread filters, per-notice Mark read / Mark unread, and
+  opening a notice marks it read and follows its link. Mark all stays.
+- **Publisher fields check live**: leaving the repository / workflow / refs
+  fields runs the same loader validators the door uses and shows the message
+  under the field (owner/repo, a `.yml` file name, `refs/*`), and the request
+  form's status line gains a green check / amber `!` / red cross state, with
+  submit disabled only while a fresh check says a hard rule would refuse the
+  request. Advisory: the door re-checks at submit.
 - **Live name check on the request form**: leaving the package-names field
   runs the same naming-guard check the door uses (`GET /requests/check`,
   read-only) and shows errors and advisories inline, so a reserved, taken,
@@ -23,6 +32,11 @@ The rendered version of this file is at `/whats-new`.
 
 ### Operations
 
+- **Admin message this user**: admins write a subject and message on the user
+  page; it lands in the user's in-app notices and emails only to a verified
+  address, with the address itself never shown. Every send is audit-logged and
+  capped at five per target per hour; users can mute the new `admin-message`
+  kind in Settings.
 - **Decision-form safety in the admin queue**: the name-warning
   acknowledge is enforced server-side at approval only, so the checkbox can
   no longer block a Deny click; and Enter in a decision note no longer

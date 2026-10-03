@@ -2639,8 +2639,8 @@ now warns when the manifest declares no stage or marks a pre-release version
 
 | Item | Value |
 |---|---|
-| Repo | `main` at `64f8a3d` (2.11.0 release, after `d3f3ba1`; `91259c3` fixes + `c2a6388` live name check), pushed; clean; Registry CI + CodeQL green |
-| Tests | `npm test` **349/349**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
+| Repo | `main` at the post-2.11.0 UX-batch commit (after `64f8a3d`; `[Unreleased]` carries notification triage, the publisher-field live check + state icons, and admin messaging), pushed; clean; Registry CI + CodeQL green |
+| Tests | `npm test` **351/351**, `npm run test:e2e` **20/20** (real `xiom-pkg` client) |
 | Deployed | **2.10.0 on staging and production** (ops, 2026-10-03): staging first, then production; no migrations/env. One incident: the first production attempt ran without `git pull`, so a fully cached build reproduced the 2.9.0 image, compose said Running, and health stayed 2.9.0 -- caught by the version check and fixed by re-running with the pull (DEPLOY.md now carries the release-identity check). The re-run was clean: HEAD `c0af724`, fresh image digests, both boots 2.10.0 + email enabled at 13:24Z; registry-lane re-verified: `/whats-new` serves the 2.10.0 entry, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), live-check green (staging 226/225, production 452/451, isolation ok). **2.11.0 live on staging and production (ops, 2026-10-03 14:13Z): both checkouts 64f8a3d, fresh image digests, no migrations/env; verified externally by the registry lane** -- health 2.11.0 + email enabled on both, `/whats-new` serves 2.11.0, `/index-digest.json` byte-exact and signature-valid (production `f7:6f:5f:f5:15:38:ce:75`, staging `0f:07:f7:1a:05:2e:16:f1`), `GET /requests/check` present and auth-gated (302 -> `/login`), `scope-check` CSS served. Remaining manual checks (signed-in session): naming-guard walkthrough, the deny flow (`Request denied: <scope>`; no Enter/ack flip to approve), and the blur check. Ops flagged staging OIDC publishers at 5 (was 4) -- host-side check of `/etc/xiom-registry/staging/trusted-publishers.json` queued; production unchanged at 2 |
 | Deploy pin | **Lifted by the 2.11.0 cut.** The ops pin (`b3f123a`) held production/staging on `c0af724` (2.10.0) and marked main do-not-deploy *while the version string still reads 2.10.0*; 2.11.0 changes the version, so main is deployable again. The release-identity check stays adopted on both sides -- after `git pull` confirm the checkout commit, after `up` confirm `/health` and a changed image digest; `Running` is never the verdict |
 | Index digest key | Production key in the host `.env` (`INDEX_SIGNING_KEY`, generated via `scripts/index-key.js`): public key `f76f5ff51538ce757454864494b74eae5424ce9ae6eb33689aa31ffe6d059673`, fp `f7:6f:5f:f5:15:38:ce:75`. Staging signed with its own key since 2026-10-02: public key `0f07f71a052e16f10c20c5f6198adf168e3a9f092f6bc11b6255e64e11746efb`, fp `0f:07:f7:1a:05:2e:16:f1`. The compiler lane recorded the staging pin on 2026-10-03 (`xiom pkg trust --registry <staging> --index-key 0f07f71a…46efb`); production unchanged |
@@ -2656,7 +2656,11 @@ now warns when the manifest declares no stage or marks a pre-release version
 **Current window:** **2.11.0 is live on staging and production** (ops,
 2026-10-03 14:13Z) and verified (24.1); it carries the live name check
 (`c2a6388`) and the decision-notice/decision-form fixes (`91259c3`).
-`[Unreleased]` is empty; the next cut happens when a new requirement arrives.
+Post-2.11.0 on `main`, `[Unreleased]` now carries the owner-requested UX
+batch: notification triage (header bell, All/Unread filter, per-notice
+read/unread, open-through), the publisher-field live check with green/amber/red
+state icons, and audited admin messaging (no address exposure, 5/hour cap,
+mutable `admin-message` kind). Next cut: minor, when the owner orders it.
 
 **Archive (shipped releases, in order):**
 
@@ -2793,43 +2797,48 @@ now warns when the manifest declares no stage or marks a pre-release version
    the release-identity check held (production image digest changed). Open
    ops follow-up: confirm the staging OIDC publisher count (5, was 4) by
    reading the staging trusted-publishers file.
-3. **Compiler lane (theirs; nothing needed from the registry):** C5
+3. **Next cut (owner-gated):** minor bump carrying the `[Unreleased]` UX
+   batch (notification triage, publisher-field check + icons, admin
+   messaging) after the 2.11.0 deploy checks are closed. Staging-first, no
+   migrations/env changes.
+4. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).
    Remaining optional polish: B1 packaging guard, B2 `xiom pkg yank`,
    install `trust` wording, `--resolve` outside a workspace.
-4. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
+5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
    names, staging first; ops opens the publish-rate window only for larger
    batches). The README staleness ruling stands: no version-less refresh --
    a patch bump whose artifact carries the fixed README is the fix. The +2
    (firebird, oracle) landed 2026-10-03 (scopes 499 live, production 452
    entries).
-5. **Playground lane:** C3 is delivered (`E:\xiom-lang\registry-bundle` +
+6. **Playground lane:** C3 is delivered (`E:\xiom-lang\registry-bundle` +
    tarball with pinned hashes in 24.1); their offline example continues.
-6. **Ops backlog** (section 21 Track D): fulfiller worker confirmation (D1),
+7. **Ops backlog** (section 21 Track D): fulfiller worker confirmation (D1),
    ops-repo template cleanup (D2), backup/restore drill (D4), resource-cap
    retune (D6, after the staging characterization run). Optional: nothing.
 
-No registry code work is pending. The only live registry-lane items are the
-2.11.0 deploy + staging checks; everything else is another lane's queue or
-optional ops follow-up.
+No registry code work is pending. The live registry-lane items are the
+2.11.0 staging checks and the owner-gated next cut; everything else is
+another lane's queue or optional ops follow-up.
 
 ### 24.4 Paste-ready prompt for the next session
 
 ```
 Registry lane continuation. Read SESSION.md section 24 first (state, order,
 paste-ready handoff); sections 21-23 carry the roadmap and implementation
-notes. This is E:\xiom-lang\registry on main at 64f8a3d (2.11.0 release),
-clean, 349/349 unit and 20/20 e2e green.
+notes. This is E:\xiom-lang\registry on main at the post-2.11.0 UX-batch
+commit (after 64f8a3d), clean, 351/351 unit and 20/20 e2e green.
 
 State in one line: 2.11.0 (live name check + decision-form/notice fixes) is
 live on staging and production and verified (health/digests/whats-new, route
 + CSS presence), both digests signed (production fp f7:6f:5f:f5:15:38:ce:75,
-staging fp 0f:07:f7:1a:05:2e:16:f1); the remaining manual staging checks
-need a signed-in session; no relay is open.
+staging fp 0f:07:f7:1a:05:2e:16:f1); [Unreleased] carries the UX batch
+(notification triage, publisher-field check + icons, admin messaging); the
+remaining manual staging checks need a signed-in session; no relay is open.
 
 First actions:
-1. Verify state: git pull; npm test (expect 349) and npm run test:e2e (expect
+1. Verify state: git pull; npm test (expect 351) and npm run test:e2e (expect
    20); /health on staging and production (expect 2.11.0, email enabled);
    /index-digest.json byte-exact and signature-valid on both.
 2. If the staging checks are still open, run them with a signed-in session:

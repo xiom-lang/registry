@@ -61,6 +61,44 @@ function globToRegExp(pattern) {
   return new RegExp(`${body}$`);
 }
 
+/**
+ * Pure field validators shared by the config loader and the request-form
+ * pre-check (`GET /requests/check`). Each returns a human message or '' when
+ * the value is acceptable; the loader wraps them with source/label context,
+ * so the rules exist in exactly one place.
+ */
+function repositoryError(value) {
+  const repository = typeof value === 'string' ? value.trim() : '';
+  if (!repository) return 'repository is required';
+  if (repository.includes('*')) return 'repository wildcards are not allowed';
+  if (!REPOSITORY.test(repository)) {
+    return 'repository must be "owner/repo" (a full GitHub URL is not accepted)';
+  }
+  return '';
+}
+
+function workflowError(value) {
+  const workflow = normalizeWorkflow(String(value || '').trim());
+  if (!workflow) return 'workflow is required';
+  if (workflow.includes('..')) return 'workflow path must not contain ".."';
+  if (!isWorkflowFile(workflow)) {
+    return 'workflow must be a file name ending in .yml or .yaml (for example publish-registry.yml)';
+  }
+  return '';
+}
+
+function refsError(value) {
+  const refs = Array.isArray(value) ? value : String(value || '').split(/[,\s]+/);
+  const list = refs.map((ref) => String(ref).trim()).filter(Boolean);
+  if (list.length === 0) return 'at least one ref is required (for example refs/tags/v*)';
+  for (const ref of list) {
+    if (!ref.startsWith('refs/') || /\s/.test(ref)) {
+      return `ref "${ref}" must start with "refs/" and contain no whitespace`;
+    }
+  }
+  return '';
+}
+
 function assertString(value, what, source) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${source}: ${what} must be a non-empty string`);
@@ -98,26 +136,24 @@ function normalizeEntry(entry, source, index) {
     : `publisher-${index + 1}`;
 
   const repository = assertString(entry.repository, `${label}: repository`, source);
-  if (repository.includes('*')) {
-    throw new Error(`${source}: ${label}: repository wildcards are not allowed (got "${repository}")`);
-  }
-  if (!REPOSITORY.test(repository)) {
-    throw new Error(`${source}: ${label}: repository must be "owner/repo" (got "${repository}")`);
+  const repositoryProblem = repositoryError(repository);
+  if (repositoryProblem) {
+    throw new Error(`${source}: ${label}: ${repositoryProblem} (got "${repository}")`);
   }
 
   const workflow = normalizeWorkflow(assertString(entry.workflow, `${label}: workflow`, source));
-  if (workflow.includes('..')) {
-    throw new Error(`${source}: ${label}: workflow path must not contain ".."`);
+  const workflowProblem = workflowError(workflow);
+  if (workflowProblem) {
+    throw new Error(`${source}: ${label}: ${workflowProblem}`);
   }
 
   if (!Array.isArray(entry.refs) || entry.refs.length === 0) {
     throw new Error(`${source}: ${label}: refs must be a non-empty array`);
   }
   const refs = entry.refs.map((ref) => assertString(ref, `${label}: ref`, source));
-  for (const ref of refs) {
-    if (!ref.startsWith('refs/') || /\s/.test(ref)) {
-      throw new Error(`${source}: ${label}: ref "${ref}" must start with "refs/" and contain no whitespace`);
-    }
+  const refsProblem = refsError(refs);
+  if (refsProblem) {
+    throw new Error(`${source}: ${label}: ${refsProblem}`);
   }
 
   if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
@@ -247,4 +283,7 @@ module.exports = {
   isWorkflowFile,
   workflowFileFromRef,
   matchPublisher,
+  repositoryError,
+  workflowError,
+  refsError,
 };

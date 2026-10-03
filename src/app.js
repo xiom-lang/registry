@@ -36,6 +36,7 @@ const { authenticate, assertPublishScope, safeEqual } = require('./tokens');
 const { createJwksCache } = require('./oidc');
 const { validatePackageName, isFirstPartyNamespace, assertNamespaceAllowed } = require('./names');
 const { checkScopes } = require('./name-guard');
+const { repositoryError, workflowError, refsError } = require('./publishers');
 const oauth = require('./oauth');
 const { SessionStore, parseCookies, serializeCookie, SESSION_COOKIE, DEFAULT_TTL_MS } = require('./sessions');
 const { AccountStore } = require('./accounts');
@@ -556,8 +557,18 @@ function createApp(config = loadConfig()) {
     const avatar = avatarUrl
       ? `<img class="nav-avatar" src="${escapeHtml(avatarUrl)}" alt="" width="24" height="24" referrerpolicy="no-referrer">`
       : `<span class="nav-avatar nav-avatar--fallback" aria-hidden="true">${escapeHtml(login.slice(0, 1).toUpperCase())}</span>`;
+    // Unread bell next to the account control: one indexed count per page.
+    const unread = notifications.unreadCount(account.githubId);
+    const bell = `<a class="nav-bell" href="/account/notifications"`
+      + ` aria-label="Notifications${unread > 0 ? `, ${unread} unread` : ''}">`
+      + '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+      + '<path d="M12 3a5 5 0 0 0-5 5v3.6L5.6 14.4A1 1 0 0 0 6.5 16h11a1 1 0 0 0 .9-1.6L17 11.6V8a5 5 0 0 0-5-5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>'
+      + '<path d="M9.8 18.5a2.3 2.3 0 0 0 4.4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
+      + '</svg>'
+      + (unread > 0 ? `<span class="nav-bell-count">${unread > 99 ? '99+' : unread}</span>` : '')
+      + '</a>';
     return {
-      primary: `<details class="nav-account">
+      primary: `${bell}<details class="nav-account">
       <summary>${avatar}<span${current}>${escapeHtml(label)}</span></summary>
       <nav class="nav-account-panel" aria-label="Account">${panel}</nav>
     </details>`,
@@ -1679,12 +1690,19 @@ function createApp(config = loadConfig()) {
 
   app.get('/account/notifications', generalLimit, requireAccount, (req, res) => {
     const context = accountContext(req);
+    const id = context.account.githubId;
+    const filter = String(req.query.filter || '') === 'unread' ? 'unread' : '';
+    const unreadCount = notifications.unreadCount(id);
+    const page = notifications.listFor(id, { limit: filter === 'unread' ? 200 : 50 });
     const notice = req.query.read === '1'
       ? 'All notifications marked as read.'
       : (req.query.abuse === '1' ? 'Thank you. The moderators will review that message.' : '');
     res.type('html').send(accountNotificationsPage({
       ...context,
-      notifications: notifications.listFor(context.account.githubId, { limit: 50 }),
+      notifications: filter === 'unread' ? page.filter((entry) => !entry.readAt) : page,
+      filter,
+      unreadCount,
+      total: notifications.countFor(id),
       notice,
     }));
   });
@@ -1708,9 +1726,56 @@ function createApp(config = loadConfig()) {
     requireCsrf,
     (req, res) => {
       notifications.markAllRead(accountOf(req).githubId);
-      res.redirect(303, '/account/notifications?read=1');
+      const filter = String(req.body.filter || '') === 'unread' ? '&filter=unread' : '';
+      res.redirect(303, `/account/notifications?read=1${filter}`);
     },
   );
+
+  // Per-notice read state (inbox triage at admin scale). Owner-scoped:
+  // a foreign or unknown id is a silent no-op, never an error oracle.
+  const noticeBack = (req) => (String(req.body.filter || '') === 'unread'
+    ? '/account/notifications?filter=unread'
+    : '/account/notifications');
+  const noticeId = (value) => (/^\d+$/.test(String(value)) ? Number(value) : 0);
+
+  app.post(
+    '/account/notifications/:id/read',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res) => {
+      notifications.markRead(accountOf(req).githubId, noticeId(req.params.id));
+      res.redirect(303, noticeBack(req));
+    },
+  );
+
+  app.post(
+    '/account/notifications/:id/unread',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '8kb' }),
+    requireLogin,
+    requireCsrf,
+    (req, res) => {
+      notifications.markUnread(accountOf(req).githubId, noticeId(req.params.id));
+      res.redirect(303, noticeBack(req));
+    },
+  );
+
+  // Opening a notice marks it read and follows its internal link; anything
+  // that is not a same-site path lands back on the inbox instead.
+  app.get('/account/notifications/:id/open', generalLimit, requireAccount, (req, res) => {
+    const actor = accountOf(req);
+    const row = notifications.get(noticeId(req.params.id));
+    if (!row || row.githubId !== actor.githubId) {
+      return res.redirect(303, '/account/notifications');
+    }
+    notifications.markRead(actor.githubId, row.id);
+    const link = typeof row.link === 'string' && row.link.startsWith('/') && !row.link.startsWith('//')
+      ? row.link
+      : '';
+    return res.redirect(303, link || '/account/notifications');
+  });
 
   // A maintainer can flag a support message to the moderators (A7). The mark
   // on the message is idempotent; the first flag files one report into the
@@ -2023,7 +2088,7 @@ function createApp(config = loadConfig()) {
     res.set('Cache-Control', 'no-store');
     if (raw.length > 1024) {
       return res.json({
-        scopes: [], errors: ['scope list is too long'], warnings: [], overlaps: [],
+        scopes: [], errors: ['scope list is too long'], warnings: [], overlaps: [], fields: {},
       });
     }
     const scopes = parseScopeInput(raw);
@@ -2033,10 +2098,19 @@ function createApp(config = loadConfig()) {
         errors: [`at most ${MAX_SCOPES} scopes per request`],
         warnings: [],
         overlaps: [],
+        fields: {},
       });
     }
     const check = guardScopes(scopes, { account: accountOf(req) });
-    return res.json({ scopes, ...check });
+    // Trusted-publisher fields use the loader's own validators, so the form
+    // sees exactly the message the door would produce.
+    const fields = {};
+    if (String(req.query.kind || 'token') === 'publisher') {
+      fields.repository = repositoryError(String(req.query.repository || '').slice(0, 200));
+      fields.workflow = workflowError(String(req.query.workflow || '').slice(0, 200));
+      fields.refs = refsError(String(req.query.refs || '').slice(0, 500));
+    }
+    return res.json({ scopes, ...check, fields });
   });
 
   // ─── Naming guard (request-time and approval-time) ────────────────────────
@@ -2566,11 +2640,20 @@ function createApp(config = loadConfig()) {
       return next(new NotFoundError('account not found', 'account_not_found'));
     }
     const context = adminPageContext(req);
+    const emailState = account.notifyEmail && account.notifyEmailVerifiedAt
+      ? 'verified'
+      : (account.notifyEmail ? 'unverified' : 'none');
     res.type('html').send(adminUserPage({
       ...context,
       user: accountUserView(account),
       audit: admin.auditFor(account.githubId, 30),
       viewerIsConfigAdmin: isConfigAdmin(accountOf(req)),
+      emailState,
+      notice: req.query.messaged === '1'
+        ? 'Message queued: it appears in the user\'s in-app notices and emails only if their address is verified.'
+        : (req.query.messaged === 'muted'
+          ? 'Not delivered: this user has muted registry messages in Settings.'
+          : context.notice),
     }));
   });
 
@@ -2670,6 +2753,61 @@ function createApp(config = loadConfig()) {
           sessions.destroyForAccount(target.githubId);
         }
         res.redirect(303, `/admin/users/${encodeURIComponent(target.githubId)}`);
+      } catch (err) {
+        if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
+          req.session.flash = { error: err.message };
+          return res.redirect(303, `/admin/users/${encodeURIComponent(String(req.params.githubId))}`);
+        }
+        return next(err);
+      }
+    },
+  );
+
+  // Admin outbound message (owner, 2026-10-03): the audited way to reach any
+  // account without exposing notification addresses. Delivery is the normal
+  // notice path (in-app always, email only to a verified address) and the
+  // per-kind pref can mute it; a per-target hourly cap stops spam.
+  app.post(
+    '/admin/users/:githubId/message',
+    writeLimit,
+    express.urlencoded({ extended: false, limit: '16kb' }),
+    requireAdmin,
+    requireCsrf,
+    (req, res, next) => {
+      try {
+        const target = accounts.get(String(req.params.githubId));
+        if (!target) throw new NotFoundError('account not found', 'account_not_found');
+        const actor = accountOf(req);
+        const subject = String(req.body.subject || '').trim().slice(0, 120);
+        const body = String(req.body.body || '').trim().slice(0, 1000);
+        if (!subject) throw new BadRequestError('a subject is required', 'message_subject_required');
+        if (!body) throw new BadRequestError('a message body is required', 'message_body_required');
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        if (notifications.recentCountFor(target.githubId, 'admin-message', hourAgo) >= 5) {
+          throw new ConflictError(
+            'this user already received 5 registry messages in the last hour',
+            'message_rate',
+          );
+        }
+        const delivered = notifyAccount({
+          account: target,
+          kind: 'admin-message',
+          subject,
+          body,
+          link: '/account/notifications',
+        });
+        admin.audit({
+          actor,
+          action: 'user.message',
+          subjectType: 'user',
+          subjectId: target.githubId,
+          subjectLogin: target.login,
+          detail: subject,
+        });
+        res.redirect(
+          303,
+          `/admin/users/${encodeURIComponent(target.githubId)}?messaged=${delivered ? '1' : 'muted'}`,
+        );
       } catch (err) {
         if (err instanceof BadRequestError || err instanceof ConflictError || err instanceof NotFoundError) {
           req.session.flash = { error: err.message };

@@ -108,6 +108,50 @@ class NotificationStore {
     return row ? Number(row.count) : 0;
   }
 
+  /** Total notices for one account (filter chip counts). */
+  countFor(githubId) {
+    const row = this.db.get(
+      'SELECT COUNT(*) AS count FROM notifications WHERE github_id = ?',
+      String(githubId),
+    );
+    return row ? Number(row.count) : 0;
+  }
+
+  /** Notices of one kind for one account since an ISO time (rate caps). */
+  recentCountFor(githubId, kind, sinceIso) {
+    const row = this.db.get(
+      `SELECT COUNT(*) AS count FROM notifications
+       WHERE github_id = ? AND kind = ? AND created_at >= ?`,
+      String(githubId),
+      String(kind),
+      String(sinceIso),
+    );
+    return row ? Number(row.count) : 0;
+  }
+
+  /** Mark one notice read; returns 1 when this call changed it. */
+  markRead(githubId, id) {
+    const result = this.db.run(
+      `UPDATE notifications SET read_at = ?
+       WHERE id = ? AND github_id = ? AND read_at IS NULL`,
+      new Date().toISOString(),
+      Number(id),
+      String(githubId),
+    );
+    return result.changes;
+  }
+
+  /** Mark one notice unread; returns 1 when this call changed it. */
+  markUnread(githubId, id) {
+    const result = this.db.run(
+      `UPDATE notifications SET read_at = NULL
+       WHERE id = ? AND github_id = ? AND read_at IS NOT NULL`,
+      Number(id),
+      String(githubId),
+    );
+    return result.changes;
+  }
+
   markAllRead(githubId) {
     return this.db.run(
       'UPDATE notifications SET read_at = ? WHERE github_id = ? AND read_at IS NULL',

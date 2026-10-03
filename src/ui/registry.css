@@ -927,6 +927,45 @@ table.versions tr:hover td { background: var(--panel); }
   width: 100%;
 }
 .site-header .nav-account-signout:hover { background: var(--panel-raised); color: var(--paper); }
+
+/* Header notification bell: unread count next to the account control. */
+.nav-bell {
+  align-items: center;
+  color: var(--paper-dim);
+  display: inline-flex;
+  gap: 5px;
+  padding: 6px 4px;
+  position: relative;
+}
+.nav-bell:hover { color: var(--paper); }
+.nav-bell svg { display: block; }
+.nav-bell-count {
+  background: var(--signal);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 17px;
+  padding: 3px 5px;
+  text-align: center;
+}
+
+/* Inbox triage: filter chips and per-notice actions. */
+.notice-filters {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+.notice-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
 @media (max-width: 640px) {
   .nav-account > summary span { max-width: 120px; }
   .site-header .nav-account-panel { left: auto; right: 0; }
@@ -1437,8 +1476,16 @@ textarea:focus-visible {
 
 /* Request-form live name check (advisory; the door re-checks at submit). */
 .scope-check { display: grid; gap: 4px; margin: 0; font-size: 13px; }
-.scope-check-error { color: var(--error); }
-.scope-check-warn { color: #ffc400; }
+.scope-check-icon { font-weight: 700; }
+.scope-check-label { font-weight: 600; }
+.scope-check-line { color: var(--muted); }
+.scope-check-ok .scope-check-icon,
+.scope-check-ok .scope-check-label { color: var(--verified); }
+.scope-check-warn .scope-check-icon,
+.scope-check-warn .scope-check-label { color: #ffc400; }
+.scope-check-error .scope-check-icon,
+.scope-check-error .scope-check-label { color: var(--error); }
+.field-error { color: var(--error); font-size: 12px; }
 
 .profile-link { color: var(--paper); font-weight: 600; text-decoration: none; }
 .profile-link:hover { text-decoration: underline; }

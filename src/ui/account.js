@@ -194,18 +194,21 @@ function requestForm({ csrf, defaults = {}, disabled = false }) {
         <span>Repository (owner/repo)</span>
         <input name="repository" value="${escapeHtml(values.repository)}"
           placeholder="alice/my-lib" autocomplete="off"${disabled ? ' disabled' : ''}>
+        <small class="field-error" id="repository-error" hidden></small>
       </label>
       <label class="form-field">
         <span>Workflow file</span>
         <input name="workflow" value="${escapeHtml(values.workflow)}"
           placeholder="publish-registry.yml" autocomplete="off"${disabled ? ' disabled' : ''}>
         <small>Path under <code>.github/workflows/</code>.</small>
+        <small class="field-error" id="workflow-error" hidden></small>
       </label>
       <label class="form-field">
         <span>Refs</span>
         <input name="refs" value="${escapeHtml(values.refs)}"
           placeholder="refs/tags/v*, refs/heads/main" autocomplete="off"${disabled ? ' disabled' : ''}>
         <small>Comma-separated. For releases, <code>refs/tags/v*</code> is usually what you want.</small>
+        <small class="field-error" id="refs-error" hidden></small>
       </label>
     </div>
   </fieldset>
@@ -216,68 +219,145 @@ function requestForm({ csrf, defaults = {}, disabled = false }) {
         placeholder="Anything the reviewer should know">${escapeHtml(values.note)}</textarea>
     </label>
   </div>
-  <button class="button primary" type="submit"${disabled ? ' disabled' : ''}>Submit request</button>
+  <button class="button primary" type="submit"${disabled ? ' disabled data-page-disabled="1"' : ''}>Submit request</button>
 </form>
 <script>
 // The door check, before the door: advisory only. The POST and the admin
 // approval re-run the authoritative checks, so a stale or failed check here
-// never blocks or authorizes anything.
+// never authorizes anything; submit is disabled only while a fresh check
+// says a hard rule would refuse the request.
 (function () {
   var form = document.getElementById('request');
   if (!form) return;
-  var input = form.querySelector('input[name="scopes"]');
+  var scopes = form.querySelector('input[name="scopes"]');
+  var kindInputs = form.querySelectorAll('input[name="kind"]');
+  var repository = form.querySelector('input[name="repository"]');
+  var workflow = form.querySelector('input[name="workflow"]');
+  var refs = form.querySelector('input[name="refs"]');
   var status = document.getElementById('scope-check');
-  if (!input || !status) return;
+  var submit = form.querySelector('button[type="submit"]');
+  if (!scopes || !status) return;
   var inFlight = null;
-  var lastChecked = null;
+  var lastKey = null;
+  var fieldNames = ['repository', 'workflow', 'refs'];
+  var icons = { ok: '\u2713', warn: '!', error: '\u2715' };
+  var labels = {
+    ok: 'Looks good: no naming or publisher-field issues.',
+    warn: 'Advisory: the details are still allowed.',
+    error: 'This would be refused at the door.',
+  };
+
+  function currentKind() {
+    for (var i = 0; i < kindInputs.length; i++) {
+      if (kindInputs[i].checked) return kindInputs[i].value;
+    }
+    return 'token';
+  }
+
+  function valueOf(input) {
+    return input ? input.value.trim() : '';
+  }
+
+  function key() {
+    return [currentKind(), valueOf(scopes), valueOf(repository), valueOf(workflow), valueOf(refs)].join('|');
+  }
+
+  function setBlocked(blocked) {
+    if (!submit || submit.getAttribute('data-page-disabled') === '1') return;
+    submit.disabled = blocked;
+    submit.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+  }
+
+  function showField(name, message) {
+    var node = document.getElementById(name + '-error');
+    if (!node) return;
+    node.textContent = message || '';
+    node.hidden = !message;
+  }
+
+  function clearAll() {
+    while (status.firstChild) status.removeChild(status.firstChild);
+    status.hidden = true;
+    status.className = 'scope-check';
+    fieldNames.forEach(function (name) { showField(name, ''); });
+    setBlocked(false);
+  }
 
   function render(result) {
+    var errors = result.errors || [];
+    var warnings = result.warnings || [];
+    var overlaps = result.overlaps || [];
+    var fields = result.fields || {};
+    var fieldErrors = fieldNames.filter(function (name) { return fields[name]; });
+    var state = (errors.length > 0 || fieldErrors.length > 0) ? 'error'
+      : ((warnings.length > 0 || overlaps.length > 0) ? 'warn' : 'ok');
     while (status.firstChild) status.removeChild(status.firstChild);
-    var lines = [];
-    (result.errors || []).forEach(function (text) {
-      lines.push({ text: text, kind: 'error' });
-    });
-    (result.warnings || []).forEach(function (text) {
-      lines.push({ text: text, kind: 'warn' });
-    });
-    (result.overlaps || []).forEach(function (text) {
-      lines.push({ text: text + ' (an admin decides this at approval)', kind: 'warn' });
-    });
-    lines.forEach(function (line) {
+    var icon = document.createElement('span');
+    icon.className = 'scope-check-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = icons[state];
+    status.appendChild(icon);
+    var label = document.createElement('span');
+    label.className = 'scope-check-label';
+    label.textContent = labels[state];
+    status.appendChild(label);
+    errors.concat(warnings).concat(overlaps).forEach(function (line) {
       var item = document.createElement('span');
-      item.className = 'scope-check-' + line.kind;
-      item.textContent = line.text;
+      item.className = 'scope-check-line';
+      item.textContent = line;
       status.appendChild(item);
     });
-    status.hidden = lines.length === 0;
+    fieldNames.forEach(function (name) { showField(name, fields[name] || ''); });
+    status.className = 'scope-check scope-check-' + state;
+    var hasText = errors.length + warnings.length + overlaps.length + fieldErrors.length > 0;
+    status.hidden = !hasText && valueOf(scopes) === '';
+    setBlocked(errors.length > 0 || fieldErrors.length > 0);
   }
 
   function check() {
-    var value = input.value.trim();
-    if (!value) {
-      lastChecked = null;
-      render({});
-      return;
-    }
-    if (value === lastChecked) return;
-    lastChecked = value;
+    var current = key();
+    if (current === lastKey) return;
+    lastKey = current;
     if (inFlight) inFlight.abort();
     inFlight = new AbortController();
-    fetch('/requests/check?scopes=' + encodeURIComponent(value), {
+    fetch('/requests/check?kind=' + encodeURIComponent(currentKind())
+      + '&scopes=' + encodeURIComponent(valueOf(scopes))
+      + '&repository=' + encodeURIComponent(valueOf(repository))
+      + '&workflow=' + encodeURIComponent(valueOf(workflow))
+      + '&refs=' + encodeURIComponent(valueOf(refs)), {
       headers: { Accept: 'application/json' },
       signal: inFlight.signal,
     }).then(function (response) {
       if (!response.ok) throw new Error('check failed');
       return response.json();
     }).then(function (result) {
-      if (input.value.trim() === value) render(result);
+      if (key() === current) render(result);
     }).catch(function () {
       // Advisory: a failed or superseded check stays silent; submit re-checks.
     });
   }
 
-  input.addEventListener('blur', check);
-  input.addEventListener('change', check);
+  // Editing invalidates the last verdict, so clear it and re-enable submit.
+  function onInput() {
+    if (key() !== lastKey) {
+      lastKey = null;
+      clearAll();
+    }
+  }
+
+  [scopes, repository, workflow, refs].forEach(function (input) {
+    if (!input) return;
+    input.addEventListener('blur', check);
+    input.addEventListener('change', check);
+    input.addEventListener('input', onInput);
+  });
+  Array.prototype.forEach.call(kindInputs, function (input) {
+    input.addEventListener('change', function () {
+      lastKey = null;
+      clearAll();
+      check();
+    });
+  });
 })();
 </script>`;
 }
@@ -324,7 +404,7 @@ ${requests.slice(0, 3).map((record) => `  <li class="request-card">
 <p class="pkg-meta"><a href="/account/requests">All requests and the request form &rarr;</a></p>`;
 }
 
-function notificationCards(notifications, { compact = false, csrf = '' } = {}) {
+function notificationCards(notifications, { compact = false, csrf = '', filter = '' } = {}) {
   const list = compact ? notifications.slice(0, 3) : notifications;
   if (list.length === 0) {
     return '<p class="pkg-meta">Nothing yet. Approvals, review decisions, and '
@@ -340,6 +420,15 @@ ${list.map((entry) => {
       <span class="pkg-meta">Flags this message to the moderators.</span>
     </form>`
       : '';
+    // Per-notice read state: the triage flow for a long inbox. Owner-scoped
+    // server-side; the filter rides along so the list comes back the same.
+    const readToggle = !compact && csrf
+      ? `<form method="post" action="/account/notifications/${entry.id}/${entry.readAt ? 'unread' : 'read'}" class="inline-form">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+      ${filter ? `<input type="hidden" name="filter" value="${escapeHtml(filter)}">` : ''}
+      <button class="button" type="submit">${entry.readAt ? 'Mark unread' : 'Mark read'}</button>
+    </form>`
+      : '';
     return `  <li class="request-card${entry.readAt ? ' closed' : ''}">
     <div class="request-head">
       <span class="mono">${escapeHtml(NOTICE_KIND_LABELS[entry.kind] || entry.kind)}</span>
@@ -348,8 +437,8 @@ ${list.map((entry) => {
     </div>
     <p class="pkg-desc">${escapeHtml(entry.subject)}</p>
     ${entry.body ? `<p class="pkg-meta">${escapeHtml(entry.body)}</p>` : ''}
-    ${link ? `<p class="pkg-meta"><a href="${escapeHtml(link)}">View details &rarr;</a></p>` : ''}
-    ${abuse}
+    ${link ? `<p class="pkg-meta"><a href="/account/notifications/${entry.id}/open">View details &rarr;</a></p>` : ''}
+    ${readToggle || abuse ? `<div class="notice-actions">${readToggle}${abuse}</div>` : ''}
   </li>`;
   }).join('\n')}
 </ul>`;
@@ -559,6 +648,9 @@ ${grantsBlock(requests, { csrf })}`;
 function accountNotificationsPage({
   account,
   notifications = [],
+  filter = '',
+  unreadCount = 0,
+  total = 0,
   csrf,
   notice = '',
   error = '',
@@ -566,19 +658,25 @@ function accountNotificationsPage({
   status = 'active',
   nav = '',
 }) {
-  const unread = notifications.filter((entry) => !entry.readAt).length;
+  const filterLink = (href, label, active) => `<a class="button${active ? ' primary' : ''}"`
+    + ` href="${href}"${active ? ' aria-current="page"' : ''}>${label}</a>`;
   const body = `${accountHero(account, { title: 'Notifications' })}
 ${accountTabs('notifications', { admin: role === 'admin' })}
 ${accountBanner({ account, status, notice, error })}
 <section>
-  <h2>In-app notices <span class="count">${unread > 0 ? `${unread} new` : notifications.length}</span></h2>
-  ${unread > 0
+  <h2>In-app notices <span class="count">${unreadCount > 0 ? `${unreadCount} new` : total}</span></h2>
+  <div class="notice-filters">
+    ${filterLink('/account/notifications', `All (${total})`, filter !== 'unread')}
+    ${filterLink('/account/notifications?filter=unread', `Unread (${unreadCount})`, filter === 'unread')}
+    ${unreadCount > 0
     ? `<form method="post" action="/account/notifications/read" class="inline-form">
     <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+    ${filter ? `<input type="hidden" name="filter" value="${escapeHtml(filter)}">` : ''}
     <button class="button" type="submit">Mark all as read</button>
   </form>`
     : ''}
-  ${notificationCards(notifications, { csrf })}
+  </div>
+  ${notificationCards(notifications, { csrf, filter })}
   <p class="pkg-meta">Email delivery is optional and configured in
      <a href="/account/settings">Settings</a>.</p>
 </section>`;
@@ -644,6 +742,7 @@ ${accountBanner({ account, status, notice, error })}
       ${kindRow('support', 'Messages from the community')}
       ${kindRow('review-reply', 'Replies to your reviews')}
       ${kindRow('release', 'New releases of packages you watch')}
+      ${kindRow('admin-message', 'Messages from the registry team')}
       <button class="button primary" type="submit">Save notification types</button>
     </form>
     <h3 id="sponsors" class="account-subhead">GitHub Sponsors badge</h3>

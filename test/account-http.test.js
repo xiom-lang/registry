@@ -1527,11 +1527,15 @@ test('a verified maintainer claim notifies the claimant with a maintainers link'
   assert.equal(row.link, '/packages/notify-claim-pkg#maintainers');
   assert.equal(row.emailStatus, 'skipped', 'no notification email is set');
 
-  // The notifications page renders the link as an anchor.
+  // The notifications page links through the open route, which marks the
+  // notice read and forwards to the stored maintainers link.
   response = await requestAs(claimant, '/account/notifications', { headers: BROWSER });
   const html = await response.text();
   assert.match(html, /Maintainer claim verified/);
-  assert.match(html, /href="\/packages\/notify-claim-pkg#maintainers"/);
+  assert.match(html, new RegExp(`href="/account/notifications/${row.id}/open"`));
+  response = await requestAs(claimant, `/account/notifications/${row.id}/open`, { headers: BROWSER });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/packages/notify-claim-pkg#maintainers');
 });
 
 test('a rejected maintainer claim notifies the claimant with the reason', async () => {
@@ -1677,7 +1681,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const stored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     stored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: false, support: true, 'review-reply': true, release: true },
+    { claim: true, report: true, review: false, support: true, 'review-reply': true, release: true, 'admin-message': true },
   );
 
   response = await requestAs(member, '/account/settings', { headers: BROWSER });
@@ -1733,7 +1737,7 @@ test('per-kind muting suppresses that kind only and defaults to on', async () =>
   const restored = JSON.parse(fs.readFileSync(path.join(sandbox, 'data', 'accounts.json'), 'utf-8'));
   assert.deepEqual(
     restored.accounts['777'].notifyKinds,
-    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true },
+    { claim: true, report: true, review: true, support: true, 'review-reply': true, release: true, 'admin-message': true },
   );
 });
 
@@ -2652,13 +2656,33 @@ test('the request form has a read-only name check endpoint', async () => {
   response = await requestAs(user, '/requests/check?scopes=fresh-check-tool');
   body = await response.json();
   assert.deepEqual(body, {
-    scopes: ['fresh-check-tool'], errors: [], warnings: [], overlaps: [],
+    scopes: ['fresh-check-tool'], errors: [], warnings: [], overlaps: [], fields: {},
   });
   assert.equal(
     requests.list({ requesterId: '777' }).length,
     before,
     'the check files nothing',
   );
+
+  // Publisher fields use the loader's own messages, before submit.
+  response = await requestAs(
+    user,
+    '/requests/check?kind=publisher&scopes=fresh-check-tool'
+      + `&repository=${encodeURIComponent('https://github.com/alice/fresh-check-tool')}`
+      + '&workflow=bad&refs=' + encodeURIComponent('main'),
+  );
+  body = await response.json();
+  assert.match(body.fields.repository, /owner\/repo/);
+  assert.match(body.fields.workflow, /\.yml or \.yaml/);
+  assert.match(body.fields.refs, /must start with "refs\/"/);
+
+  response = await requestAs(
+    user,
+    '/requests/check?kind=publisher&scopes=fresh-check-tool&repository=alice/fresh-check-tool'
+      + '&workflow=publish-registry.yml&refs=' + encodeURIComponent('refs/tags/v*'),
+  );
+  body = await response.json();
+  assert.deepEqual(body.fields, { repository: '', workflow: '', refs: '' });
 
   response = await requestAs(
     user,
@@ -2667,8 +2691,171 @@ test('the request form has a read-only name check endpoint', async () => {
   body = await response.json();
   assert.match(body.errors[0], /at most 8 scopes per request/);
 
-  // The form carries the status line and the blur wiring.
+  // The form carries the status line, field errors, and the blur wiring.
   const page = await (await requestAs(user, '/account/requests')).text();
   assert.match(page, /id="scope-check"/);
-  assert.match(page, /\/requests\/check\?scopes=/);
+  assert.match(page, /\/requests\/check\?kind=/);
+  assert.match(page, /id="repository-error"/);
+  assert.match(page, /id="workflow-error"/);
+  assert.match(page, /id="refs-error"/);
+});
+
+// --- Notifications triage: header bell, per-notice read state, filters -----
+
+test('notifications have per-notice read state, filters, and a header bell', async () => {
+  const { notifications } = app.locals.registry;
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  notifications.markAllRead('777');
+  const noticeA = notifications.enqueue({
+    account: { githubId: '777', login: 'user-user' },
+    kind: 'request-approved',
+    subject: 'Token request approved: triage-a',
+    body: 'Scopes: triage-a.',
+    link: '/account/requests',
+  });
+  const noticeB = notifications.enqueue({
+    account: { githubId: '777', login: 'user-user' },
+    kind: 'request-denied',
+    subject: 'Request denied: triage-b',
+    body: 'Scopes: triage-b.',
+  });
+
+  // Bell: count in the header, link to the inbox.
+  let page = await (await requestAs(user, '/account')).text();
+  assert.match(page, /class="nav-bell"/);
+  assert.match(page, /class="nav-bell-count">2</);
+  assert.match(page, /aria-label="Notifications, 2 unread"/);
+
+  // Inbox: filter chips, per-notice controls, and the open-through link.
+  page = await (await requestAs(user, '/account/notifications')).text();
+  const csrf = csrfFrom(page);
+  assert.match(page, /Unread \(2\)/);
+  assert.match(page, new RegExp(`/account/notifications/${noticeA}/read`));
+  assert.match(page, new RegExp(`/account/notifications/${noticeA}/open`));
+
+  // Mark one read: only that one changes; unread filter shows the other.
+  let response = await requestAs(user, `/account/notifications/${noticeA}/read`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.ok(notifications.get(noticeA).readAt);
+  assert.equal(notifications.get(noticeB).readAt, '');
+  page = await (await requestAs(user, '/account/notifications?filter=unread')).text();
+  assert.doesNotMatch(page, /triage-a/);
+  assert.match(page, /triage-b/);
+
+  // Mark unread restores it, and opening follows the stored link, read.
+  response = await requestAs(user, `/account/notifications/${noticeA}/unread`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(notifications.get(noticeA).readAt, '');
+  response = await requestAs(user, `/account/notifications/${noticeA}/open`);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/requests');
+  assert.ok(notifications.get(noticeA).readAt);
+
+  // Foreign ids are owner-scoped no-ops (no error oracle).
+  const other = cookieJar();
+  await login(other, 'plain-code'); // 888
+  const otherPage = await (await requestAs(other, '/account/notifications')).text();
+  const otherCsrf = csrfFrom(otherPage);
+  response = await requestAs(other, `/account/notifications/${noticeB}/read`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: otherCsrf }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(notifications.get(noticeB).readAt, '', 'foreign notice is untouched');
+  response = await requestAs(other, `/account/notifications/${noticeB}/open`);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/account/notifications');
+
+  // Mark all still works and clears the bell.
+  page = await (await requestAs(user, '/account/notifications')).text();
+  response = await requestAs(user, '/account/notifications/read', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: csrfFrom(page) }),
+  });
+  assert.equal(response.status, 303);
+  assert.ok(notifications.get(noticeB).readAt);
+  page = await (await requestAs(user, '/account')).text();
+  assert.match(page, /aria-label="Notifications">/);
+  assert.doesNotMatch(page, /nav-bell-count/);
+});
+
+// --- Admin messaging: audited outbound without exposing addresses ----------
+
+test('admins message any user through the audited notice path', async () => {
+  const { notifications, admin } = app.locals.registry;
+  // Materialize the target account (888) the way the suite does elsewhere.
+  const target = cookieJar();
+  await login(target, 'plain-code');
+  const adminJar = cookieJar();
+  await login(adminJar, 'admin-code');
+  let page = await (await requestAs(adminJar, '/admin/users/888', { headers: BROWSER })).text();
+  const csrf = csrfFrom(page);
+  assert.match(page, /Message this user/);
+  assert.match(page, /The address itself stays private/);
+
+  const before = notifications.listFor('888', { limit: 200 })
+    .filter((entry) => entry.kind === 'admin-message').length;
+  let response = await requestAs(adminJar, '/admin/users/888/message', {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf, subject: 'About your claim', body: 'Please review the claim note.',
+    }),
+  });
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get('location'), /\?messaged=1$/);
+  const row = notifications.listFor('888')[0];
+  assert.equal(row.kind, 'admin-message');
+  assert.equal(row.subject, 'About your claim');
+  assert.equal(row.body, 'Please review the claim note.');
+  assert.equal(
+    notifications.listFor('888', { limit: 200 }).filter((e) => e.kind === 'admin-message').length,
+    before + 1,
+  );
+  assert.ok(
+    admin.auditFor('888', 10).some((entry) => entry.action === 'user.message'),
+    'the send is audit-logged',
+  );
+
+  // Rate cap: five per target per hour; the sixth is refused.
+  for (let i = 0; i < 4; i += 1) {
+    response = await requestAs(adminJar, '/admin/users/888/message', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf, subject: `Capped ${i}`, body: 'Body' }),
+    });
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get('location'), /\?messaged=1$/);
+  }
+  response = await requestAs(adminJar, '/admin/users/888/message', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf, subject: 'One too many', body: 'Body' }),
+  });
+  assert.equal(response.status, 303);
+  assert.doesNotMatch(response.headers.get('location'), /messaged=1/);
+  assert.equal(
+    notifications.listFor('888', { limit: 200 }).filter((e) => e.kind === 'admin-message').length,
+    before + 5,
+    'the sixth message in an hour is refused',
+  );
+
+  // Members cannot use the route.
+  const member = cookieJar();
+  await login(member, 'user-code');
+  const memberPage = await (await requestAs(member, '/account')).text();
+  response = await requestAs(member, '/admin/users/888/message', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: csrfFrom(memberPage), subject: 'Nope', body: 'Nope' }),
+  });
+  assert.equal(response.status, 403);
+  assert.equal(
+    notifications.listFor('888', { limit: 200 }).filter((e) => e.kind === 'admin-message').length,
+    before + 5,
+    'nothing was sent',
+  );
 });

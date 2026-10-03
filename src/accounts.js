@@ -24,7 +24,9 @@ const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 // Structured notification kinds (SESSION.md 22.4 A2 + 21.9.2 A7 + 21.9.3 A9
 // + 21 A5). Only these can be muted from /account/settings; every other
 // outbox kind is unconditional.
-const NOTIFY_KINDS = Object.freeze(['claim', 'report', 'review', 'support', 'review-reply', 'release']);
+const NOTIFY_KINDS = Object.freeze([
+  'claim', 'report', 'review', 'support', 'review-reply', 'release', 'admin-message',
+]);
 const DEFAULT_NOTIFY_KINDS = Object.freeze({
   claim: true,
   report: true,
@@ -32,6 +34,7 @@ const DEFAULT_NOTIFY_KINDS = Object.freeze({
   support: true,
   'review-reply': true,
   release: true,
+  'admin-message': true,
 });
 
 function clean(value, maxLength) {
