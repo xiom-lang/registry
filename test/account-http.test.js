@@ -2386,7 +2386,7 @@ test('fulfilled token grants can request rotation', async () => {
   });
   assert.equal(app.locals.registry.requests.get(rotationId).status, 'approved');
   const notices = app.locals.registry.notifications.listFor('777');
-  assert.equal(notices[0].subject, 'Token rotation approved');
+  assert.equal(notices[0].subject, 'Token rotation approved: rotate-demo');
 });
 
 // --- Naming guard: the door and the approval both check names ---------------
@@ -2460,6 +2460,11 @@ test('requests check names at the door and scope overlaps at approval', async ()
   const queue = await (await requestAs(admin, '/admin/requests', { headers: BROWSER })).text();
   assert.match(queue, /Name check:/);
   assert.match(queue, /I checked these name warnings/);
+  // The ack is enforced server-side for approval only: the checkbox must not
+  // block a Deny click, and Enter in the note must not implicitly approve.
+  assert.doesNotMatch(queue, /name="ack" value="1" required/);
+  assert.match(queue, /required to approve/);
+  assert.match(queue, /Enter in a decision note/);
 
   response = await requestAs(admin, `/admin/requests/${lookalikeId}/decision`, {
     method: 'POST',
@@ -2524,4 +2529,91 @@ test('requests check names at the door and scope overlaps at approval', async ()
     });
     assert.equal(response.status, 303);
   }
+});
+
+// --- Decision notices: a denial never reads as an approval -----------------
+
+test('a denied request notifies the requester with a denial that names the scope', async () => {
+  const { requests, notifications } = app.locals.registry;
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'deny-notice-lib' }),
+  });
+  assert.equal(response.status, 303);
+  const created = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/account');
+  const adminCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, `/admin/requests/${created}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      csrf: adminCsrf,
+      action: 'deny',
+      note: 'name conflicts with an existing project',
+    }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(requests.get(created).status, 'denied');
+
+  const notice = notifications.listFor('777')[0];
+  assert.equal(notice.kind, 'request-denied');
+  assert.equal(notice.subject, 'Request denied: deny-notice-lib');
+  assert.match(notice.body, /deny-notice-lib/, 'the denial names the package');
+  assert.match(notice.body, /name conflicts/, 'the denial carries the reason');
+
+  // The approval notice names the scope too, and the note field cannot
+  // silently approve by Enter: approval is a deliberate button click.
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'approve-notice-lib' }),
+  });
+  const approveId = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  response = await requestAs(admin, `/admin/requests/${approveId}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'approve' }),
+  });
+  assert.equal(response.status, 303);
+  const approved = notifications.listFor('777')[0];
+  assert.equal(approved.kind, 'request-approved');
+  assert.equal(approved.subject, 'Token request approved: approve-notice-lib');
+  assert.match(approved.body, /Scopes: approve-notice-lib\./);
+});
+
+test('denying a warned request still records a denial, not an approval', async () => {
+  const { requests, notifications } = app.locals.registry;
+  const user = cookieJar();
+  await login(user, 'user-code'); // 777
+  let response = await requestAs(user, '/account/requests');
+  const userCsrf = csrfFrom(await response.text());
+  response = await requestAs(user, '/requests', {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: userCsrf, kind: 'token', scopes: 'readme-pq' }),
+  });
+  assert.equal(response.status, 303);
+  const created = new URL(response.headers.get('location'), baseUrl).searchParams.get('created');
+  assert.ok(
+    requests.get(created).warnings.some((warning) => /looks like published/.test(warning)),
+    'the lookalike is flagged at the door',
+  );
+
+  const admin = cookieJar();
+  await login(admin, 'admin-code');
+  response = await requestAs(admin, '/account');
+  const adminCsrf = csrfFrom(await response.text());
+  response = await requestAs(admin, `/admin/requests/${created}/decision`, {
+    method: 'POST',
+    body: new URLSearchParams({ csrf: adminCsrf, action: 'deny', note: 'lookalike not wanted' }),
+  });
+  assert.equal(response.status, 303);
+  assert.equal(requests.get(created).status, 'denied');
+  const notice = notifications.listFor('777')[0];
+  assert.equal(notice.kind, 'request-denied');
+  assert.equal(notice.subject, 'Request denied: readme-pq');
+  assert.match(notice.body, /readme-pq/);
 });

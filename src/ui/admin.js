@@ -195,8 +195,8 @@ function pendingRow(record, csrf) {
       <ul class="name-warning-list">
 ${record.warnings.map((warning) => `        <li class="pkg-meta">${escapeHtml(warning)}</li>`).join('\n')}
       </ul>
-      <label class="radio-row"><input type="checkbox" name="ack" value="1" required>
-        <span>I checked these name warnings</span></label>
+      <label class="radio-row"><input type="checkbox" name="ack" value="1">
+        <span>I checked these name warnings (required to approve)</span></label>
     </div>`
     : ''}
     <button class="button primary" type="submit" name="action" value="approve">Approve${record.kind === 'publisher' ? ' &amp; activate' : ''}</button>
@@ -320,7 +320,20 @@ function adminRequestsPage({
 ${adminTabs('requests')}
 ${noticeBox(notice, error)}
 ${filterChips('/admin/requests', [['', 'All'], ['pending', 'Pending'], ['approved', 'Awaiting fulfilment'], ['closed', 'Closed']], filter)}
-${rendered}`;
+${rendered}
+<script>
+// Enter in a decision note must not implicitly submit the form: the first
+// submit button is Approve, so a typed denial reason would file an approval.
+// Approve and Deny are deliberate clicks here.
+(function () {
+  var notes = document.querySelectorAll('.request-card .decision-form input[name="note"]');
+  Array.prototype.forEach.call(notes, function (note) {
+    note.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') event.preventDefault();
+    });
+  });
+})();
+</script>`;
   return layout({ title: 'Admin requests', body, nav });
 }
 

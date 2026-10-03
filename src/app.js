@@ -655,6 +655,18 @@ function createApp(config = loadConfig()) {
     notifyAccount({ account: request.requester, kind, subject, body, link });
   }
 
+  /**
+   * Scope names for a decision notice subject. The full list lives in the
+   * body; the subject keeps at most three names so a many-scope request
+   * cannot truncate mid-name.
+   */
+  function requestScopeLabel(record) {
+    const scopes = Array.isArray(record && record.scopes) ? record.scopes : [];
+    if (scopes.length === 0) return 'no scopes';
+    if (scopes.length <= 3) return scopes.join(', ');
+    return `${scopes.slice(0, 3).join(', ')} +${scopes.length - 3} more`;
+  }
+
   // Package-decision actions that notify the package's maintainers. `clear`
   // stays store-only: the console exposes the six independent toggles, which
   // is the A2 scope (SESSION.md 22.4); every decision is still audited.
@@ -2720,7 +2732,7 @@ function createApp(config = loadConfig()) {
             request,
             'publisher-revoked',
             'Trusted publisher revoked',
-            `${target.repository} / ${target.workflow} is no longer accepted.`,
+            `${target.repository} / ${target.workflow} is no longer accepted. Scopes: ${(target.scopes || []).join(', ')}.`,
           );
           console.log(`Trusted publisher ${target.repository} / ${target.workflow} revoked via ${request.id} by ${actor}`);
         } else if (request.kind === 'publisher-edit' && action === 'approve') {
@@ -2745,7 +2757,7 @@ function createApp(config = loadConfig()) {
             request,
             'publisher-approved',
             'Trusted publisher updated',
-            `${entry.repository} / ${entry.workflow} is live with the new settings.`,
+            `${entry.repository} / ${entry.workflow} is live with the new settings. Scopes: ${(entry.scopes || []).join(', ')}.`,
           );
           console.log(`Trusted publisher entry for ${target.id} updated via ${request.id} by ${actor}`);
         } else if (request.kind === 'publisher' && action === 'approve') {
@@ -2769,26 +2781,28 @@ function createApp(config = loadConfig()) {
             request,
             'publisher-approved',
             'Trusted publisher approved',
-            `${request.repository} / ${request.workflow} is live. Run your publish workflow.`,
+            `${request.repository} / ${request.workflow} is live. Scopes: ${(request.scopes || []).join(', ')}. Run your publish workflow.`,
           );
           console.log(`Trusted publisher ${entry.repository} / ${entry.workflow} activated for ${request.id} by ${actor}`);
         } else {
           updated = requests.decide(request.id, { action, actor, note });
           if (action === 'approve') {
+            const scopeList = (request.scopes || []).join(', ');
             notifyRequester(
               request,
               'request-approved',
-              request.kind === 'token-rotation' ? 'Token rotation approved' : 'Token request approved',
+              `${request.kind === 'token-rotation' ? 'Token rotation approved' : 'Token request approved'}: ${requestScopeLabel(request)}`,
               request.kind === 'token-rotation'
-                ? 'The maintainers will mint the replacement token on the host and deliver it privately.'
-                : 'The maintainers will mint your token on the host and deliver it privately.',
+                ? `Scopes: ${scopeList}. The maintainers will mint the replacement token on the host and deliver it privately.`
+                : `Scopes: ${scopeList}. The maintainers will mint your token on the host and deliver it privately.`,
             );
           } else if (action === 'deny') {
+            const scopeList = (request.scopes || []).join(', ');
             notifyRequester(
               request,
               'request-denied',
-              'Request denied',
-              note ? `Reason: ${note}` : '',
+              `Request denied: ${requestScopeLabel(request)}`,
+              `Scopes: ${scopeList}.${note ? ` Reason: ${note}` : ''}`,
             );
           }
           console.log(`Request ${updated.id} ${updated.status} by ${updated.decidedBy}`);
@@ -2822,7 +2836,7 @@ function createApp(config = loadConfig()) {
           request,
           'publisher-revoked',
           'Trusted publisher revoked',
-          `${request.repository} / ${request.workflow} is no longer accepted; contact the maintainers if this was unexpected.`,
+          `${request.repository} / ${request.workflow} is no longer accepted; contact the maintainers if this was unexpected. Scopes: ${(request.scopes || []).join(', ')}.`,
         );
         console.log(`Trusted publisher entry for ${request.id} revoked by ${actor}`);
         res.redirect(303, `/admin/requests?updated=${encodeURIComponent(request.id)}`);
@@ -2851,7 +2865,7 @@ function createApp(config = loadConfig()) {
         notifyRequester(
           updated,
           'request-fulfilled',
-          'Token request fulfilled',
+          `Token request fulfilled: ${requestScopeLabel(updated)}`,
           updated.mintReference ? `Reference: ${updated.mintReference}` : 'Your token was delivered.',
         );
         console.log(`Request ${updated.id} fulfilled by ${updated.fulfilledBy}`);
@@ -3332,7 +3346,7 @@ function createApp(config = loadConfig()) {
         notifyRequester(
           updated,
           'request-fulfilled',
-          'Token request fulfilled',
+          `Token request fulfilled: ${requestScopeLabel(updated)}`,
           updated.mintReference ? `Reference: ${updated.mintReference}` : 'Your token was delivered.',
         );
         console.log(`Request ${updated.id} fulfilled by the fulfiller worker`);

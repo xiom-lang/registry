@@ -6,6 +6,22 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Interface
+
+- **Decision notices name the package**: every request-decision notice
+  (approved, denied, fulfilled, trusted-publisher approved/updated/revoked)
+  now names the requested scopes -- the first three in the subject with a
+  `+N more` suffix, the full list in the body -- so a requester can match a
+  notice to a request without decoding the request id.
+
+### Operations
+
+- **Decision-form safety in the admin queue**: the name-warning
+  acknowledge is enforced server-side at approval only, so the checkbox can
+  no longer block a Deny click; and Enter in a decision note no longer
+  implicitly submits the first button (Approve) -- Approve and Deny are
+  deliberate clicks.
+
 ## [2.10.0] - 2026-10-03
 
 ### Publishing
