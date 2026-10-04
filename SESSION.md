@@ -2830,7 +2830,19 @@ roles/permissions guide, and the supervisor-scope clarification.
    publish behavior change); `trust` wording may ride v0.62.4 or v0.63.0 --
    registry/packages preference is all four in v0.63.0. The stdlib docs
    update for iter rides the stdlib lane's next push (they were mid-wave).
-   Remaining
+   **2026-10-04 compiler correction (recorded):** v0.62.4 is NOT the lz4
+   patch -- lz4 is owner-deferred to v0.63.0 as its headline item (the audit
+   is not closed: optimizer-sensitive across v0.62.0..v0.62.2, aggregate-copy
+   IR lead). v0.62.4 ships C25 (script-cache stdin/`--no-cache`), m182
+   (Str/struct const tables), m184 (nested module import), m185 (uninit-local
+   NULL-deref crash), m186 (inline UInt32 compare), m187 (doctor version
+   checks), m188 (const match arms), the last in-flight m189 (enum
+   struct-payload construction emitted invalid IR; the packages' in-situ
+   corruption family), and the XIOM_TIMINGS instrumentation. When tagged:
+   stdlib re-pins `COMPILER_VERSION` and runs **t2** (the benchmark suite,
+   Gate P is the benchmark lane's) against the official archive; the registry
+   verifies the archive against SHA256SUMS as usual. ETA still unstated
+   (relay arrived before the date). Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
