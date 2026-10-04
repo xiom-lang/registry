@@ -2857,8 +2857,13 @@ roles/permissions guide, and the supervisor-scope clarification.
    `release.yml` runs the full corpus, so a stdlib release on either pin
    cannot pass its gate while these two bugs are live. **Owner order
    (2026-10-04):** publish `xiom-std` 0.62.3 and 0.62.4 to the registry
-   (currently 0.62.0); blocked on the gate issue above -- decision on
-   fix-first vs documented gate carve-out pending. Remaining
+   (currently 0.62.0); **owner decision 2026-10-04: documented carve-out +
+   publish now** -- extend the release gate to honor the filed known failures
+   (C001 flake on `smoke_iter_range`/`smoke_iter_find_all_any`, deterministic
+   lz4), disclose both in the release notes, then cut `stdlib-v0.62.3`
+   (v0.62.3-pinned tree) and `stdlib-v0.62.4` (after the re-pin + t2) and
+   publish staging-first. The stdlib lane executes; the registry verifies and
+   records each artifact. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
