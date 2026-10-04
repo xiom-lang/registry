@@ -2863,7 +2863,16 @@ roles/permissions guide, and the supervisor-scope clarification.
    lz4), disclose both in the release notes, then cut `stdlib-v0.62.3`
    (v0.62.3-pinned tree) and `stdlib-v0.62.4` (after the re-pin + t2) and
    publish staging-first. The stdlib lane executes; the registry verifies and
-   records each artifact. Remaining
+   records each artifact. **2026-10-04 (compiler):** C001 reopening recorded
+   on their side (COMPILER_BUGS correction + SESSION kickoff item 4; m184
+   claim withdrawn; our stress evidence cited; stdlib release.yml impact
+   noted). lz4 root cause: m165's 2^32 Vec-cap constant triggered an X86
+   peephole miscompile of `_lz4_write_seq`; fixed in **m190** (unpushed;
+   ceiling 2^32-1), local acceptance P4c rc=0 and the lz4 smoke green.
+   Queued registry action: retest `smoke_compress_lz4_snappy` on the official
+   archive once a build with m190 ships (target release pending), and the
+   0.62.3/0.62.4 carve-out exclusions stay for those snapshot releases only
+   -- remove them when the pin moves to the fixed build. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
