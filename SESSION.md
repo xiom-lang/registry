@@ -2842,7 +2842,23 @@ roles/permissions guide, and the supervisor-scope clarification.
    stdlib re-pins `COMPILER_VERSION` and runs **t2** (the benchmark suite,
    Gate P is the benchmark lane's) against the official archive; the registry
    verifies the archive against SHA256SUMS as usual. ETA still unstated
-   (relay arrived before the date). Remaining
+   (relay arrived before the date). **2026-10-04 v0.62.4 verify pass (done):**
+   release published 13:15Z; SHA256SUMS `5d56d903…` matches the GitHub API
+   digest, linux-x64 `9c9feb8c…` and windows-x64 `ab1c83d2…` match both the
+   manifest and the API digests, and all nine manifest entries cross-check
+   against the API. Functional spot-check on the official windows archive
+   (reports v0.62.4, harness invocation): cell smokes green; **`iter.range`
+   C001 is NOT fixed** -- stress runs show it is ~50% run-to-run flaky on
+   BOTH pins (v0.62.4: 8/20 + 12/20 green; v0.62.3: 8/20 + 10/20 green;
+   error text captured: `error[C001]: ... 'contains' receiver does not
+   expose a concrete Vec/Slice/Array element type`), so the compiler's
+   "resolved by m184" was a single lucky green; lz4 still fails deterministically
+   (run=5) on both pins. `run_smokes.ps1` has no exclusion mechanism and
+   `release.yml` runs the full corpus, so a stdlib release on either pin
+   cannot pass its gate while these two bugs are live. **Owner order
+   (2026-10-04):** publish `xiom-std` 0.62.3 and 0.62.4 to the registry
+   (currently 0.62.0); blocked on the gate issue above -- decision on
+   fix-first vs documented gate carve-out pending. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
