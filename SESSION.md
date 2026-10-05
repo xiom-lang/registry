@@ -2894,7 +2894,16 @@ roles/permissions guide, and the supervisor-scope clarification.
    **lz4 carve-out** as well until the next archive ships and retests. Note:
    stdlib main currently drops `smoke_compress_lz4_snappy.xi` from
    `gate-exclusions.txt` (v0.63.0 pin had it green); the next pin needs it
-   re-added per this relay -- the stdlib lane owns that file. Remaining
+   re-added per this relay -- the    stdlib lane owns that file. **2026-10-05 v0.63.1 pin/verify (done):**
+   release published 11:18Z; manifest `79d6afad…`, linux-x64 `949707e4…`,
+   windows-x64 `f9dc9ec5…` all match the manifest and GitHub's asset digests
+   (all nine cross-checked). Retests on the official archive: **lz4 rc=0**;
+   **C001 clean 20/20 + 20/20** on both iter smokes (was ~50% flaky);
+   `same_leaf_audit` `conflicting=0` (310 decls, 23 multi-decl groups);
+   `smoke_contracts` and both cell smokes green. Scripting recovery in the
+   `xiom run` lane stays the compiler/benchmark lane's confirmation. Both
+   carve-outs (C001 + lz4) can drop when the stdlib lane re-pins to v0.63.1;
+   their own release battery sets the boundary. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
