@@ -2881,11 +2881,15 @@ roles/permissions guide, and the supervisor-scope clarification.
    disclosure for that release), the contracts tasks (expect 0 z3 errors, no
    "Toolchain error" classification),    and scripting (expect recovery to the
    pre-regression band). C001 stays carved out and disclosed unless its fix
-   lands before the cut. Archive hashes verified as usual. **2026-10-05
+   lands before the cut. Archive hashes verified as usual.    **2026-10-05
    relay:** compiler main now carries the **C001 fix (`4bf8cf1e`)** and the
    **verifier query-less-output fix (`6f34e1f0`)** -- the next archive
    carries both; the published v0.63.0 predates them, so both C001 smokes
-   STAY excluded for that pin. The **lz4 duplicate-leaf finding** is
+   STAY excluded for that pin. **Follow-up:** main also carries the
+   **scripting-baseline cache fix (`8405d2e6`)**; the next archive should
+   show scripting recovery in the `xiom run` lane. Keep the **lz4/C001
+   carve-outs** until that archive ships and retests. The **lz4
+   duplicate-leaf finding** is
    root-caused (stdlib rename + queued compiler parity fix); keep the
    **lz4 carve-out** as well until the next archive ships and retests. Note:
    stdlib main currently drops `smoke_compress_lz4_snappy.xi` from
