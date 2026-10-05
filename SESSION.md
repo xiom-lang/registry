@@ -2903,7 +2903,18 @@ roles/permissions guide, and the supervisor-scope clarification.
    `smoke_contracts` and both cell smokes green. Scripting recovery in the
    `xiom run` lane stays the compiler/benchmark lane's confirmation. Both
    carve-outs (C001 + lz4) can drop when the stdlib lane re-pins to v0.63.1;
-   their own release battery sets the boundary. Remaining
+   their own release battery sets the boundary. **2026-10-05 v0.64.0
+   pin/verify (done):** archive published 16:41Z; manifest `545fe5a0…`,
+   linux-x64 `432096e0…`, windows-x64 `38557d65…` all match the manifest and
+   GitHub's asset digests (nine cross-checked). Registry compiler metadata is
+   publish-driven (`metadata.compiler` -> index entry; no backfill), so the
+   hardcoded quotes were refreshed: community publish template pin
+   `v0.61.3` -> `v0.64.0` and the PUBLISHING.md example (this commit).
+   v0.64.1 compiler queue (theirs): C-PULSE-02 (installed registry deps not
+   mapped to catalog source roots; workaround `[project].source-roots`) and
+   the B1/B2/`--resolve` polish; no registry-blocking regressions known in
+   v0.64.0. Watch: the first package republished with the v0.64.0 toolchain
+   should serve `compiler: v0.64.0`. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 5. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20

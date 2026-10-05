@@ -144,7 +144,7 @@ jobs:
         if: env.XIOM_MODE == 'publish'
         run: |
           set -euo pipefail
-          pin="v0.61.3"
+          pin="v0.64.0"
           pv="${pin#v}"
           # Keep the toolchain OUT of the repository: `xiom pkg publish`
           # packages the working directory, so anything downloaded here would

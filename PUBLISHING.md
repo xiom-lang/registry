@@ -251,7 +251,7 @@ Useful variations:
 
 ```bash
 xiom pkg publish --tarball dist/my-lib-0.1.0.tar.gz   # upload exact bytes
-xiom pkg publish --compiler v0.61.3                   # record the toolchain tag
+xiom pkg publish --compiler v0.64.0                   # record the toolchain tag
 ```
 
 ### Build provenance
