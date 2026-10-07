@@ -99,7 +99,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
         <a href="/whats-new">What&rsquo;s new</a>
         <a href="https://xiom-lang.org/docs/">Docs</a>
         <a href="https://xiom-lang.org">xiom-lang.org</a>
-        <a href="https://opencollective.com/xiom">Support</a>
+        <a href="/#support">Support</a>
         <a href="https://github.com/xiom-lang/registry">GitHub</a>${navMenu}`;
   return `<!doctype html>
 <html lang="en">
@@ -126,7 +126,7 @@ function layout({ title, description = SITE_DESCRIPTION, body, searchQuery = '',
       <a href="/publish">Publish</a>
       <a href="https://xiom-lang.org/docs/">Docs</a>
       <a href="https://xiom-lang.org">xiom-lang.org</a>
-      <a href="https://opencollective.com/xiom">Support</a>
+      <a href="/#support">Support</a>
       <a class="nav-button" href="https://github.com/xiom-lang/registry">GitHub</a>
     </nav>
     ${navPrimary ? `<span class="nav-right">${navPrimary}</span>` : ''}
@@ -166,8 +166,8 @@ ${body}
     <a href="/index.json">index.json</a>
     <a href="/health">health</a>
     <a href="/whats-new">What&rsquo;s new</a>
-    <a href="https://opencollective.com/xiom">Support XIOM</a>
     <a href="https://xiom-lang.org">xiom-lang.org</a>
+    <a href="https://opencollective.com/xiom">Support XIOM</a>
   </div>
   <div class="container footer-social-row">
     ${FOOTER_SOCIAL}

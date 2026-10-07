@@ -239,14 +239,16 @@ test('footer carries the website social row and the registry contact', async () 
 test('the home page carries the Open Collective support section', async () => {
   const body = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();
 
-  // Nav: Support is the last link before the GitHub CTA; footer carries the
-  // Project-column item adapted to the registry's flat footer.
-  assert.match(body, /nav-links[\s\S]*href="https:\/\/opencollective\.com\/xiom">Support<\/a>[\s\S]*class="nav-button"/);
-  assert.match(body, /<a href="https:\/\/opencollective\.com\/xiom">Support XIOM<\/a>/);
+  // Nav: Support leads to the home support section (tier selection on our
+  // site; payment happens on Open Collective). The footer carries the
+  // website-style Support XIOM item at the far right of the link row.
+  assert.match(body, /nav-links[\s\S]*href="\/#support">Support<\/a>[\s\S]*class="nav-button"/);
+  assert.match(body, /<a href="https:\/\/opencollective\.com\/xiom">Support XIOM<\/a>\s*<\/div>\s*<div class="container footer-social-row">/);
 
   // Live tiers: hidden containers, the registered script, and the fallback +
   // privacy sentence (the registry has no local privacy page; the sentence
   // ships with the section, and xiom-lang.org/privacy.html carries its own).
+  assert.match(body, /<section class="home-support" id="support">/);
   assert.match(body, /data-support-tiers hidden/);
   assert.match(body, /data-support-backers hidden/);
   assert.match(body, /Tiers and amounts are read live from the/);

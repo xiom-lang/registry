@@ -660,7 +660,7 @@ function homePage(index, options = {}) {
 ${strip}
 <p class="browse-all"><a class="button" href="/packages">Browse all ${total} package${total === 1 ? '' : 's'}</a>
   <a class="button" href="/contributors">Meet the top contributors</a></p>
-<section class="home-support">
+<section class="home-support" id="support">
   <h2>Support the project</h2>
   <p>XIOM is funded through <a href="https://opencollective.com/xiom">Open Collective</a>,
      hosted by Open Source Europe. Sponsorships and donations support the compiler,

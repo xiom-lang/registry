@@ -6,6 +6,16 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.14.1] - 2026-10-07
+
+### Interface
+
+- **Support discoverability**: the top-nav Support item now leads to the home
+  page's support section (`/#support`), where the live tier cards are
+  selectable and each links to Open Collective with the amount and interval
+  pre-filled; the footer's Support XIOM item sits at the far right of the
+  link row, matching xiom-lang.org's Project column placement.
+
 ## [2.14.0] - 2026-10-07
 
 ### Interface
