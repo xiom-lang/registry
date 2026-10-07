@@ -6,6 +6,15 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.14.2] - 2026-10-07
+
+### Fixed
+
+- **Dependency**: `proxy-addr` 2.0.8 (critical advisory GHSA-jqcg-44mw-7w3h,
+  IP spoofing via IPv4-mapped IPv6 trust subnets). It is Express's client-IP
+  resolver, so with `TRUST_PROXY` enabled it backs the registry's IP-based
+  rate limits; `npm audit` is clean again.
+
 ## [2.14.1] - 2026-10-07
 
 ### Interface
