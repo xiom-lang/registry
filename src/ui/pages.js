@@ -644,6 +644,7 @@ function homePage(index, options = {}) {
   return layout({
     title: '',
     nav: options.nav,
+    scripts: '<script src="/ui/support-tiers.js" defer></script>',
     body: `<section class="hero">
   <p>The package registry for XIOM. Browse packages, versions, and ed25519 signatures,
      or install directly: <code>xiom pkg install &lt;package&gt;</code>.</p>
@@ -658,7 +659,19 @@ function homePage(index, options = {}) {
 <h2>Recently updated</h2>
 ${strip}
 <p class="browse-all"><a class="button" href="/packages">Browse all ${total} package${total === 1 ? '' : 's'}</a>
-  <a class="button" href="/contributors">Meet the top contributors</a></p>`,
+  <a class="button" href="/contributors">Meet the top contributors</a></p>
+<section class="home-support">
+  <h2>Support the project</h2>
+  <p>XIOM is funded through <a href="https://opencollective.com/xiom">Open Collective</a>,
+     hosted by Open Source Europe. Sponsorships and donations support the compiler,
+     the standard library, the registry and the tooling.</p>
+  <div class="eco-grid" style="margin-top:24px;" data-support-tiers hidden></div>
+  <p style="color:var(--muted);font-size:13px;" data-support-backers hidden></p>
+  <p style="color:var(--muted);font-size:13px;">Tiers and amounts are read live from the
+     collective; the contribution itself happens on Open Collective. This section reads
+     public funding data (tier names, amounts, and the financial-contributor count) from
+     Open Collective, which receives the request.</p>
+</section>`,
   });
 }
 

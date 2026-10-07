@@ -627,6 +627,36 @@ table.versions tr:hover td { background: var(--panel); }
   fill: currentColor;
 }
 
+/* Home "Support the project" section: same markup and class names as
+   xiom-lang.org's contributing page (eco-grid/eco-card), filled at runtime by
+   /ui/support-tiers.js from the collective's public endpoints. Adapted to the
+   registry palette; the grid wraps and stacks on phones. */
+.home-support {
+  border-top: 1px solid var(--line);
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+}
+.eco-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.eco-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+.eco-card h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.eco-card p { margin: 0; }
+
 /* ============================================================
    Page banners
    Full-width artwork with the wordmark and section title overlaid on the

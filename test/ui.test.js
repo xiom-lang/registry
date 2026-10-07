@@ -220,6 +220,7 @@ test('footer carries the website social row and the registry contact', async () 
     ['https://www.linkedin.com/company/145216062/', 'XIOM on LinkedIn', 'LinkedIn', 'noopener'],
     ['https://www.facebook.com/profile.php?id=61594524426045', 'XIOM on Facebook', 'Facebook', 'noopener'],
     ['https://www.instagram.com/xiom.language/', 'XIOM on Instagram', 'Instagram', 'noopener'],
+    ['https://opencollective.com/xiom', 'XIOM on Open Collective', 'Open Collective', 'noopener'],
   ];
   const positions = social.map(([href, label, title, rel]) => {
     const anchor = `<a href="${href}" aria-label="${label}" title="${title}" target="_blank" rel="${rel}"`;
@@ -233,6 +234,39 @@ test('footer carries the website social row and the registry contact', async () 
 
   // Registry-specific contact sits beside the row, not in the generic legal line.
   assert.match(body, /footer-social-row[\s\S]*mailto:registry@xiom-lang\.org/);
+});
+
+test('the home page carries the Open Collective support section', async () => {
+  const body = await (await fetch(`${baseUrl}/`, { headers: BROWSER })).text();
+
+  // Nav: Support is the last link before the GitHub CTA; footer carries the
+  // Project-column item adapted to the registry's flat footer.
+  assert.match(body, /nav-links[\s\S]*href="https:\/\/opencollective\.com\/xiom">Support<\/a>[\s\S]*class="nav-button"/);
+  assert.match(body, /<a href="https:\/\/opencollective\.com\/xiom">Support XIOM<\/a>/);
+
+  // Live tiers: hidden containers, the registered script, and the fallback +
+  // privacy sentence (the registry has no local privacy page; the sentence
+  // ships with the section, and xiom-lang.org/privacy.html carries its own).
+  assert.match(body, /data-support-tiers hidden/);
+  assert.match(body, /data-support-backers hidden/);
+  assert.match(body, /Tiers and amounts are read live from the/);
+  assert.match(body, /public funding data .* from\s+Open Collective, which receives the request/);
+  assert.match(body, /<script src="\/ui\/support-tiers\.js" defer><\/script>/);
+  assert.match(body, /support-tiers\.js" defer><\/script>\n<\/body>/);
+
+  // No third-party script or iframe is loaded with the page; the only script
+  // include is the same-origin support asset.
+  assert.doesNotMatch(body, /<script[^>]+src="https?:/i);
+  assert.doesNotMatch(body, /<iframe/i);
+
+  // The asset is served byte-for-byte from the repo and never carries a token.
+  const script = await fetch(`${baseUrl}/ui/support-tiers.js`);
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get('content-type'), /javascript/);
+  const source = await script.text();
+  assert.match(source, /api\.opencollective\.com\/graphql\/v2/);
+  assert.match(source, /opencollective\.com\/xiom\.json/);
+  assert.doesNotMatch(source, /Authorization|Bearer|apiKey|accessToken/i);
 });
 
 test('GET /packages lists packages in both formats', async () => {

@@ -128,6 +128,9 @@ const SERVICE_VERSION = require('../package.json').version;
 const SERVICE_STARTED_AT = new Date().toISOString();
 // Read once: the UI stylesheet is static and small.
 const REGISTRY_CSS = fs.readFileSync(path.join(__dirname, 'ui', 'registry.css'), 'utf-8');
+// Live Open Collective tiers for the home "Support the project" section: a
+// static browser asset, byte-identical to xiom-website/js/support-tiers.js.
+const SUPPORT_TIERS_JS = fs.readFileSync(path.join(__dirname, 'ui', 'support-tiers.js'), 'utf-8');
 // Community OIDC publish workflow, served so a beginner can copy it straight
 // into .github/workflows/publish-registry.yml (registry 2.0 request flow).
 const COMMUNITY_PUBLISH_TEMPLATE = fs.readFileSync(
@@ -1392,6 +1395,12 @@ function createApp(config = loadConfig()) {
   // Stylesheet for the read-only UI (module-level constant, no fs per request).
   app.get('/ui/registry.css', generalLimit, (req, res) => {
     res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(REGISTRY_CSS);
+  });
+
+  // Live Open Collective tiers (home page support section). Same-origin asset;
+  // the script itself only fetches the collective's public JSON endpoints.
+  app.get('/ui/support-tiers.js', generalLimit, (req, res) => {
+    res.type('text/javascript').set('Cache-Control', 'public, max-age=3600').send(SUPPORT_TIERS_JS);
   });
 
   // Ready-to-copy workflow for community trusted publishing.
