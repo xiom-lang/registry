@@ -6,6 +6,8 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-07
+
 ### Interface
 
 - **Open Collective support**: the footer gains the Open Collective icon
