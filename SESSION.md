@@ -2661,7 +2661,10 @@ with the capability matrix. **2.13.1 is live on staging and production**
 (ops, 2026-10-03 17:33Z) and externally verified (24.1); it carries the
 rating-scope fix, the double-submit guard, the activity-row links and
 roles/permissions guide, and the supervisor-scope clarification.
-`[Unreleased]` is empty; the next cut happens when a new requirement arrives.
+**2026-10-07: `[Unreleased]` now carries the Open Collective support mirror**
+(footer icon + nav/footer links + live home tiers, website-lane relay,
+`7f86e14`); the website privacy page's own funding sentence remains the
+website lane's. The next cut happens when a new requirement arrives.
 
 **Archive (shipped releases, in order):**
 
@@ -2797,8 +2800,9 @@ roles/permissions guide, and the supervisor-scope clarification.
 2. **Deploy record:** 2.13.1 is live on both and externally verified (24.1);
    the release-identity check held (both image digests changed). No
    migrations, no env changes.
-3. **Next cut:** none queued; `[Unreleased]` is empty. The next cut happens
-   when a new requirement arrives.
+3. **Next cut:** none queued beyond the `[Unreleased]` Open Collective
+   support mirror (registry site); the next cut happens when the owner
+   orders it.
 4. **Compiler lane (theirs; nothing needed from the registry):** C5
    index-digest pinning and B3 `--dry-run` landed (`1af1873c`); the staging
    pin is recorded (`0f07f71a…46efb`, fp `0f:07:f7:1a:05:2e:16:f1`).

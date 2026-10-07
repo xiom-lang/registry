@@ -6,6 +6,16 @@ The rendered version of this file is at `/whats-new`.
 
 ## [Unreleased]
 
+### Interface
+
+- **Open Collective support**: the footer gains the Open Collective icon
+  (tenth, after Instagram; same label/target/rel rules as xiom-lang.org), the
+  top nav and footer carry Support links, and the home page has a "Support
+  the project" section with live tiers read from the collective's public
+  endpoints (same-origin script, never a token; the grid stays hidden on any
+  failure and the authored fallback stands; the privacy sentence ships with
+  the section).
+
 ## [2.13.1] - 2026-10-03
 
 ### Fixed
