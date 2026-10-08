@@ -2920,7 +2920,29 @@ and fully verified (24.1); no migrations, no env changes.
    mapped to catalog source roots; workaround `[project].source-roots`) and
    the B1/B2/`--resolve` polish; no registry-blocking regressions known in
    v0.64.0. Watch: the first package republished with the v0.64.0 toolchain
-   should serve `compiler: v0.64.0`. Remaining
+   should serve `compiler: v0.64.0`. **2026-10-08 v0.64.1 acceptance (done):**
+   archive verified (manifest `73ab34d0…`, linux `6f6787a3…`, windows
+   `4023114a…`; all match the release digests). Registry publish/consume:
+   e2e **20/20 with the official v0.64.1 client**, plus a live WSL consume
+   (`xiom pkg install xiom.rate@0.2.0`: checksum + signature verified; first
+   attempt timed out transiently, retry clean). Installed-toolchain
+   resolution: extracted to a custom root, `--check`/`build` green with **no
+   `XIOM_STDLIB`/`XIOM_RUNTIME_DIR` overrides** (bundled lib). Probe fleet:
+   **`probe_pkg_kv` GREEN -- C-PULSE-10 fixed, kv workarounds droppable**
+   (the probe's own header still says BLOCKED; packages lane flips it),
+   plus `probe_session_inline`, `probe_pkg_state_holder`,
+   `probe_audit_rotate`, `probe_schema` green. Dep-roots gate (m212/m215):
+   **in the archive and green only when the homes agree** -- default env
+   fails both variants because the installer wrote `~/xiom/packages` while
+   the compiler's `paths::xiom_home()` picked the first existing candidate
+   `~/.local/share/xiom`; with `XIOM_HOME=$HOME/xiom` both variants pass
+   `xiom --check` and `xiom build` (exit 0). Installer/compiler home
+   resolution should be unified. NOT regressions: `probe_adopt_smoke` and
+   `probe_stdlib_server_parse` fail **identically on v0.64.0 and v0.64.1**
+   (same signatures; first `catalog body [xiom.pulse.http] 150:12 cannot
+   call 'server_parse_request'` -> cascades) -- pre-existing C-PULSE-09
+   family, compile-stage (no crash to capture), needs the PULSE-side wrapper
+   bisect. Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 6. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
