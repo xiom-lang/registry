@@ -2942,7 +2942,20 @@ and fully verified (24.1); no migrations, no env changes.
    (same signatures; first `catalog body [xiom.pulse.http] 150:12 cannot
    call 'server_parse_request'` -> cascades) -- pre-existing C-PULSE-09
    family, compile-stage (no crash to capture), needs the PULSE-side wrapper
-   bisect. Remaining
+   bisect. **2026-10-09 v0.64.2 acceptance (done, all green):** archive
+   verified (manifest `4acb165a…`, linux `bc2026af…`, windows `05d54f4b…`).
+   **m232 home unification confirmed:** with no `XIOM_HOME`, `xiom pkg
+   install xiom.rate@0.2.0` now writes `~/.local/share/xiom/packages` (the
+   compiler's home) and the dep-roots gate passes **by default** -- both
+   dash and dot variants `--check` (Type check PASSED) and `build` exit 0.
+   Probe fleet **7/7 green**: `probe_pkg_kv` (C-PULSE-10 stays fixed),
+   `probe_session_inline`, **`probe_adopt_smoke`** and
+   **`probe_stdlib_server_parse`** (the two v0.64.0/v0.64.1 reds are
+   cleared), `probe_pkg_state_holder`, `probe_audit_rotate`,
+   `probe_schema`. Registry publish/consume: e2e **20/20 with the official
+   v0.64.2 client**. Packages/PULSE side can now drop the kv workarounds,
+   the PULSE `source-roots` workaround, and flip the probe status headers.
+   Remaining
    optional polish: B1 packaging guard, B2 `xiom pkg yank`, install `trust`
    wording, `--resolve` outside a workspace.
 6. **Packages lane:** chunked `0.1.1` republishes continue (waves under 20
