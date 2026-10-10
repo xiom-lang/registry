@@ -11,3 +11,6 @@ Cross-lane coordination goes through the private relay bus at
 
 Everything cross-lane (findings, wishlists, release checks) goes through the
 bus; do not wait for hand-relayed messages.
+
+Robustness: if `git pull --ff-only` reports `Cannot fast-forward to multiple
+branches`, use `git fetch origin` then `git merge --ff-only origin/main`.
