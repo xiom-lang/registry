@@ -14,3 +14,9 @@ bus; do not wait for hand-relayed messages.
 
 Robustness: if `git pull --ff-only` reports `Cannot fast-forward to multiple
 branches`, use `git fetch origin` then `git merge --ff-only origin/main`.
+
+Relay notes/titles/bodies must be **ASCII-only** (the validator rejects
+non-ASCII and a red board blocks every lane; the 2026-10-16 ellipsis
+incident). Keep notes plain ASCII; pass long bodies via `--body-file` to
+avoid shell quoting, and prefer `--body-file` whenever the text contains
+quotes, angle brackets, or non-ASCII characters.
